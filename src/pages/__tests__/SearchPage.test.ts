@@ -15,6 +15,33 @@ vi.mock('../../api/coolapk', () => ({ CoolapkTauriAPI: mocks }));
 import SearchPage from '../SearchPage.vue';
 
 describe('话题内搜索', () => {
+  it('个人动态搜索在重新输入、分页和切换用户后保留 UID 范围', async () => {
+    vi.clearAllMocks();
+    mocks.searchByType.mockResolvedValue({ code: 200, data: [{ id: '1', entityType: 'feed', message: '镜头' }] });
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/search', component: SearchPage }] });
+    await router.push({ path: '/search', query: { pageType: 'user', pageParam: '123', tab: 'all' } });
+    await router.isReady();
+    const wrapper = mount(SearchPage, { global: { plugins: [createPinia(), router], stubs: { SearchResultItem: true, SearchHotListCard: true, LoadingState: true, EmptyState: true } } });
+    try {
+      await flushPromises();
+      expect(wrapper.get('.search-field').attributes('placeholder')).toBe('搜索TA的动态');
+      expect(mocks.getHotSearches).not.toHaveBeenCalled();
+      const input = wrapper.get('.search-field');
+      await input.setValue('镜头');
+      await input.trigger('keydown.enter');
+      await flushPromises();
+      expect(router.currentRoute.value.query).toEqual({ q: '镜头', tab: 'feed', pageType: 'user', pageParam: '123' });
+      expect(mocks.searchByType.mock.calls.at(-1)?.[0]).toMatchObject({ searchType: 'feed', pageType: 'user', pageParam: '123', query: '镜头', page: 1 });
+      expect(wrapper.find('.search-tabs').exists()).toBe(false);
+      await wrapper.get('.search-scroll-container').trigger('scroll');
+      await flushPromises();
+      expect(mocks.searchByType.mock.calls.at(-1)?.[0]).toMatchObject({ pageType: 'user', pageParam: '123', page: 2 });
+      await router.push({ path: '/search', query: { q: '镜头', pageType: 'user', pageParam: '456' } });
+      await flushPromises();
+      expect(mocks.searchByType.mock.calls.at(-1)?.[0]).toMatchObject({ pageType: 'user', pageParam: '456', page: 1 });
+      expect(mocks.getSearchSuggestionsApp).not.toHaveBeenCalled();
+    } finally { wrapper.unmount(); }
+  });
   it('使用 feed 搜索并携带当前话题作用域', async () => {
     mocks.getHotSearches.mockResolvedValue({ code: 200, data: [] });
     mocks.searchByType.mockResolvedValue({ code: 200, data: [] });

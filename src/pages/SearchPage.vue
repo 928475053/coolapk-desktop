@@ -23,13 +23,13 @@
           </div>
         </div>
 
-        <div v-if="queryStr && !isTopicScopedSearch" class="search-tabs custom-scrollbar">
+        <div v-if="queryStr && !isScopedSearch" class="search-tabs custom-scrollbar">
           <button v-for="tab in searchTabs" :key="tab.key" type="button" :class="['search-tab-item', { active: activeTab === tab.key }]" @click="switchTab(tab.key)">
             <i v-if="tab.icon" :class="tab.icon"></i><span>{{ tab.label }}</span>
           </button>
         </div>
 
-        <div v-if="queryStr && !isTopicScopedSearch && isAskTab" class="search-ask-filter" role="tablist" aria-label="问答类型">
+        <div v-if="queryStr && !isScopedSearch && isAskTab" class="search-ask-filter" role="tablist" aria-label="问答类型">
           <button
             v-for="option in askFeedTypeOptions"
             :key="option.key"
@@ -63,11 +63,11 @@
 
         <section v-else class="search-welcome">
           <p class="search-welcome-hint">{{ searchWelcomeHint }}</p>
-          <template v-if="!isTopicScopedSearch">
+          <template v-if="!isScopedSearch">
             <SearchHotListCard v-for="(item, index) in hotItems" :key="entityKey(item, index)" :entity="item" @search="doSearch" />
             <EmptyState v-if="!hotItems.length" title="开始搜索" description="热门搜索由酷安接口动态提供" />
           </template>
-          <EmptyState v-else title="搜索话题帖子" description="输入关键词，搜索当前话题里的帖子" />
+          <EmptyState v-else :title="scopedUserUid ? '搜索TA的动态' : '搜索话题帖子'" :description="searchWelcomeHint" />
         </section>
       </div>
     </div>
@@ -98,11 +98,11 @@ function readQueryString(value: unknown): string {
 
 const initialPageType = readQueryString(route.query.pageType);
 const initialPageParam = readQueryString(route.query.pageParam);
-const initialTopicSearch = initialPageType === 'tag' && initialPageParam ? initialPageParam : '';
+const initialScopedSearch = ['tag', 'user'].includes(initialPageType) && initialPageParam;
 const queryStr = ref(readQueryString(route.query.q));
 const searchQuery = ref(queryStr.value);
 const searchTabs = ref<SearchTabDefinition[]>(DEFAULT_SEARCH_TABS);
-const activeTab = ref(initialTopicSearch ? 'feed' : readQueryString(route.query.tab) || 'all');
+const activeTab = ref(initialScopedSearch ? 'feed' : readQueryString(route.query.tab) || 'all');
 const askFeedTypeOptions = [
   { key: 'all', label: '全部', icon: 'fas fa-layer-group' },
   { key: 'question', label: '提问', icon: 'fas fa-circle-question' },
@@ -123,16 +123,21 @@ const scopedTopicTag = computed(() => {
   return readQueryString(route.query.pageType) === 'tag' ? readQueryString(route.query.pageParam) : '';
 });
 
-const isTopicScopedSearch = computed(() => Boolean(scopedTopicTag.value));
+const scopedUserUid = computed(() => readQueryString(route.query.pageType) === 'user' ? readQueryString(route.query.pageParam) : '');
+const isScopedSearch = computed(() => Boolean(scopedTopicTag.value || scopedUserUid.value));
+const scopedPageType = computed(() => scopedUserUid.value ? 'user' : 'tag');
+const scopedPageParam = computed(() => scopedUserUid.value || scopedTopicTag.value);
 
 const searchPlaceholder = computed(() => {
-  return isTopicScopedSearch.value
+  if (scopedUserUid.value) return '搜索TA的动态';
+  return isScopedSearch.value
     ? (scopedTopicTag.value ? `搜索“${scopedTopicTag.value}”话题的内容` : '搜索此话题的内容')
     : '搜索应用、动态、用户、话题...';
 });
 
 const searchWelcomeHint = computed(() => {
-  return isTopicScopedSearch.value
+  if (scopedUserUid.value) return '输入关键词，搜索TA发布的动态';
+  return isScopedSearch.value
     ? `输入关键词，搜索“${scopedTopicTag.value}”吧里的帖子`
     : '输入关键词，搜索酷安的应用、游戏、动态、用户和话题';
 });
@@ -178,7 +183,7 @@ function resetTabStates() {
 }
 
 function syncActiveTab(requested: string) {
-  if (isTopicScopedSearch.value) {
+  if (isScopedSearch.value) {
     activeTab.value = 'feed';
     return;
   }
@@ -186,7 +191,7 @@ function syncActiveTab(requested: string) {
 }
 
 async function loadSearchConfig() {
-  if (isTopicScopedSearch.value) {
+  if (isScopedSearch.value) {
     searchTabs.value = DEFAULT_SEARCH_TABS.filter((tab) => tab.searchType === 'feed');
     configLoaded = true;
     activeTab.value = 'feed';
@@ -209,6 +214,7 @@ async function loadSearchConfig() {
 }
 
 async function loadHotItems() {
+  if (isScopedSearch.value) return;
   try {
     const response = await CoolapkTauriAPI.getHotSearches(false);
     hotItems.value = extractSearchEntities(response).filter((item) => !isSponsorSearchEntity(item)).filter((item) => item.entities?.length || getSearchEntityTitle(item));
@@ -223,7 +229,7 @@ function responseFlag(value: unknown): boolean {
 
 async function fetchTab(tabKey: string, loadMore = false) {
   if (!queryStr.value) return;
-  const scoped = isTopicScopedSearch.value;
+  const scoped = isScopedSearch.value;
   const tab = scoped
     ? DEFAULT_SEARCH_TABS.find((item) => item.searchType === 'feed')
     : searchTabs.value.find((item) => item.key === tabKey) || DEFAULT_SEARCH_TABS.find((item) => item.key === tabKey);
@@ -242,8 +248,8 @@ async function fetchTab(tabKey: string, loadMore = false) {
       page: loadMore ? state.cursor.page : 1,
       firstItem: loadMore ? state.cursor.firstItem : '',
       lastItem: loadMore ? state.cursor.lastItem : '',
-      pageType: scoped ? 'tag' : tab.searchType === 'feed' ? 'search' : '',
-      pageParam: scoped ? scopedTopicTag.value : '',
+      pageType: scoped ? scopedPageType.value : tab.searchType === 'feed' ? 'search' : '',
+      pageParam: scoped ? scopedPageParam.value : '',
       feedType: tab.searchType === 'ask' ? askFeedType.value : tab.searchType === 'feed' ? 'all' : '',
       sort: tab.searchType === 'feed' ? 'default' : '',
     });
@@ -279,7 +285,7 @@ async function fetchTab(tabKey: string, loadMore = false) {
 
 function onInputFocus() {
   showHistory.value = !searchQuery.value.trim();
-  showSuggestions.value = searchSuggestions.value.length > 0;
+  showSuggestions.value = !isScopedSearch.value && searchSuggestions.value.length > 0;
 }
 
 function handleClickOutside(event: MouseEvent) {
@@ -319,10 +325,10 @@ function doSearch(value: string, requestedSearchType = '') {
   showHistory.value = false;
   addSearchHistory(trimmed);
   const query: Record<string, string> = { q: trimmed };
-  if (isTopicScopedSearch.value) {
+  if (isScopedSearch.value) {
     query.tab = 'feed';
-    query.pageType = 'tag';
-    query.pageParam = scopedTopicTag.value;
+    query.pageType = scopedPageType.value;
+    query.pageParam = scopedPageParam.value;
   } else {
     const requestedTab = searchTabs.value.find((tab) => tab.key === requestedSearchType || tab.searchType === requestedSearchType);
     const targetTab = requestedTab?.key || (requestedSearchType && DEFAULT_SEARCH_TABS.some((tab) => tab.key === requestedSearchType) ? requestedSearchType : activeTab.value);
@@ -334,7 +340,7 @@ function doSearch(value: string, requestedSearchType = '') {
 }
 
 function switchTab(key: string) {
-  if (isTopicScopedSearch.value) return;
+  if (isScopedSearch.value) return;
   if (activeTab.value === key) return;
   activeTab.value = key;
   const targetTab = searchTabs.value.find((tab) => tab.key === key);
@@ -374,6 +380,7 @@ function handleScroll(event: Event) {
 }
 
 async function fetchSuggestions(value: string) {
+  if (isScopedSearch.value) return;
   const trimmed = value.trim();
   if (!trimmed) { searchSuggestions.value = []; return; }
   try {
@@ -393,7 +400,7 @@ async function fetchSuggestions(value: string) {
 watch(searchQuery, (value) => {
   showHistory.value = !value.trim();
   if (suggestTimer) clearTimeout(suggestTimer);
-  if (!value.trim()) { searchSuggestions.value = []; showSuggestions.value = false; return; }
+  if (isScopedSearch.value || !value.trim()) { searchSuggestions.value = []; showSuggestions.value = false; return; }
   suggestTimer = setTimeout(() => void fetchSuggestions(value), 300);
 });
 
@@ -408,11 +415,14 @@ watch(() => [
   queryStr.value = normalizedQuery;
   searchQuery.value = normalizedQuery;
   askFeedType.value = normalizeAskFeedType(nextFeedType);
-  if (isTopicScopedSearch.value) {
+  if (isScopedSearch.value) {
     activeTab.value = 'feed';
   } else if (configLoaded) {
     syncActiveTab(nextTab || activeTab.value || 'all');
   }
+  searchSequence += 1;
+  searchSuggestions.value = [];
+  showSuggestions.value = false;
   resetTabStates();
   if (normalizedQuery) void fetchTab(activeTab.value);
 }, { immediate: true });

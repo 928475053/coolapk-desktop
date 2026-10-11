@@ -23,7 +23,7 @@
           <!-- 悬浮顶部交互栏；页面导航统一放在全局顶栏。 -->
           <div class="banner-top-bar">
             <div class="top-bar-right">
-              <button class="icon-circle-btn" title="搜索" @click="router.push('/search')">
+              <button class="icon-circle-btn" title="搜索TA的动态" @click="searchUserFeeds">
                 <i class="fas fa-search"></i>
               </button>
               <button class="icon-circle-btn" title="更多设置" @click="openProfileMenu">
@@ -581,6 +581,12 @@ const effectiveUid = computed(() => {
   const rUid = (route.params.uid as string) || (route.params.id as string) || '';
   return String((!rUid || rUid === 'me') ? (authStore.user?.uid || '') : rUid);
 });
+
+function searchUserFeeds() {
+  const uid = String(profile.value?.uid || effectiveUid.value || '').trim();
+  if (!uid) return;
+  void router.push({ path: '/search', query: { tab: 'feed', pageType: 'user', pageParam: uid } });
+}
 
 const isSelfUser = computed(() => {
   if (!authStore.user?.uid) return false;

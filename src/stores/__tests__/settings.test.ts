@@ -222,20 +222,40 @@ describe('settings store', () => {
       const store = useSettingsStore();
       store.setTheme('dark');
       await nextTick();
-      expect(invoke).toHaveBeenCalledWith('set_android_system_bar_theme', { dark: true, profile: false });
+      expect(invoke).toHaveBeenCalledWith('set_android_system_bar_theme', { dark: true, profile: false, dimmed: false });
       store.setTheme('light');
       await nextTick();
-      expect(invoke).toHaveBeenCalledWith('set_android_system_bar_theme', { dark: false, profile: false });
+      expect(invoke).toHaveBeenCalledWith('set_android_system_bar_theme', { dark: false, profile: false, dimmed: false });
       store.setAndroidProfileBackground(true);
-      expect(invoke).toHaveBeenCalledWith('set_android_system_bar_theme', { dark: false, profile: true });
+      expect(invoke).toHaveBeenCalledWith('set_android_system_bar_theme', { dark: false, profile: true, dimmed: false });
       store.setTheme('dark');
       await nextTick();
-      expect(invoke).toHaveBeenCalledWith('set_android_system_bar_theme', { dark: true, profile: true });
+      expect(invoke).toHaveBeenCalledWith('set_android_system_bar_theme', { dark: true, profile: true, dimmed: false });
       store.setAndroidProfileBackground(false);
-      expect(invoke).toHaveBeenCalledWith('set_android_system_bar_theme', { dark: true, profile: false });
+      expect(invoke).toHaveBeenCalledWith('set_android_system_bar_theme', { dark: true, profile: false, dimmed: false });
     } finally {
       userAgent.mockRestore();
     }
+  });
+
+  it('Android 回复遮罩随主题更新，最后一个弹层关闭后恢复状态栏', async () => {
+    const userAgent = vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue('Android');
+    try {
+      (window as any).__TAURI_INTERNALS__ = {};
+      const store = useSettingsStore();
+      store.setTheme('light');
+      const first = Symbol('first');
+      const second = Symbol('second');
+      store.setAndroidSystemBarDimmed(first, true);
+      expect(invoke).toHaveBeenCalledWith('set_android_system_bar_theme', { dark: false, profile: false, dimmed: true });
+      store.setAndroidSystemBarDimmed(second, true);
+      store.setAndroidSystemBarDimmed(first, false);
+      store.setTheme('dark');
+      await nextTick();
+      expect(invoke).toHaveBeenCalledWith('set_android_system_bar_theme', { dark: true, profile: false, dimmed: true });
+      store.setAndroidSystemBarDimmed(second, false);
+      expect(invoke).toHaveBeenCalledWith('set_android_system_bar_theme', { dark: true, profile: false, dimmed: false });
+    } finally { userAgent.mockRestore(); }
   });
 
   it('setTheme persists to localStorage across new store instances', async () => {

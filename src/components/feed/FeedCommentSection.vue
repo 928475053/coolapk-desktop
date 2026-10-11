@@ -653,6 +653,11 @@ const inputMsg = ref('');
 const sending = ref(false);
 const inputRef = ref<HTMLDivElement | null>(null);
 const composerOpen = ref(false);
+const systemBarDimOwner = Symbol('comment-composer');
+watch([composerOpen, () => props.officialDetail], ([open, official]) => {
+  settingsStore.setAndroidSystemBarDimmed(systemBarDimOwner, Boolean(open && official));
+}, { flush: 'sync' });
+onUnmounted(() => { settingsStore.setAndroidSystemBarDimmed(systemBarDimOwner, false); });
 async function openComposer() { if (!authStore.isLoggedIn) { authStore.openLoginModal(); return; } composerOpen.value = true; await nextTick(); syncMsgToEditor(inputMsg.value); inputRef.value?.focus(); }
 watch(composerOpen, async visible => { if (visible) { await nextTick(); syncMsgToEditor(inputMsg.value); } });
 onDeactivated(() => { composerOpen.value = false; });

@@ -25,24 +25,27 @@ import androidx.annotation.Keep
 import androidx.core.content.FileProvider
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.Insets
+import androidx.core.graphics.ColorUtils
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import java.io.File
 
 class MainActivity : TauriActivity() {
-    private fun applySystemBarTheme(dark: Boolean, profile: Boolean = false) {
+    private fun applySystemBarTheme(dark: Boolean, profile: Boolean = false, dimmed: Boolean = false) {
         // 个人页背景与网页一致；吸顶或离开个人页后恢复普通顶栏颜色。
         val surface = if (profile) { if (dark) Color.rgb(0x0e, 0x10, 0x12) else Color.rgb(0xf2, 0xf2, 0xf6) } else { if (dark) Color.rgb(0x18, 0x1b, 0x1e) else Color.WHITE }
         // 状态栏保持透明；给原生安全区与网页顶栏使用相同的背景色。
-        window.decorView.setBackgroundColor(surface)
-        findViewById<View>(android.R.id.content).setBackgroundColor(surface)
+        // 回复弹层的网页遮罩是 #0006（40% 黑色），原生安全区同步同一遮罩。
+        val background = if (dimmed) ColorUtils.blendARGB(surface, Color.BLACK, 0.4f) else surface
+        window.decorView.setBackgroundColor(background)
+        findViewById<View>(android.R.id.content).setBackgroundColor(background)
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = !dark
     }
 
     @Keep
     fun setSystemBarTheme(theme: String): String {
-        runOnUiThread { applySystemBarTheme(theme.startsWith("dark"), theme.endsWith("-profile")) }
+        runOnUiThread { applySystemBarTheme(theme.startsWith("dark"), theme.contains("-profile"), theme.endsWith("-dimmed")) }
         return "ok"
     }
 

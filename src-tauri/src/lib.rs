@@ -553,14 +553,15 @@ fn set_window_theme(app: tauri::AppHandle, theme: Option<String>) -> Result<(), 
 }
 
 #[tauri::command]
-async fn set_android_system_bar_theme(app: tauri::AppHandle, dark: bool, profile: Option<bool>) -> Result<(), String> {
+async fn set_android_system_bar_theme(app: tauri::AppHandle, dark: bool, profile: Option<bool>, dimmed: Option<bool>) -> Result<(), String> {
     #[cfg(target_os = "android")]
     {
         let theme = match (dark, profile.unwrap_or(false)) { (true, true) => "dark-profile", (false, true) => "light-profile", (true, false) => "dark", (false, false) => "light" };
-        coolapk::commands::call_android_update_method(&app, "setSystemBarTheme", theme.to_string()).await?;
+        let theme = if dimmed.unwrap_or(false) { format!("{theme}-dimmed") } else { theme.to_string() };
+        coolapk::commands::call_android_update_method(&app, "setSystemBarTheme", theme).await?;
     }
     #[cfg(not(target_os = "android"))]
-    let _ = (app, dark, profile);
+    let _ = (app, dark, profile, dimmed);
     Ok(())
 }
 

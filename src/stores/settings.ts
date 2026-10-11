@@ -384,6 +384,7 @@ const ACCENT_PALETTES: Record<AccentColor, { light: AccentPalette; dark: AccentP
 export const useSettingsStore = defineStore('settings', () => {
   const settings = ref<AppSettings>(cloneDefaultSettings());
   const androidProfileBackground = ref(false);
+  const androidSystemBarDimOwners = new Set<symbol>();
   const profileToolbarCompact = ref(false);
   const isTauriRuntime = typeof window !== 'undefined' && Boolean((window as any).__TAURI_INTERNALS__);
   let fileStore: SettingsFileStore | null = null;
@@ -536,11 +537,18 @@ export const useSettingsStore = defineStore('settings', () => {
   // 我的页面使用独立背景，滚动后的顶栏恢复普通表面色。
   function setAndroidProfileBackground(enabled: boolean) { androidProfileBackground.value = enabled; syncAndroidSystemBarTheme(); }
 
+  function setAndroidSystemBarDimmed(owner: symbol, dimmed: boolean) {
+    const wasDimmed = androidSystemBarDimOwners.size > 0;
+    if (dimmed) androidSystemBarDimOwners.add(owner);
+    else androidSystemBarDimOwners.delete(owner);
+    if (wasDimmed !== (androidSystemBarDimOwners.size > 0)) syncAndroidSystemBarTheme();
+  }
+
   function syncAndroidSystemBarTheme() {
     if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) return;
     if (typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent)) {
       // Android 状态栏后方由原生容器绘制，颜色须与当前 CSS 主题一致。
-      void invoke('set_android_system_bar_theme', { dark: document.documentElement.getAttribute('data-theme') === 'dark', profile: androidProfileBackground.value }).catch((err) => console.warn('同步 Android 状态栏主题失败:', err));
+      void invoke('set_android_system_bar_theme', { dark: document.documentElement.getAttribute('data-theme') === 'dark', profile: androidProfileBackground.value, dimmed: androidSystemBarDimOwners.size > 0 }).catch((err) => console.warn('同步 Android 状态栏主题失败:', err));
     }
   }
 
@@ -822,6 +830,7 @@ export const useSettingsStore = defineStore('settings', () => {
     settings,
     profileToolbarCompact,
     setAndroidProfileBackground,
+    setAndroidSystemBarDimmed,
     initializeSettings,
     flushSettings,
     syncDeviceProfile,

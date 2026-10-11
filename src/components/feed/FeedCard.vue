@@ -340,7 +340,7 @@ import { feedPageVisibleKey, feedPageRenderKey } from '../../utils/feedPageVisib
 import { useRouter } from 'vue-router';
 import type { FeedItem } from '../../types/feed';
 import { navigateBack } from '../../utils/navigation';
-import { useOfficialMobileFeedDetail } from '../../composables/useOfficialMobileFeedDetail';
+import { useOfficialMobileFeedDetail, useMobileLayout } from '../../composables/useOfficialMobileFeedDetail';
 import OfficialFeedProductCard from './OfficialFeedProductCard.vue';
 import FeedHeader from './FeedHeader.vue';
 import FeedContent from './FeedContent.vue';
@@ -401,6 +401,17 @@ const settingsStore = useSettingsStore();
 const appStore = useAppStore();
 const router = useRouter();
 const mobileOfficialEnabled = useOfficialMobileFeedDetail();
+const mobileLayout = useMobileLayout();
+/**
+ * 点击卡片是否应跳详情页，而不是就地展开评论。
+ *
+ * 移动端布局由既有开关 `officialMobileFeedDetail` 决定（行为不变）；
+ * 宽窗口则由新开关 `desktopFeedDetailOnClick` 决定。
+ */
+const opensDetailOnClick = computed(() =>
+  mobileOfficialEnabled.value
+  || (!mobileLayout.value && settingsStore.settings.desktopFeedDetailOnClick)
+);
 const commentSectionRef = ref<InstanceType<typeof FeedCommentSection> | null>(null);
 const showDeviceInfo = computed(() => settingsStore.settings.showDeviceInfo);
 
@@ -1331,7 +1342,7 @@ function keepCollapsedCardVisible(card: HTMLElement, scrollContainer: HTMLElemen
 }
 
 async function toggleComments() {
-  if (!props.detailMode && mobileOfficialEnabled.value && !isQuestionCard.value && !isAnswerCard.value) { openOfficialDetail(); return; }
+  if (!props.detailMode && opensDetailOnClick.value && !isQuestionCard.value && !isAnswerCard.value) { openOfficialDetail(); return; }
   if (props.disableInlineComments) {
     emit('open-comment', props.feed);
     return;
@@ -1497,7 +1508,7 @@ function handleCardClick(e: MouseEvent) {
     }
   }
 
-  if (mobileOfficialEnabled.value) openOfficialDetail();
+  if (opensDetailOnClick.value) openOfficialDetail();
   else toggleComments();
 }
 

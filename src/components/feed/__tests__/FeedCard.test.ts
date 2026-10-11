@@ -31,6 +31,7 @@ vi.mock('../../../api/coolapk', () => ({
 
 import FeedCard from '../FeedCard.vue';
 import { useAuthStore } from '../../../stores/auth';
+import { useSettingsStore } from '../../../stores/settings';
 
 describe('动态卡片编辑记录', () => {
   it.each([false, true])('点评详情走专用评分正文并保留公共交互（移动=%s）', officialMobileDetail => {
@@ -956,5 +957,44 @@ describe('评论区收起定位', () => {
 
     wrapper.unmount();
     host.remove();
+  });
+});
+
+describe('桌面端点击动态的行为', () => {
+  // 本 describe 在文件末尾，**不在**既有 describe 的 beforeEach 作用域内，
+  // 必须自己把 API mock 备好 —— 否则 openComments() 会因 getFeedReplies
+  // 返回 undefined 而走进 catch 分支。
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getHotReplies.mockResolvedValue({ data: [] });
+    mocks.getFeedReplies.mockResolvedValue({ data: [] });
+    setActivePinia(createPinia());
+  });
+
+  const mountCard = async (desktopFeedDetailOnClick: boolean) => {
+    useSettingsStore().settings.desktopFeedDetailOnClick = desktopFeedDetailOnClick;
+    const wrapper = mount(FeedCard, {
+      props: { feed: { id: '42', uid: '456', username: '作者', message: '正文' } },
+      global: { stubs: { FeedHeader: true, FeedContent: true, FeedActionBar: true, FeedCommentSection: true, FeedDyhShareDialog: true, FeedShareImageDialog: true, FeedInteractionListDialog: true, FeedCollectionPickerDialog: true, AppDialog: true, ForwardDialog: true } },
+    });
+    await flushPromises();
+    return wrapper;
+  };
+
+  it('默认（开关关）点击卡片就地展开评论，不跳详情页', async () => {
+    const wrapper = await mountCard(false);
+    await wrapper.find('article').trigger('click');
+    await flushPromises();
+    expect(mocks.routerPush).not.toHaveBeenCalled();
+    expect(wrapper.find('.inline-comment-wrapper').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('开关开启时点击卡片跳转详情页', async () => {
+    const wrapper = await mountCard(true);
+    await wrapper.find('article').trigger('click');
+    await flushPromises();
+    expect(mocks.routerPush).toHaveBeenCalledWith('/feed/42');
+    wrapper.unmount();
   });
 });

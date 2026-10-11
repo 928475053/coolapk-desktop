@@ -162,7 +162,8 @@
     <div class="setting-group">
       <h4 class="group-title">动态详情</h4>
       <div class="setting-row"><div class="row-info"><span class="row-label">官方样式动态详情</span><span class="row-sub">手机和平板默认启用官方作者栏、评论列表和底部操作栏；关闭后恢复原有动态详情与内联评论。</span></div><AppSwitch v-model="settingsStore.settings.officialMobileFeedDetail" /></div>
-      <div class="setting-row"><div class="row-info"><span class="row-label">桌面端点击动态进入详情页</span><span class="row-sub">宽窗口下点击动态跳转详情页，而不是在当前页展开评论区。</span></div><AppSwitch v-model="settingsStore.settings.desktopFeedDetailOnClick" /></div>
+      <!-- 触摸设备上 isMobileLayout 直接短路为移动布局，该开关永远不会生效，直接不展示。 -->
+      <div v-if="showDesktopLayoutSwitch" class="setting-row"><div class="row-info"><span class="row-label">桌面端点击动态进入详情页</span><span class="row-sub">桌面布局下点击动态跳转详情页，而不是在当前页展开评论区。</span></div><AppSwitch v-model="settingsStore.settings.desktopFeedDetailOnClick" /></div>
     </div>
     <div v-if="showDesktopLayoutSwitch" class="setting-group">
       <h4 class="group-title">窗口响应式布局</h4>

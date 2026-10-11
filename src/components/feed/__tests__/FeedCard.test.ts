@@ -964,11 +964,20 @@ describe('桌面端点击动态的行为', () => {
   // 本 describe 在文件末尾，**不在**既有 describe 的 beforeEach 作用域内，
   // 必须自己把 API mock 备好 —— 否则 openComments() 会因 getFeedReplies
   // 返回 undefined 而走进 catch 分支。
+  //
+  // 文件更早的用例用 Object.defineProperty 改过 window.innerWidth 且未还原，
+  // 布局判断依赖它，所以这里在 beforeEach 显式固定为宽窗口，并在 afterEach
+  // 还原为文件加载时的原值，避免宽度污染本 describe 及其它用例。
+  const originalInnerWidth = window.innerWidth;
   beforeEach(() => {
+    Object.defineProperty(window, 'innerWidth', { value: 1400, configurable: true, writable: true });
     vi.clearAllMocks();
     mocks.getHotReplies.mockResolvedValue({ data: [] });
     mocks.getFeedReplies.mockResolvedValue({ data: [] });
     setActivePinia(createPinia());
+  });
+  afterEach(() => {
+    Object.defineProperty(window, 'innerWidth', { value: originalInnerWidth, configurable: true, writable: true });
   });
 
   const mountCard = async (desktopFeedDetailOnClick: boolean) => {
@@ -986,6 +995,7 @@ describe('桌面端点击动态的行为', () => {
     await wrapper.find('article').trigger('click');
     await flushPromises();
     expect(mocks.routerPush).not.toHaveBeenCalled();
+    expect(mocks.getFeedReplies).toHaveBeenCalled();
     expect(wrapper.find('.inline-comment-wrapper').exists()).toBe(true);
     wrapper.unmount();
   });
@@ -995,6 +1005,29 @@ describe('桌面端点击动态的行为', () => {
     await wrapper.find('article').trigger('click');
     await flushPromises();
     expect(mocks.routerPush).toHaveBeenCalledWith('/feed/42');
+    wrapper.unmount();
+  });
+
+  it('窄窗口 + 开关开启时不跳详情页，仍就地展开评论（开关只在桌面布局生效）', async () => {
+    // 这条用例是「新开关只在桌面布局生效」的唯一防线：
+    // 若 opensDetailOnClick 丢掉 !mobileLayout 守卫，这里必须红。
+    // 官方样式动态详情默认开启，窄窗口下会走 mobileOfficialEnabled 分支，
+    // 因此这里显式关掉它，把判断聚焦到新开关的布局守卫上。
+    // 必须在 mount 之前设好宽度：useViewportWidth 在首个订阅者 mount 时
+    // 才读取一次当前 innerWidth。
+    useSettingsStore().settings.officialMobileFeedDetail = false;
+    Object.defineProperty(window, 'innerWidth', { value: 600, configurable: true, writable: true });
+    const wrapper = await mountCard(true);
+    // `viewportWidth` 是**模块级**状态，整个测试文件共享：若更早的用例留下了
+    // 未卸载的订阅者，本次 mount 就不会重新读取 innerWidth，光靠「mount 前设宽度」
+    // 会随用例顺序失效。补派发一次 resize 覆盖「已有订阅者」这条路径；
+    // 订阅者已清空时这次派发是空操作（监听器未挂上），而那种情况下 mount 已经读过宽度。
+    window.dispatchEvent(new Event('resize'));
+    await nextTick();
+    await wrapper.find('article').trigger('click');
+    await flushPromises();
+    expect(mocks.routerPush).not.toHaveBeenCalled();
+    expect(wrapper.find('.inline-comment-wrapper').exists()).toBe(true);
     wrapper.unmount();
   });
 });

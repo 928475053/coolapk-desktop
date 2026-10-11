@@ -126,6 +126,7 @@ describe('settings store', () => {
     expect(store.settings.favoriteCollectionSortMode).toBe(defaults.favoriteCollectionSortMode);
     expect(store.settings.favoriteCollectionSortDirection).toBe(defaults.favoriteCollectionSortDirection);
     expect(store.settings.topicHubShowCommentsByDefault).toBe(defaults.topicHubShowCommentsByDefault);
+    expect(store.settings.desktopFeedDetailOnClick).toBe(defaults.desktopFeedDetailOnClick);
     expect(store.settings.navVisibility?.albums).toBe(true);
     expect(store.settings.navVisibility?.pictures).toBe(true);
     expect(store.settings.navVisibility?.downloads).toBe(true);

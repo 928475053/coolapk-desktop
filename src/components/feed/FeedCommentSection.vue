@@ -1374,6 +1374,7 @@ function insertEmoji(name: string) {
 }
 
 function triggerImageSelect() {
+  showEmojiPicker.value = false;
   if (images.value.length >= MAX_IMAGES) {
     showToast(`最多只能添加 ${MAX_IMAGES} 张配图`, 'warning');
     return;
@@ -1532,12 +1533,13 @@ function handleContextReplyComment(event: Event) {
 }
 
 function bindGlobalListeners() {
-  window.addEventListener('click', handleClickOutside);
+  // 捕获阶段先判断面板外部点击，避免评论卡片的 @click.stop 阻断关闭。
+  window.addEventListener('click', handleClickOutside, true);
   window.addEventListener('coolapk-context-reply-comment', handleContextReplyComment);
 }
 
 function unbindGlobalListeners() {
-  window.removeEventListener('click', handleClickOutside);
+  window.removeEventListener('click', handleClickOutside, true);
   window.removeEventListener('coolapk-context-reply-comment', handleContextReplyComment);
 }
 

@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { useAuthStore } from '../../../stores/auth';
 import { useSettingsStore } from '../../../stores/settings';
 import { shuzilmGuideState } from '../../../utils/shuzilmDeviceGuide';
+import { clearRecentEmojis } from '../../../utils/recentEmojis';
 
 const mocks = vi.hoisted(() => ({
   getReplyDetail: vi.fn(),
@@ -90,6 +91,7 @@ describe('评论完整信息展示', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    clearRecentEmojis();
     mocks.getReplyDetail.mockResolvedValue({ data: {} });
     mocks.getSubReplies.mockResolvedValue({ code: 200, data: [] });
     mocks.replyFeed.mockResolvedValue({ code: 200, message: 'ok' });
@@ -415,6 +417,41 @@ describe('评论完整信息展示', () => {
     expect(mocks.getReplyDetail).toHaveBeenCalledWith('sub-1');
     expect(wrapper.get('.sub-reply-text').text()).toBe('楼中楼完整正文');
     wrapper.unmount();
+  });
+
+  it('外层阻止冒泡时仍能点击输入框关闭表情，选择表情和按钮切换正常', async () => {
+    const wrapper = mountSection();
+    const host = document.createElement('div');
+    const stopBubbling = vi.fn((event: Event) => event.stopPropagation());
+    host.addEventListener('click', stopBubbling);
+    document.body.appendChild(host);
+    host.appendChild(wrapper.element);
+    try {
+      const toggle = wrapper.get('[aria-label="插入表情"]');
+      await toggle.trigger('click');
+      expect(wrapper.find('.emoji-picker-popover').exists()).toBe(true);
+      await wrapper.get('.emoji-item-btn').trigger('click');
+      expect(wrapper.find('.emoji-picker-popover').exists()).toBe(true);
+      await toggle.trigger('click');
+      expect(wrapper.find('.emoji-picker-popover').exists()).toBe(false);
+      await toggle.trigger('click');
+      await wrapper.get('.comment-rich-editor').trigger('click');
+      expect(stopBubbling).toHaveBeenCalled();
+      expect(wrapper.find('.emoji-picker-popover').exists()).toBe(false);
+    } finally { wrapper.unmount(); host.remove(); }
+  });
+
+  it('点击图片按钮先关闭表情，即使文件选择被取消也保持关闭', async () => {
+    const wrapper = mountSection();
+    const file = wrapper.get('input[type="file"]').element as HTMLInputElement;
+    const select = vi.spyOn(file, 'click').mockImplementation(() => {});
+    try {
+      await wrapper.get('[aria-label="插入表情"]').trigger('click');
+      expect(wrapper.find('.emoji-picker-popover').exists()).toBe(true);
+      await wrapper.get('[aria-label="添加图片"]').trigger('click');
+      expect(select).toHaveBeenCalledOnce();
+      expect(wrapper.find('.emoji-picker-popover').exists()).toBe(false);
+    } finally { select.mockRestore(); wrapper.unmount(); }
   });
 
   it('支持表情面板展开与表情插入，并支持最近使用与移除顶部栏', async () => {

@@ -137,6 +137,8 @@ export interface AppSettings {
   disableAutoMobileMode: boolean;
   /** 移动端官方样式动态详情；关闭后沿用原详情和内联评论。 */
   officialMobileFeedDetail: boolean;
+  /** 宽窗口下点击动态是否直接进入详情页；关闭时在当前页展开评论。 */
+  desktopFeedDetailOnClick: boolean;
   myRecentPinned: boolean;
   moreExpanded: boolean;
   reduceMotion: boolean;

@@ -108,6 +108,7 @@ describe('settings store', () => {
     favoriteCollectionSortMode: 'default',
     favoriteCollectionSortDirection: 'asc',
     topicHubShowCommentsByDefault: true,
+    desktopFeedDetailOnClick: false,
   };
 
   it('loads default settings when localStorage is empty', () => {
@@ -181,6 +182,9 @@ describe('settings store', () => {
     expect(normalized.disableAutoMobileMode).toBe(true);
     expect(normalized.topicHubShowCommentsByDefault).toBe(false);
     expect(normalized.messageEnterBehavior).toBe('newline');
+    expect(normalizeSettings({}).desktopFeedDetailOnClick).toBe(false);
+    expect(normalizeSettings({ desktopFeedDetailOnClick: 'yes' }).desktopFeedDetailOnClick).toBe(false);
+    expect(normalizeSettings({ desktopFeedDetailOnClick: true }).desktopFeedDetailOnClick).toBe(true);
     expect(normalizeSettings({ rememberWindowState: false }).rememberWindowState).toBe(false);
   });
 

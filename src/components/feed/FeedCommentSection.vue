@@ -2593,7 +2593,7 @@ async function handleSend() {
 
 .comment-text :deep(a.coolapk-user-link),
 .sub-reply-text :deep(a.coolapk-user-link) {
-  color: var(--text-primary);
+  color: var(--brand-primary);
   font-weight: 400;
 }
 

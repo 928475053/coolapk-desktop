@@ -388,7 +388,7 @@ async function loadSubReplies(reset: boolean) {
 
 .comment-body :deep(a.coolapk-user-link),
 .sub-text :deep(a.coolapk-user-link) {
-  color: var(--text-primary);
+  color: var(--brand-primary);
   font-weight: 400;
 }
 

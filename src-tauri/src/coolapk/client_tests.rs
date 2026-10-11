@@ -263,6 +263,22 @@ fn test_product_rating_list_query_matches_apk_contract() {
 }
 
 #[test]
+fn test_topic_rating_list_query_matches_apk_contract() {
+    assert_eq!(build_topic_rating_list_query("topic-id", 0, 0, "", false, "", ""), vec![
+        ("url", "/feed/nodeRatingList".to_string()),
+        ("targetType", "3".to_string()),
+        ("targetId", "topic-id".to_string()),
+        ("page", "1".to_string()),
+    ]);
+    let query = build_topic_rating_list_query("topic-id", 2, 5, "1", true, "first", "last");
+    for field in [("star", "5"), ("ratingType", "1"), ("v4RatingItem", "1"), ("firstItem", "first"), ("lastItem", "last")] {
+        assert!(query.contains(&(field.0, field.1.to_string())));
+    }
+    let query = build_topic_rating_list_query("topic-id", 1, 8, "invalid", false, "", "");
+    assert!(!query.iter().any(|(name, _)| matches!(*name, "star" | "ratingType" | "isOwner" | "v4RatingItem")));
+}
+
+#[test]
 fn test_secondhand_product_list_query_matches_apk_contract() {
     assert_eq!(
         build_secondhand_product_list_query("1016", "recommend", 0, "", ""),

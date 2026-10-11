@@ -105,7 +105,8 @@
     </div>
     </Teleport>
 
-    <FeedContent
+    <OfficialRatingDetailBody v-if="isRatingDetail" :feed="feed" />
+    <FeedContent v-else
       :feed-id="feed.id"
       :title="feed.title || feed.message_title || feed.messageTitle"
       :message="feed.message || feed.message_raw_output"
@@ -167,7 +168,7 @@
       <OfficialFeedProductCard v-if="officialMobileDetail && isProductTarget(target)" :target="target" @open="openTarget" />
       <div
         v-else
-        class="feed-target-chip"
+        class="feed-target-chip" :class="{ 'rating-detail-target': isRatingDetail }"
         @click.stop="openTarget(target)"
         :title="getTargetTitle(target)"
       >
@@ -183,10 +184,11 @@
           <i :class="targetIconClass(target)"></i>
         </div>
         <div class="target-chip-text">
-          <span class="target-chip-title">{{ getTargetTitle(target) || '关联内容' }}</span>
+          <span class="target-chip-title"><span v-if="isRatingDetail && !isProductTarget(target)" class="rating-target-type">话题</span>{{ getTargetTitle(target) || '关联内容' }}</span>
           <span v-if="getTargetSubtitle(target)" class="target-chip-subtitle">{{ getTargetSubtitle(target) }}</span>
         </div>
-        <i class="fas fa-chevron-right target-chip-arrow"></i>
+        <div v-if="isRatingDetail && Number(target.star_average_score) > 0" class="rating-target-score"><strong>{{ Number(target.star_average_score).toFixed(1) }}</strong><span><i v-for="value in 5" :key="value" class="fas fa-star" :class="{ active: value <= topicScoreStars(Number(target.star_average_score)) }"></i></span></div>
+        <i v-else class="fas fa-chevron-right target-chip-arrow"></i>
       </div>
       </template>
     </div>
@@ -342,6 +344,8 @@ import { useOfficialMobileFeedDetail } from '../../composables/useOfficialMobile
 import OfficialFeedProductCard from './OfficialFeedProductCard.vue';
 import FeedHeader from './FeedHeader.vue';
 import FeedContent from './FeedContent.vue';
+import OfficialRatingDetailBody from './OfficialRatingDetailBody.vue';
+import { topicScoreStars } from '../../utils/topicRating';
 import VoteCard from './VoteCard.vue';
 import FeedImageGrid from './FeedImageGrid.vue';
 import FeedVideoCard from './FeedVideoCard.vue';
@@ -433,6 +437,12 @@ function openOfficialDetail() { appStore.setFeedDetailContext(String(props.feed.
 async function scrollToMobileComments() { void openComments(); await nextTick(); cardRef.value?.querySelector('.comment-toolbar')?.scrollIntoView({ block: 'start', behavior: settingsStore.settings.reduceMotion ? 'auto' : 'smooth' }); }
 async function writeMobileComment() { if (!authStore.isLoggedIn) { authStore.openLoginModal(); return; } void openComments(); await nextTick(); commentSectionRef.value?.openComposer(); }
 const isAnswerCard = computed(() => Boolean(props.answerMode) || isAnswerSearchEntity(props.feed as any));
+const isRatingDetail = computed(() => {
+  const feed = props.feed as any;
+  return props.detailMode && (/^(rating|ratingFeed)$/i.test(String(feed.feedType || feed.entityType || ''))
+    || Number(feed.rating_score ?? feed.ratingScore) > 0
+    || (Array.isArray(feed.rating_item_info ?? feed.ratingItemInfo) && (feed.rating_item_info ?? feed.ratingItemInfo).length > 0));
+});
 // FeedCard 同时用于话题和普通动态列表，不能用搜索结果里的 questionId 推断问答；这里只接受明确的问答实体标记。
 const isQuestionCard = computed(() => !isAnswerCard.value && (Boolean(props.questionMode) || isQuestionFeedEntity(props.feed)));
 const hasQuestionStats = computed(() => {
@@ -1532,6 +1542,18 @@ defineExpose({
 </script>
 
 <style scoped>
+.feed-target-chip.rating-detail-target { display: flex; width: 100%; max-width: 680px; height: auto; min-height: 80px; border-radius: 10px; padding: 14px; gap: 12px; background: var(--background-secondary); align-items: center; }
+.rating-detail-target .target-chip-media { width: 46px; height: 46px; min-width: 46px; max-width: 46px; min-height: 46px; max-height: 46px; }
+.rating-detail-target :deep(.target-chip-logo) { width: 46px !important; height: 46px !important; }
+.rating-detail-target .target-chip-text { flex: 1; flex-direction: column; align-items: flex-start; gap: 6px; }
+.rating-detail-target .target-chip-title,.rating-detail-target .target-chip-subtitle { max-width: 100%; }
+.rating-detail-target .target-chip-title { display: flex; gap: 6px; align-items: center; font-size: 16px; }
+.rating-target-type { border: 1px solid var(--brand-primary); color: var(--brand-primary); border-radius: 4px; padding: 1px 4px; font-size: 12px; }
+.rating-target-score { display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0; }
+.rating-target-score strong { font-size: 28px; line-height: 1; }
+.rating-target-score > span { display: flex; gap: 3px; }
+.rating-target-score i { display: grid; place-items: center; width: 12px; height: 12px; font-size: 8px; border-radius: 2px; background: var(--border-color); color: white; }
+.rating-target-score i.active { background: #ffb900; }
 .official-hot-reply { position: relative; display: block; width: 100%; border: 0; border-radius: 9px; margin-top: 12px; padding: 28px 10px 12px; background: var(--surface-hover); text-align: left; color: var(--text-primary); font: inherit; }
 .hot-reply-likes { position: absolute; top: 0; left: 0; background: var(--brand-primary); color: white; border-radius: 9px 0 7px 0; padding: 2px 10px; font-size: 11px; }
 .hot-reply-copy { font-size: 14px; line-height: 1.7; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }

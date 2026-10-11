@@ -1363,6 +1363,19 @@ pub async fn get_topic_detail(state: State<'_, AppState>, tag: String) -> Result
 }
 
 #[tauri::command]
+pub async fn get_topic_rating_list(
+    state: State<'_, AppState>, topic_id: String, page: u32, star: i32,
+    rating_type: String, detail_only: bool, first_item: String, last_item: String,
+) -> Result<Value, String> {
+    state.client.get_topic_rating_list(&topic_id, page, star, &rating_type, detail_only, &first_item, &last_item).await
+}
+
+#[tauri::command]
+pub async fn get_topic_rating_chart(state: State<'_, AppState>, topic_id: String) -> Result<Value, String> {
+    state.client.get_topic_rating_chart(&topic_id).await
+}
+
+#[tauri::command]
 pub async fn get_topic_feeds(
     state: State<'_, AppState>,
     tag: String,

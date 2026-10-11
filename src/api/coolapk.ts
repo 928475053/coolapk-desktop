@@ -705,6 +705,21 @@ export class CoolapkTauriAPI {
     }, { retry: true, kind: 'feed' });
   }
 
+  static async getTopicRatingList(options: {
+    topicId: string; page?: number; star?: number; ratingType?: '' | '0' | '1';
+    detailOnly?: boolean; firstItem?: string; lastItem?: string;
+  }) {
+    return await invokeNative('get_topic_rating_list', {
+      topicId: options.topicId, page: options.page || 1, star: options.star || 0,
+      ratingType: options.ratingType || '', detailOnly: options.detailOnly || false,
+      firstItem: options.firstItem || '', lastItem: options.lastItem || '',
+    }, { retry: true, kind: 'feed' });
+  }
+
+  static async getTopicRatingChart(topicId: string) {
+    return await invokeNative('get_topic_rating_chart', { topicId }, { retry: true, kind: 'feed' });
+  }
+
   static async getTopicHubData(subUrl: string = '', page: number = 1, firstItem: string = '', lastItem: string = '') {
     return await invokeNative('get_topic_hub_data', { subUrl, page, firstItem, lastItem }, { retry: true, kind: 'feed' });
   }

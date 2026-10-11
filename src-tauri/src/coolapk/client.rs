@@ -481,6 +481,25 @@ fn build_product_rating_list_query(
     query
 }
 
+// TopicUserRatingFragment / NodeRatingApi: targetType=3，默认不传筛选参数。
+fn build_topic_rating_list_query(
+    topic_id: &str, page: u32, star: i32, rating_type: &str,
+    detail_only: bool, first_item: &str, last_item: &str,
+) -> Vec<(&'static str, String)> {
+    let mut query = vec![
+        ("url", "/feed/nodeRatingList".to_string()),
+        ("targetType", "3".to_string()),
+        ("targetId", topic_id.to_string()),
+        ("page", page.max(1).to_string()),
+    ];
+    if (1..=5).contains(&star) { query.push(("star", star.to_string())); }
+    if matches!(rating_type, "0" | "1") { query.push(("ratingType", rating_type.to_string())); }
+    if detail_only { query.push(("v4RatingItem", "1".to_string())); }
+    if !first_item.is_empty() { query.push(("firstItem", first_item.to_string())); }
+    if !last_item.is_empty() { query.push(("lastItem", last_item.to_string())); }
+    query
+}
+
 fn build_secondhand_product_list_query(
     brand_id: &str,
     list_type: &str,
@@ -5717,6 +5736,21 @@ impl CoolapkClient {
             self.api_get("/v6/topic/newTagDetail", &[("tag", tag.to_string())])
                 .await?,
         )
+    }
+
+    /// 保留 NodeRating 原始字段，不能用动态清洗逻辑丢弃星级和详细评分。
+    pub async fn get_topic_rating_list(
+        &self, topic_id: &str, page: u32, star: i32, rating_type: &str,
+        detail_only: bool, first_item: &str, last_item: &str,
+    ) -> Result<Value, String> {
+        if topic_id.trim().is_empty() { return Err("缺少话题 ID".to_string()); }
+        let query = build_topic_rating_list_query(topic_id, page, star, rating_type, detail_only, first_item, last_item);
+        wrap_api_data(self.api_get("/v6/page/dataList", &query).await?)
+    }
+
+    pub async fn get_topic_rating_chart(&self, topic_id: &str) -> Result<Value, String> {
+        if topic_id.trim().is_empty() { return Err("缺少话题 ID".to_string()); }
+        wrap_api_data(self.api_get("/v6/topic/ratingChart", &[("id", topic_id.to_string())]).await?)
     }
 
     pub async fn get_topic_feeds(

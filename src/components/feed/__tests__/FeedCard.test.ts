@@ -33,6 +33,17 @@ import FeedCard from '../FeedCard.vue';
 import { useAuthStore } from '../../../stores/auth';
 
 describe('动态卡片编辑记录', () => {
+  it.each([false, true])('点评详情走专用评分正文并保留公共交互（移动=%s）', officialMobileDetail => {
+    const wrapper = mount(FeedCard, {
+      props: { feed: { id: '42', uid: '456', username: 'Zeldq', message: '【点评】摘要', feedType: 'rating', rating_score: 10 } as any, detailMode: true, officialMobileDetail },
+      global: { stubs: { OfficialRatingDetailBody: true, FeedHeader: true, FeedContent: true, FeedActionBar: true, FeedCommentSection: true, FeedDyhShareDialog: true, FeedShareImageDialog: true, FeedInteractionListDialog: true, FeedCollectionPickerDialog: true, AppDialog: true, ForwardDialog: true } },
+    });
+    expect(wrapper.find('official-rating-detail-body-stub').exists()).toBe(true);
+    expect(wrapper.find('feed-content-stub').exists()).toBe(false);
+    expect(wrapper.findComponent({ name: 'FeedHeader' }).exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'FeedActionBar' }).exists()).toBe(true);
+    wrapper.unmount();
+  });
   it.each([
     [{ publishStatus: 1 }, true],
     [{ publish_status: '1' }, true],

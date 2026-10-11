@@ -26,6 +26,32 @@ function deferred<T>() {
 }
 
 describe('话题排序按钮', () => {
+  it('有评分的话题显示官方详情入口，切换评分不请求普通动态', async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    mocks.getTopicDetail.mockResolvedValue({ data: { id: 76, title: 'iOS27', open_rate: 1, star_average_score: 8.8,
+      tabList: [{ pageName: 'feed', title: '讨论' }] } });
+    mocks.getTopicDetailV7.mockResolvedValue({ data: {} });
+    mocks.getTopicFeeds.mockReset().mockResolvedValue({ code: 200, data: [] });
+    mocks.getTopicTabData.mockReset();
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/topic/:tag', component: TopicPage }] });
+    await router.push('/topic/iOS27');
+    const wrapper = mount(TopicPage, { global: { plugins: [pinia, router], stubs: {
+      TopicRatingPanel: { props: ['detail'], template: '<div class="rating-panel-stub">{{ detail.id }}</div>' },
+      AppImage: true, FeedCard: true, LoadingState: true, EmptyState: true,
+    } } });
+    await flushPromises();
+    expect(wrapper.find('.topic-official-summary').text()).toContain('8.8');
+    await wrapper.find('.topic-official-summary header button').trigger('click'); await flushPromises();
+    expect(wrapper.find('.rating-panel-stub').text()).toBe('76');
+    expect(wrapper.find('.topic-header-card').exists()).toBe(false);
+    expect(mocks.getTopicFeeds).toHaveBeenCalledTimes(1);
+    expect(mocks.getTopicTabData).not.toHaveBeenCalled();
+    await router.push('/topic/iOS27'); await flushPromises();
+    expect(wrapper.find('.topic-header-card').exists()).toBe(true);
+    expect(wrapper.find('.rating-panel-stub').exists()).toBe(false);
+    wrapper.unmount();
+  });
   it('首次列表请求未完成时切换排序仍会加载新排序并丢弃旧响应', async () => {
     const pinia = createPinia();
     setActivePinia(pinia);

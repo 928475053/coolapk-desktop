@@ -5,13 +5,15 @@
     @scroll="handleScroll"
   >
     <!-- 1. 话题头部卡片 -->
-    <div v-if="topicDetail" class="topic-header-card">
+    <div v-if="topicDetail && !isRatingView" class="topic-official-hero" :class="{ 'has-rating': ratingAvailable }" :style="{ '--topic-color': /^#[\da-f]{6}$/i.test(topicDetail.bgColor || '') ? topicDetail.bgColor : '#4a6263' }">
+    <AppImage v-if="topicDetail.cover" :src="topicDetail.cover" fit="contain" image-class="topic-cover" />
+    <div class="topic-header-card">
       <div class="header-content">
         <div class="topic-icon-wrapper">
           <AppImage
             v-if="topicLogo"
             :src="topicLogo"
-            class="topic-icon"
+            image-class="topic-icon"
             fit="cover"
             :alt="tag"
           />
@@ -48,13 +50,15 @@
         {{ cleanedDescription }}
       </div>
     </div>
+    <TopicRatingSummary v-if="ratingAvailable" :detail="topicDetail" @detail="openRatings" />
+    </div>
 
     <!-- 保留「正在加载话题概况...」大白框转圈 -->
     <div v-else-if="headerLoading" class="topic-header-card skeleton-header">
       <LoadingState text="正在加载话题概况..." />
     </div>
 
-    <div v-if="topicTabs.length > 1 || isDiscussionTab(activeTopicTab)" class="topic-sticky-controls">
+    <div v-if="!isRatingView && (topicTabs.length > 1 || isDiscussionTab(activeTopicTab))" class="topic-sticky-controls">
       <!-- APK 话题页由 tabList 下发栏目，展示方式与设备页 Tab 保持一致。 -->
       <div v-if="topicTabs.length > 1" class="topic-sub-tabs custom-scrollbar">
         <button
@@ -90,8 +94,11 @@
       />
     </div>
 
+    <button v-if="!isRatingView && activeTopicTab?.kind === 'rating' && Number(topicDetail?.allow_rate) === 0" class="topic-single-rating" type="button" @click="showToast('暂未开放点评', 'info')"><span><i class="fas fa-chart-column"></i> 点击星星评分</span><span class="single-rating-stars"><i v-for="n in 5" :key="n" class="fas fa-star"></i><i class="fas fa-chevron-right"></i></span></button>
+    <div v-if="!isRatingView && activeTopicTab?.kind === 'rating'" class="topic-rating-toolbar"><span>排序规则</span><div><button v-for="option in sortOptions" :key="option.key" type="button" :aria-pressed="currentSort === option.key" @click="changeSort(option.key)">{{ option.label }}</button></div></div>
     <!-- 5. Feed 动态列表加载中转圈 -->
-    <div v-if="feedsLoading && page === 1" class="loading-wrapper">
+    <TopicRatingPanel v-if="isRatingView" :key="String(topicDetail.id)" :detail="topicDetail" />
+    <div v-else-if="feedsLoading && page === 1" class="loading-wrapper">
       <LoadingState :text="loadingText" />
     </div>
 
@@ -134,6 +141,9 @@ import AppImage from '../components/common/AppImage.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 import EntityFilterBar from '../components/common/EntityFilterBar.vue';
+import TopicRatingPanel from '../components/topic/TopicRatingPanel.vue';
+import TopicRatingSummary from '../components/topic/TopicRatingSummary.vue';
+import { hasTopicRating } from '../utils/topicRating';
 import { showToast } from '../utils/toast';
 import { normalizeCoolapkPageRoute, normalizeCoolapkRoute } from '../utils/coolapkRoute';
 import { resolveDiscoveryRoute } from '../utils/discovery';
@@ -213,6 +223,9 @@ watch(
 );
 
 const topicDetail = ref<any>(null);
+const ratingAvailable = computed(() => hasTopicRating(topicDetail.value)
+  || (Boolean(topicDetail.value?.id) && topicTabs.value.some(tab => tab.kind === 'rating')));
+const isRatingView = computed(() => Boolean(topicDetail.value?.id) && route.query.ratingDetail === '1');
 const headerLoading = ref(true);
 const topicTabs = ref<TopicTab[]>([]);
 const activeTopicTabKey = ref('feed');
@@ -353,7 +366,7 @@ function applyServerSortOptions(response: any) {
 
 function topicTabKind(pageName: string, label: string, url: string): TopicTab['kind'] {
   const text = `${pageName} ${label} ${url}`.toLowerCase();
-  if (/评分|beta|rating|score/.test(text)) return 'rating';
+  if (/评分|点评|beta|rating|score/.test(text)) return 'rating';
   if (/新特性|特性|feature|changelog|更新日志/.test(text)) return 'feature';
   if (/机型|设备|device|model/.test(text)) return 'device';
   if (/讨论|discussion|tagfeed|feed/.test(text)) return 'discussion';
@@ -407,10 +420,26 @@ function normalizeTopicTabs(detail: any): TopicTab[] {
 
 function applyTopicTabs(detail: any) {
   const tabs = normalizeTopicTabs(detail);
+  if (hasTopicRating(detail) && !tabs.some(tab => tab.kind === 'rating')) {
+    tabs.push({ key: 'rating', label: '点评', pageName: 'rating', url: '', subTitle: '', kind: 'rating' });
+  }
   const selected = String(detail?.selectedTab || detail?.selected_tab || '').trim();
   const selectedTab = tabs.find((tab) => tab.key === selected || tab.pageName === selected || tab.url === selected || tab.label === selected);
   topicTabs.value = tabs;
   activeTopicTabKey.value = selectedTab?.key || tabs[0]?.key || 'feed';
+}
+
+function openRatings() {
+  void router.push({ path: route.path, query: { ...route.query, ratingDetail: '1' } });
+}
+
+function sortedTopicTabUrl(tab: TopicTab, listType: string): string {
+  const url = getTopicTabUrl(tab);
+  if (tab.kind !== 'rating') return url;
+  const value = encodeURIComponent(listType);
+  return /([?&])listType=[^&]*/.test(url)
+    ? url.replace(/([?&])listType=[^&]*/, `$1listType=${value}`)
+    : `${url}${url.includes('?') ? '&' : '?'}listType=${value}`;
 }
 
 function isDiscussionTab(tab: TopicTab | null): boolean {
@@ -557,6 +586,7 @@ async function fetchTopicHeader() {
 }
 
 async function fetchFeeds(isLoadMore = false) {
+  if (isRatingView.value) { feedRequestId++; feedsLoading.value = false; return; }
   if (!tag.value || (isLoadMore && (feedsLoading.value || noMore.value))) return;
 
   const requestId = ++feedRequestId;
@@ -594,7 +624,7 @@ async function fetchFeeds(isLoadMore = false) {
         : usesDeviceFeedList(tab)
           ? await CoolapkTauriAPI.getDeviceFeedList(tag.value, page.value, { firstItem, lastItem })
         : await CoolapkTauriAPI.getTopicTabData({
-          url: getTopicTabUrl(tab),
+          url: sortedTopicTabUrl(tab, sortOption.listType),
           title: tab.label,
           subTitle: tab.subTitle,
           page: page.value,
@@ -693,6 +723,7 @@ function changeTopicTab(tabKey: string) {
   void fetchFeeds(false);
 }
 
+watch(isRatingView, async () => { await nextTick(); if (pageContainerRef.value) pageContainerRef.value.scrollTop = 0; });
 watch(() => settingsStore.settings.topicDiscussionDefaultSortMode, (sortMode) => {
   if (!isDiscussionTab(activeTopicTab.value)) return;
   const nextSort = findTopicSortOption(sortMode)?.key || sortMode;
@@ -711,6 +742,7 @@ let savedScrollTop = 0;
 function handleScroll(e: Event) {
   const target = e.target as HTMLElement;
   savedScrollTop = target.scrollTop;
+  if (isRatingView.value) return;
   const { scrollTop, clientHeight, scrollHeight } = target;
   if (scrollTop + clientHeight >= scrollHeight - 300) {
     if (!feedsLoading.value && !noMore.value) {
@@ -781,6 +813,33 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.topic-official-hero { flex: 0 0 auto; }
+.topic-official-hero :deep(.topic-cover) { height: auto; min-height: 160px; width: 100%; border-radius: 12px; margin-bottom: -28px; background: var(--topic-color); }
+.topic-official-hero :deep(.topic-cover img) { width: 100%; height: auto; object-fit: contain; object-position: center top; }
+@media(min-width:721px){
+  .topic-official-hero.has-rating { background: var(--topic-color); border-radius: 12px; overflow: hidden; padding: 0 16px 4px; }
+  .topic-official-hero.has-rating :deep(.topic-cover) { width: calc(100% + 32px); margin: 0 -16px -24px; border-radius: 0; }
+  .topic-official-hero.has-rating .topic-header-card { position: relative; margin-bottom: 12px; background: color-mix(in srgb, var(--topic-color) 88%, black); border: 0; color: white; }
+  .topic-official-hero.has-rating .topic-title,.topic-official-hero.has-rating .topic-description,.topic-official-hero.has-rating .topic-stats-text { color: #fffc; }
+  .topic-official-hero.has-rating :deep(.topic-official-summary) { background: #0002; color: white; }
+  .topic-official-hero.has-rating :deep(.topic-official-summary header button),.topic-official-hero.has-rating :deep(.topic-official-summary .score small),.topic-official-hero.has-rating :deep(.topic-official-summary .dimensions > div),.topic-official-hero.has-rating :deep(.topic-official-summary footer) { color: #fffc; }
+  .topic-official-hero.has-rating :deep(.topic-official-summary .dimensions b) { background: #ffffff15; }
+  .topic-official-hero.has-rating :deep(.topic-official-summary footer) { border-color: #ffffff15; }
+}
+.topic-single-rating { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px; border: 0; border-radius: 12px; background: var(--surface); color: var(--text-primary); font: inherit; cursor: pointer; }.topic-single-rating > span:first-child { display: flex; align-items: center; gap: 12px; }.single-rating-stars { display: flex; gap: 4px; color: var(--text-disabled); }
+.topic-rating-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; }.topic-rating-toolbar > div { display: flex; padding: 2px; background: var(--background-secondary); border-radius: 20px; }.topic-rating-toolbar button { border: 0; background: transparent; color: var(--text-secondary); font: inherit; padding: 6px 12px; border-radius: 20px; cursor: pointer; }.topic-rating-toolbar button[aria-pressed="true"] { color: var(--text-primary); background: var(--surface); }
+@media(max-width:720px){
+  .topic-official-hero { margin: -14px -16px 0; padding: 0 12px 12px; background: var(--topic-color); }
+  .topic-official-hero :deep(.topic-cover) { margin: 0 -12px -40px; width: calc(100% + 24px); border-radius: 0; }
+  .topic-official-hero .topic-header-card { position: relative; background: color-mix(in srgb, var(--topic-color) 88%, black); color: white; border: 0; margin-bottom: 12px; }
+  .topic-official-hero .topic-title,.topic-official-hero .topic-description,.topic-official-hero .topic-stats-text { color: #fffc; }
+  .topic-official-hero .topic-icon-wrapper { width: 64px; height: 64px; }
+  .topic-sticky-controls { border-radius: 12px 12px 0 0; margin: 0 -16px; }
+  .topic-sub-tabs { border-radius: 12px 12px 0 0; box-shadow: none; justify-content: space-around; gap: 0; border: 0; }
+}
+.topic-rating-entry { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; width: 100%; margin-top: 16px; padding: 12px 0 0; border: 0; border-top: 1px solid var(--border-light); background: transparent; color: var(--text-secondary); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.topic-rating-entry > i, .topic-rating-entry strong { color: #ef8b13; }
+.topic-rating-entry > span:last-child { margin-left: auto; color: var(--brand-primary); }
 .page-container {
   width: 100%;
   max-width: 100%;
@@ -1045,5 +1104,14 @@ onMounted(() => {
 .no-more {
   color: var(--text-tertiary);
   font-size: 12px;
+}
+@media(max-width:720px){
+  .topic-sticky-controls { border-radius: 12px 12px 0 0; margin: 0 -16px; }
+  .topic-sub-tabs { border-radius: 12px 12px 0 0; box-shadow: none; justify-content: space-around; gap: 0; border: 0; }
+  .feed-list :deep(.rating-dimensions-row) { background: transparent; padding: 0; gap: 6px 10px; }
+  .feed-list :deep(.sub-stars),.feed-list :deep(.sub-description) { display: none; }
+  .feed-list :deep(.sub-score)::after { content: '☆'; font-size: 14px; }
+  .feed-list :deep(.star-rating-stars i) { display: grid; place-items: center; width: 16px; height: 16px; border-radius: 3px; background: var(--border); color: white; font-size: 10px; }
+  .feed-list :deep(.star-rating-stars i.active) { background: #ffb900; }
 }
 </style>

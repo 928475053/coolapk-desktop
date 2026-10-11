@@ -2662,6 +2662,7 @@ onUnmounted(() => {
 .message-content {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   gap: var(--space-1);
 }
 
@@ -2673,10 +2674,15 @@ onUnmounted(() => {
   position: relative;
   display: inline-flex;
   align-items: center;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .bubble {
   position: relative;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-control);
   background: var(--surface);
@@ -2769,7 +2775,8 @@ onUnmounted(() => {
 }
 
 .msg-pic-only-card {
-  max-width: 320px;
+  max-width: min(320px, 100%);
+  box-sizing: border-box;
   max-height: 480px;
   border-radius: var(--radius-card, 10px);
   overflow: hidden;
@@ -2787,7 +2794,8 @@ onUnmounted(() => {
 }
 
 .msg-pic-only-card :deep(.msg-pure-img) {
-  max-width: 320px;
+  min-width: 0;
+  max-width: 100%;
   max-height: 480px;
   width: auto;
   height: auto;
@@ -2796,7 +2804,8 @@ onUnmounted(() => {
 }
 
 .msg-pic-only-card :deep(.msg-pure-img img) {
-  max-width: 320px;
+  min-width: 0;
+  max-width: 100%;
   max-height: 480px;
   width: auto;
   height: auto;
@@ -2806,7 +2815,7 @@ onUnmounted(() => {
 }
 
 .bubble :deep(.msg-pic-container) {
-  max-width: 320px;
+  max-width: min(320px, 100%);
   max-height: 380px;
   border-radius: var(--radius-sm);
   overflow: hidden;
@@ -2815,7 +2824,8 @@ onUnmounted(() => {
 }
 
 .bubble :deep(.msg-img) {
-  max-width: 320px;
+  min-width: 0;
+  max-width: 100%;
   max-height: 380px;
   width: auto;
   height: auto;
@@ -2824,7 +2834,8 @@ onUnmounted(() => {
 }
 
 .bubble :deep(.msg-img img) {
-  max-width: 320px;
+  min-width: 0;
+  max-width: 100%;
   max-height: 380px;
   width: auto;
   height: auto;

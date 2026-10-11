@@ -146,6 +146,7 @@ fn create_session_marker(path: &Path) -> std::io::Result<bool> {
 }
 
 pub fn begin_session(app: &tauri::AppHandle) {
+    crate::performance_diagnostics::start();
     if let Ok(dir) = log_dir(app) {
         if fs::create_dir_all(&dir).is_ok() {
             let _ = REPORT_DIRECTORY.set(dir);
@@ -168,6 +169,7 @@ pub fn begin_session(app: &tauri::AppHandle) {
 }
 
 pub fn end_session(app: &tauri::AppHandle) {
+    crate::performance_diagnostics::stop();
     log::info!("runtime.exit_normal pid={}", std::process::id());
     if let Ok(dir) = log_dir(app) {
         let marker = dir.join(SESSION_MARKER);

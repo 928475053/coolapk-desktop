@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { debug as writeDebug, error as writeError, info as writeInfo, warn as writeWarn } from '@tauri-apps/plugin-log';
 import { APP_VERSION } from '../constants/version';
+import { installPerformanceDiagnostics } from './performanceDiagnostics';
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 let installed = false;
@@ -200,6 +201,7 @@ export function installDiagnosticLogging(): void {
   installConsoleDiagnosticBridge();
   installClickDiagnosticBridge();
   logDiagnostic('info', 'app', 'startup', `version=${APP_VERSION}`);
+  installPerformanceDiagnostics((event, detail) => logDiagnostic('info', 'performance', event, detail));
   let viewportTimer: ReturnType<typeof setTimeout> | undefined;
   const logViewport = () => {
     clearTimeout(viewportTimer);

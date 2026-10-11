@@ -830,6 +830,7 @@ dependencies = [
  "hex",
  "hmac",
  "jni 0.21.1",
+ "libc",
  "libloading",
  "log",
  "md-5",

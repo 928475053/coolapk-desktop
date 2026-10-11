@@ -1,5 +1,6 @@
 pub mod coolapk;
 pub mod diagnostics;
+mod performance_diagnostics;
 pub mod download_manager;
 mod windows_tile;
 

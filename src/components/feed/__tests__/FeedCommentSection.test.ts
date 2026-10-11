@@ -454,6 +454,30 @@ describe('评论完整信息展示', () => {
     } finally { select.mockRestore(); wrapper.unmount(); }
   });
 
+  it('系统 Emoji 插入真实字符，收藏表情加入配图而不是伪造表情代码', async () => {
+    const wrapper = mountSection({}, { feedId: 'emoji-contract-feed' });
+    try {
+      await flushPromises();
+      await wrapper.get('[aria-label="插入表情"]').trigger('click');
+      await wrapper.get('[role="tab"][aria-label="系统 Emoji"]').trigger('click');
+      await wrapper.get('.emoji-item-btn').trigger('click');
+      expect((wrapper.get('.comment-textarea').element as any).value).toBe('😀');
+      expect(wrapper.find('.comment-textarea img').exists()).toBe(false);
+      const panel = wrapper.findComponent({ name: 'EmojiPanel' });
+      const picture = { id: '1', url: 'https://image.coolapk.com/favorite1.gif' };
+      panel.vm.$emit('picture', picture);
+      await vi.waitFor(() => expect(wrapper.find('.comment-media-thumb').exists()).toBe(true));
+      expect(wrapper.find('.emoji-picker-popover').exists()).toBe(true);
+      panel.vm.$emit('picture', picture);
+      await flushPromises();
+      expect(wrapper.findAll('.comment-media-thumb')).toHaveLength(1);
+      panel.vm.$emit('picture', { id: '2', url: 'https://image.coolapk.com/favorite2.gif' });
+      await vi.waitFor(() => expect(wrapper.findAll('.comment-media-thumb')).toHaveLength(2));
+      expect(wrapper.find('.emoji-picker-popover').exists()).toBe(true);
+      expect((wrapper.get('.comment-textarea').element as any).value).toBe('😀');
+    } finally { wrapper.unmount(); }
+  });
+
   it('支持表情面板展开与表情插入，并支持最近使用与移除顶部栏', async () => {
     const wrapper = mountSection();
     expect(wrapper.find('.emoji-picker-popover').exists()).toBe(false);
@@ -466,7 +490,7 @@ describe('评论完整信息展示', () => {
     expect(wrapper.find('.emoji-picker-popover').exists()).toBe(true);
     // 顶部条已去除（参考微信设计）
     expect(wrapper.find('.emoji-picker-header').exists()).toBe(false);
-    expect(wrapper.find('.emoji-section-title').text()).toBe('所有表情');
+    expect(wrapper.find('.emoji-section-title').text()).toBe('酷安表情');
 
     // 点击某一个表情
     const firstEmoji = wrapper.find('.emoji-item-btn');
@@ -476,10 +500,12 @@ describe('评论完整信息展示', () => {
     const textarea = wrapper.find<HTMLTextAreaElement>('.comment-textarea');
     expect(textarea.element.value).toMatch(/^\[.+\]$/);
 
-    // 再次渲染时应包含“最近使用”区块
+    // 最近使用独立分类，选择后可切换查看。
+    await wrapper.get('[role="tab"][aria-label="最近使用"]').trigger('click');
     const titles = wrapper.findAll('.emoji-section-title').map(t => t.text());
     expect(titles).toContain('最近使用');
     expect(wrapper.find('.emoji-grid-recent').exists()).toBe(true);
+    wrapper.unmount();
   });
 
   it('点击回复酷友时显示回复目标栏且支持一键取消', async () => {
@@ -519,6 +545,30 @@ describe('评论完整信息展示', () => {
     expect(wrapper.emitted('send-comment')?.[0]).toEqual(['这是一条测试评论内容']);
   });
 
+  it.each([false, true])('收藏图片评论复用已有 URL，仅上传混入的本地图片：%s', async (includeLocal) => {
+    const auth = useAuthStore(); auth.isLoggedIn = true; auth.user = { uid: 12345, username: '发布者' } as any;
+    const settings = useSettingsStore();
+    settings.settings.deviceFingerprint.deviceId = 'DU-MOCK-SAMPLE-DEVICE-ID-12345';
+    settings.settings.deviceFingerprint.ddid = 'DU-MOCK-DDI-SESSION-12345';
+    settings.settings.publishDeviceSignature = false;
+    const wrapper = mountSection({}, { feedId: 'picture-only-feed' }); await flushPromises();
+    await wrapper.get('[aria-label="插入表情"]').trigger('click');
+    wrapper.findComponent({ name: 'EmojiPanel' }).vm.$emit('picture', { id: '1', url: 'https://image.coolapk.com/favorite.gif' });
+    await vi.waitFor(() => expect(wrapper.find('.comment-media-thumb').exists()).toBe(true));
+    if (includeLocal) {
+      const file = new File(['PNG'], 'local.png', { type: 'image/png' });
+      Object.defineProperty(file, 'arrayBuffer', { value: async () => new Uint8Array([80, 78, 71]).buffer });
+      const input = wrapper.get('input[type="file"]');
+      Object.defineProperty(input.element, 'files', { configurable: true, value: [file] });
+      await input.trigger('change');
+      await vi.waitFor(() => expect(wrapper.findAll('.comment-media-thumb')).toHaveLength(2));
+    }
+    await wrapper.get('.stub-button').trigger('click'); await flushPromises();
+    expect(mocks.replyFeed).toHaveBeenCalledWith('picture-only-feed', '[图片]', undefined, `https://image.coolapk.com/favorite.gif${includeLocal ? ',https://image.coolapk.com/feed/test.jpg' : ''}`);
+    expect(mocks.uploadImage).toHaveBeenCalledTimes(includeLocal ? 1 : 0);
+    wrapper.unmount();
+  });
+
   it('未配置设备 ID 时提交评论会唤起设置弹窗', async () => {
     const authStore = useAuthStore();
     authStore.user = { uid: 12345, username: '发布者' } as any;
@@ -542,6 +592,21 @@ describe('评论完整信息展示', () => {
     expect(shuzilmGuideState.visible).toBe(true);
     expect(shuzilmGuideState.reason).toBe('missing_id');
   });
+  it('官方详情的表情面板放在编辑框内部，点击面板不会被外部点击处理关闭', async () => {
+    const auth = useAuthStore(); auth.isLoggedIn = true; auth.user = { uid: 12345, username: '发布者' } as any;
+    const wrapper = mountSection({}, { officialDetail: true, feedId: 'mobile-emoji-feed' });
+    await (wrapper.vm as any).openComposer();
+    const layer = document.body.querySelector('.official-composer-layer')!;
+    await new DOMWrapper(layer.querySelector('[aria-label="插入表情"]')!).trigger('click');
+    const panel = layer.querySelector('.official-composer-emoji')!;
+    expect(panel.parentElement?.classList.contains('comment-composer-box')).toBe(true);
+    expect(layer.querySelector('.emoji-picker-popover')).toBeNull();
+    const systemTab = panel.querySelector('[aria-label="系统 Emoji"]')!;
+    systemTab.dispatchEvent(new MouseEvent('click', { bubbles: true })); await flushPromises();
+    expect(layer.querySelector('.official-composer-emoji')).not.toBeNull();
+    wrapper.unmount();
+  });
+
   it('官方详情初始隐藏编辑框，底部唤起后关闭再打开保留草稿', async () => {
     const dim = vi.spyOn(useSettingsStore(), 'setAndroidSystemBarDimmed');
     const auth = useAuthStore(); auth.isLoggedIn = true; auth.user = { uid: 12345, username: '发布者' } as any;

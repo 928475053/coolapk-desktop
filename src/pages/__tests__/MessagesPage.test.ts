@@ -72,6 +72,32 @@ import { clearMessageDraft } from '../../utils/messageDrafts';
 describe('MessagesPage 粘贴图片发送功能', () => {
   let wrapper: any;
 
+  it('系统表情插入 Unicode，收藏图片进入待发送区且不立即发私信', async () => {
+    await mountMessagesPage();
+    const page = wrapper.findComponent(MessagesPage);
+    await page.get('button[title="表情"]').trigger('click');
+    await page.get('[role="tab"][aria-label="系统 Emoji"]').trigger('click');
+    await page.get('.emoji-item-btn').trigger('click');
+    expect(page.get('[contenteditable="true"]').text()).toBe('😀');
+    await page.get('button[title="表情"]').trigger('click');
+    const picture = { id: '1', url: 'https://image.coolapk.com/favorite1.gif' };
+    page.findComponent({ name: 'EmojiPanel' }).vm.$emit('picture', picture);
+    await flushPromises();
+    expect(page.findAll('.pending-image-card')).toHaveLength(1);
+    expect(mocks.sendPrivateImage).not.toHaveBeenCalled();
+    expect(page.find('.emoji-picker-popover').exists()).toBe(true);
+    page.findComponent({ name: 'EmojiPanel' }).vm.$emit('picture', picture); await flushPromises();
+    expect(page.findAll('.pending-image-card')).toHaveLength(1);
+    page.findComponent({ name: 'EmojiPanel' }).vm.$emit('picture', { id: '2', url: 'https://image.coolapk.com/favorite2.gif' });
+    await flushPromises();
+    expect(page.findAll('.pending-image-card')).toHaveLength(2);
+    expect(page.find('.emoji-picker-popover').exists()).toBe(true);
+    await page.get('.input-actions .app-btn').trigger('click'); await flushPromises();
+    expect(mocks.sendPrivateImage).toHaveBeenCalledWith('20002', picture.url);
+    expect(mocks.sendPrivateImage).toHaveBeenCalledWith('20002', 'https://image.coolapk.com/favorite2.gif');
+    expect(mocks.uploadImage).not.toHaveBeenCalled();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     delete mocks.route.query.feedback;

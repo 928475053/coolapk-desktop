@@ -1449,6 +1449,21 @@ pub async fn get_notification_count(state: State<'_, AppState>) -> Result<Value,
 }
 
 #[tauri::command]
+pub async fn get_emoji_pictures(state: State<'_, AppState>) -> Result<Value, String> {
+    state.client.get_emoji_pictures().await
+}
+
+#[tauri::command]
+pub async fn add_emoji_picture(state: State<'_, AppState>, url: String) -> Result<Value, String> {
+    state.client.add_emoji_picture(&url).await
+}
+
+#[tauri::command]
+pub async fn edit_emoji_pictures(state: State<'_, AppState>, action: String, ids: Vec<String>) -> Result<Value, String> {
+    state.client.edit_emoji_pictures(&action, &ids).await
+}
+
+#[tauri::command]
 pub async fn clear_notification_count(
     state: State<'_, AppState>,
     notification_type: String,

@@ -732,6 +732,18 @@ export class CoolapkTauriAPI {
     return await invokeNative('get_notification_count', {}, { retry: true });
   }
 
+  static async getEmojiPictures() {
+    return await invokeNative('get_emoji_pictures', {}, { retry: true });
+  }
+
+  static async addEmojiPicture(url: string) {
+    return await invokeNative('add_emoji_picture', { url }, { retry: false });
+  }
+
+  static async editEmojiPictures(action: 'delete' | 'sort', ids: string[]) {
+    return await invokeNative('edit_emoji_pictures', { action, ids }, { retry: false });
+  }
+
   static async clearNotificationCount(notificationType: string = 'all') {
     return await invokeNative('clear_notification_count', { notificationType });
   }

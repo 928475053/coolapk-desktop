@@ -509,7 +509,10 @@ function isPreparing(): boolean {
   return isPreparingCover.value || isPreparingImages.value;
 }
 
-defineExpose({ openImagePicker, insertTextAtCaret, isPreparing });
+function insertPreparedPicture(image: PublishImage) {
+  insertPreparedImages([image], captureActiveSelection());
+}
+defineExpose({ openImagePicker, insertTextAtCaret, insertPreparedPicture, isPreparing });
 </script>
 
 <style scoped>

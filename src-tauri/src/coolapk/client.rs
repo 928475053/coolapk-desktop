@@ -6018,6 +6018,26 @@ impl CoolapkClient {
         wrap_api_data(self.api_get("/v6/notification/checkCount", &[]).await?)
     }
 
+    /// 官方个人收藏表情列表（APK 使用 group=default）。
+    pub async fn get_emoji_pictures(&self) -> Result<Value, String> {
+        wrap_api_data(self.api_get("/v6/emojiPicture/list", &[("group", "default".to_string())]).await?)
+    }
+
+    pub async fn add_emoji_picture(&self, url: &str) -> Result<Value, String> {
+        let parsed = reqwest::Url::parse(url).map_err(|_| "表情图片地址无效".to_string())?;
+        if !matches!(parsed.scheme(), "http" | "https") || !is_coolapk_host(parsed.host_str().unwrap_or_default()) {
+            return Err("表情图片必须先上传到酷安".to_string());
+        }
+        wrap_api_data(self.api_post("/v6/emojiPicture/addEmoji", &[], &[("group", "default".to_string()), ("url", url.to_string())]).await?)
+    }
+
+    pub async fn edit_emoji_pictures(&self, action: &str, ids: &[String]) -> Result<Value, String> {
+        if !matches!(action, "delete" | "sort") || ids.is_empty() || ids.iter().any(|id| id.is_empty() || !id.bytes().all(|byte| byte.is_ascii_digit()) || id == "0") {
+            return Err("表情管理参数无效".to_string());
+        }
+        wrap_api_data(self.api_post("/v6/emojiPicture/edit", &[], &[("group", "default".to_string()), ("action", action.to_string()), ("id", ids.join(","))]).await?)
+    }
+
     /// 清除服务端通知数。对应 APK 的 POST /v6/notification/clearCount?type={type}。
     pub async fn clear_notification_count(&self, notification_type: &str) -> Result<Value, String> {
         wrap_api_data(
@@ -6322,7 +6342,7 @@ impl CoolapkClient {
         let (file_list, video_name) = build_publish_upload_files(image_bytes, file_name, live_video, hdr);
 
         // 发动态/评论配图用 image/feed，私信图片用 message/message
-        let upload_bucket = if dir == "feed" || dir == "feed_report" { "image" } else { dir }.to_string();
+        let upload_bucket = if matches!(dir, "feed" | "feed_report" | "feed_emoji_picture") { "image" } else { dir }.to_string();
         let feed_type = if dir == "feed" { "feed" } else { "" }.to_string();
 
         let prepare_params = [

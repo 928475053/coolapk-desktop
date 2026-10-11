@@ -219,35 +219,7 @@
 
               <!-- 酷安 Emoji 表情包浮动面板 (参考微信：无顶部条，最近使用 + 所有表情) -->
               <div v-if="showEmojiPicker" class="emoji-picker-popover custom-scrollbar" @click.stop>
-                <!-- 最近使用 -->
-                <template v-if="recentEmojis.length">
-                  <div class="emoji-section-title">最近使用</div>
-                  <div class="emoji-grid emoji-grid-recent">
-                    <button
-                      v-for="name in recentEmojis"
-                      :key="'recent-' + name"
-                      class="emoji-item-btn"
-                      :title="String(name)"
-                      @click="insertEmoji(String(name))"
-                    >
-                      <img :src="getEmojiUrl(String(name))" :alt="String(name)" />
-                    </button>
-                  </div>
-                </template>
-
-                <!-- 所有表情 -->
-                <div class="emoji-section-title">所有表情</div>
-                <div class="emoji-grid">
-                  <button
-                    v-for="(filename, name) in EMOJI_MAP"
-                    :key="name"
-                    class="emoji-item-btn"
-                    :title="String(name)"
-                    @click="insertEmoji(String(name))"
-                  >
-                    <img :src="getEmojiUrl(String(name))" :alt="String(name)" />
-                  </button>
-                </div>
+                <EmojiPanel :key="String(currentSession?.ukey || currentSession?.id || '')" :disabled="sending || sendingImage" :selected-urls="pendingImages.flatMap(image => image.url ? [image.url] : [])" @select="insertEmoji" @picture="selectFavoritePicture" />
               </div>
             </div>
 
@@ -273,7 +245,8 @@
         <!-- 待发送图片预览区 -->
         <div v-if="pendingImages.length > 0" class="pending-images-bar">
           <div v-for="(img, idx) in pendingImages" :key="img.id" class="pending-image-card">
-            <img :src="img.previewUrl" class="pending-image-thumb" alt="待发送图片" />
+            <AppImage v-if="img.url" :src="img.previewUrl" class="pending-image-thumb" alt="待发送图片" fit="cover" />
+            <img v-else :src="img.previewUrl" class="pending-image-thumb" alt="待发送图片" />
             <button
               type="button"
               class="pending-image-remove-btn"
@@ -357,6 +330,8 @@ import ErrorState from '../components/common/ErrorState.vue';
 import AppButton from '../components/common/AppButton.vue';
 import { EMOJI_MAP, EMOJI_BASE, getEmojiUrl } from '../utils/coolapkEmoji';
 import { useRecentEmojis } from '../utils/recentEmojis';
+import EmojiPanel from '../components/common/EmojiPanel.vue';
+import { isSystemEmoji, type EmojiPicture } from '../utils/emojiPanel';
 import { renderCoolapkRichText } from '../utils/richText';
 import { coolapkHtmlToPlainText } from '../utils/sanitizeHtml';
 import { handleAnchorClick } from '../utils/anchorClick';
@@ -465,7 +440,7 @@ const confirmingFollow = ref(false);
 
 const showEmojiPicker = ref(false);
 const emojiContainerRef = ref<HTMLElement | null>(null);
-const { recentEmojis, addRecent } = useRecentEmojis();
+const { addRecent } = useRecentEmojis();
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const editorRef = ref<HTMLDivElement | null>(null);
 const chatAreaRef = ref<HTMLElement | null>(null);
@@ -528,7 +503,8 @@ function syncTextToEditor(text: string) {
 
 interface PendingImageItem {
   id: string;
-  file: File;
+  file?: File;
+  url?: string;
   previewUrl: string;
 }
 
@@ -549,14 +525,14 @@ function appendPendingImages(files: File[]) {
 function removePendingImage(index: number, force = false) {
   if (!force && (sending.value || sendingImage.value)) return;
   const removed = pendingImages.value.splice(index, 1);
-  if (removed.length > 0 && removed[0].previewUrl) {
+  if (removed.length > 0 && removed[0].previewUrl.startsWith('blob:')) {
     URL.revokeObjectURL(removed[0].previewUrl);
   }
 }
 
 function clearPendingImages() {
   for (const item of pendingImages.value) {
-    if (item.previewUrl) {
+    if (item.previewUrl.startsWith('blob:')) {
       URL.revokeObjectURL(item.previewUrl);
     }
   }
@@ -1829,7 +1805,7 @@ const insertEmoji = (emojiName: string) => {
   addRecent(emojiName);
   const filename = EMOJI_MAP[emojiName];
   const el = editorRef.value;
-  const emojiCode = `[${emojiName}]`;
+  const emojiCode = isSystemEmoji(emojiName) ? emojiName : `[${emojiName}]`;
   if (!el) {
     inputText.value += emojiCode;
     showEmojiPicker.value = false;
@@ -1838,7 +1814,7 @@ const insertEmoji = (emojiName: string) => {
 
   el.focus();
   const sel = window.getSelection();
-  const img = createEmojiImg(emojiName, filename);
+  const img = isSystemEmoji(emojiName) ? document.createTextNode(emojiName) : createEmojiImg(emojiName, filename);
 
   if (sel && sel.rangeCount > 0 && el.contains(sel.anchorNode)) {
     const range = sel.getRangeAt(0);
@@ -1859,9 +1835,16 @@ const insertEmoji = (emojiName: string) => {
 };
 
 const triggerImageSelect = () => {
+  showEmojiPicker.value = false;
   if (fileInputRef.value) {
     fileInputRef.value.click();
   }
+};
+
+const selectFavoritePicture = (picture: EmojiPicture) => {
+  if (sending.value || sendingImage.value) return;
+  if (pendingImages.value.some(image => image.url === picture.url)) { showToast('已经添加了', 'info'); return; }
+  pendingImages.value.push({ id: `favorite_${picture.id}`, url: picture.url, previewUrl: picture.url });
 };
 
 const handleImageSelected = async (e: Event) => {
@@ -1876,7 +1859,7 @@ const handleImageSelected = async (e: Event) => {
   }
 };
 
-const sendImageFile = async (file: File): Promise<boolean> => {
+const sendImageFile = async (file?: File, existingUrl?: string): Promise<boolean> => {
   if (!currentSession.value) {
     alert('请先选择一个会话再发送图片');
     return false;
@@ -1889,19 +1872,23 @@ const sendImageFile = async (file: File): Promise<boolean> => {
 
   sendingImage.value = true;
   try {
-    // File → ArrayBuffer → Uint8Array → 上传图床
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const contentType = file.type || 'image/jpeg';
-    const ext = contentType.split('/')[1] || 'jpg';
-    const fileName = file.name || `image_${Date.now()}.${ext}`;
-    const res = await CoolapkTauriAPI.uploadImage(bytes, fileName, contentType, 'message', String(targetUid));
-    const uploaded: any = res?.data || res;
-    let picPath = typeof uploaded === 'string' ? uploaded : (uploaded?.url || uploaded?.data || uploaded?.pic || '');
+    let picPath = existingUrl || '';
+    if (!picPath) {
+      if (!file) throw new Error('图片尚未准备好');
+      // 本地图片才上传，收藏表情直接使用已有 URL。
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const contentType = file.type || 'image/jpeg';
+      const ext = contentType.split('/')[1] || 'jpg';
+      const fileName = file.name || `image_${Date.now()}.${ext}`;
+      const res = await CoolapkTauriAPI.uploadImage(bytes, fileName, contentType, 'message', String(targetUid));
+      const uploaded: any = res?.data || res;
+      picPath = typeof uploaded === 'string' ? uploaded : (uploaded?.url || uploaded?.data || uploaded?.pic || '');
 
-    // 酷安 message_pic 字段存 /message/ 开头的相对路径
-    if (picPath && !picPath.startsWith('/')) {
-      const idx = String(picPath).indexOf('/message/');
-      picPath = idx >= 0 ? String(picPath).slice(idx) : String(picPath);
+      // 新上传的私信图片使用 /message/ 相对路径，收藏 URL 保持原样。
+      if (picPath && !picPath.startsWith('/')) {
+        const idx = String(picPath).indexOf('/message/');
+        picPath = idx >= 0 ? String(picPath).slice(idx) : String(picPath);
+      }
     }
     if (!picPath) {
       throw new Error('图片上传成功但未获取到图片地址');
@@ -2058,7 +2045,7 @@ const sendMessage = async () => {
     // 1. 发送待发送列表中的所有图片
     while (pendingImages.value.length > 0) {
       const item = pendingImages.value[0];
-      const success = await sendImageFile(item.file);
+      const success = await sendImageFile(item.file, item.url);
       if (success) {
         removePendingImage(0, true);
       } else {
@@ -2995,16 +2982,15 @@ onUnmounted(() => {
   position: absolute;
   bottom: 36px;
   left: 0;
-  width: 324px;
-  max-height: 280px;
+  width: min(360px, calc(100vw - 32px));
   background: var(--surface);
   border: 1px solid var(--border-light);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
   border-radius: var(--radius-card);
   z-index: 100;
   display: block;
-  overflow-y: auto;
-  padding: 8px 10px 10px 10px;
+  overflow: hidden;
+  padding: 0;
   animation: emojiSpringPop 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
   transform-origin: bottom left;
 }

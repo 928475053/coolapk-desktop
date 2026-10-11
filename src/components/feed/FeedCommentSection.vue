@@ -76,7 +76,8 @@
       <!-- 已选图片预览列表 -->
       <div v-if="images.length > 0" class="comment-media-preview">
         <div v-for="(img, i) in images" :key="i" class="comment-media-thumb">
-          <img :src="img.preview" alt="评论配图" />
+          <AppImage v-if="img.url" :src="img.preview" alt="评论配图" fit="cover" />
+          <img v-else :src="img.preview" alt="评论配图" />
           <button
             type="button"
             class="comment-media-remove-btn"
@@ -89,7 +90,7 @@
         </div>
         <div v-if="uploadingImages" class="comment-uploading-tip">
           <i class="fa-solid fa-circle-notch fa-spin"></i>
-          <span>正在上传配图 {{ uploadedCount }}/{{ images.length }}...</span>
+          <span>正在上传配图 {{ uploadedCount }}/{{ imageUploadTotal }}...</span>
         </div>
       </div>
 
@@ -104,6 +105,9 @@
       />
 
       <!-- 工具栏与表情面板 -->
+      <div v-if="officialDetail && showEmojiPicker" ref="officialEmojiPanelRef" class="official-composer-emoji" @click.stop>
+        <EmojiPanel :key="String(feedId)" :disabled="sending" :selected-urls="images.flatMap(image => image.url ? [image.url] : [])" @select="insertEmoji" @picture="selectFavoritePicture" />
+      </div>
       <div class="comment-composer-toolbar">
         <div class="composer-tools-left">
           <!-- 表情按钮 -->
@@ -120,43 +124,13 @@
               <span>表情</span>
             </button>
 
-            <!-- 酷安表情浮层 (参考微信：无顶部条，最近使用 + 所有表情) -->
+            <!-- 官方分类表情浮层 -->
             <div
-              v-if="showEmojiPicker"
+              v-if="showEmojiPicker && !officialDetail"
               class="emoji-picker-popover custom-scrollbar"
               @click.stop
             >
-              <!-- 最近使用 -->
-              <template v-if="recentEmojis.length">
-                <div class="emoji-section-title">最近使用</div>
-                <div class="emoji-grid emoji-grid-recent">
-                  <button
-                    v-for="name in recentEmojis"
-                    :key="'recent-' + name"
-                    type="button"
-                    class="emoji-item-btn"
-                    :title="String(name)"
-                    @click="insertEmoji(String(name))"
-                  >
-                    <img :src="getEmojiUrl(String(name))" :alt="String(name)" loading="lazy" />
-                  </button>
-                </div>
-              </template>
-
-              <!-- 所有表情 -->
-              <div class="emoji-section-title">所有表情</div>
-              <div class="emoji-grid">
-                <button
-                  v-for="(filename, name) in EMOJI_MAP"
-                  :key="name"
-                  type="button"
-                  class="emoji-item-btn"
-                  :title="String(name)"
-                  @click="insertEmoji(String(name))"
-                >
-                  <img :src="getEmojiUrl(String(name))" :alt="String(name)" loading="lazy" />
-                </button>
-              </div>
+              <EmojiPanel :key="String(feedId)" :disabled="sending" :selected-urls="images.flatMap(image => image.url ? [image.url] : [])" @select="insertEmoji" @picture="selectFavoritePicture" />
             </div>
           </div>
 
@@ -558,6 +532,9 @@ import { useAuthStore } from '../../stores/auth';
 import { useSettingsStore } from '../../stores/settings';
 import { EMOJI_MAP, EMOJI_BASE, getEmojiUrl } from '../../utils/coolapkEmoji';
 import { useRecentEmojis } from '../../utils/recentEmojis';
+import EmojiPanel from '../common/EmojiPanel.vue';
+import AppImage from '../common/AppImage.vue';
+import { isSystemEmoji, type EmojiPicture } from '../../utils/emojiPanel';
 import { clearCommentDraft, loadCommentDraft, saveCommentDraft } from '../../utils/commentDrafts';
 import { handleAnchorClick } from '../../utils/anchorClick';
 import { showToast } from '../../utils/toast';
@@ -740,13 +717,15 @@ function selectAuthorOnly() {
 
 // 评论配图与酷安表情输入
 const MAX_IMAGES = 9;
-const images = ref<{ file: File; preview: string }[]>([]);
+const images = ref<{ file?: File; preview: string; url?: string }[]>([]);
+const imageUploadTotal = ref(0);
 const uploadingImages = ref(false);
 const uploadedCount = ref(0);
 const imageInputRef = ref<HTMLInputElement | null>(null);
 const showEmojiPicker = ref(false);
 const emojiContainerRef = ref<HTMLElement | null>(null);
-const { recentEmojis, addRecent } = useRecentEmojis();
+const officialEmojiPanelRef = ref<HTMLElement | null>(null);
+const { addRecent } = useRecentEmojis();
 let restoringDraft = false;
 
 function createEmojiImg(name: string, _filename?: string): HTMLImageElement {
@@ -1346,7 +1325,7 @@ function insertEmoji(name: string) {
   addRecent(name);
   const filename = EMOJI_MAP[name];
   const el = inputRef.value;
-  const emojiCode = `[${name}]`;
+  const emojiCode = isSystemEmoji(name) ? name : `[${name}]`;
   if (!el) {
     inputMsg.value += emojiCode;
     return;
@@ -1354,7 +1333,7 @@ function insertEmoji(name: string) {
 
   el.focus();
   const sel = window.getSelection();
-  const img = createEmojiImg(name, filename);
+  const img = isSystemEmoji(name) ? document.createTextNode(name) : createEmojiImg(name, filename);
 
   if (sel && sel.rangeCount > 0 && el.contains(sel.anchorNode)) {
     const range = sel.getRangeAt(0);
@@ -1380,6 +1359,13 @@ function triggerImageSelect() {
     return;
   }
   imageInputRef.value?.click();
+}
+
+function selectFavoritePicture(picture: EmojiPicture) {
+  if (sending.value) return;
+  if (images.value.some(image => image.url === picture.url)) { showToast('已经添加了', 'info'); return; }
+  if (images.value.length >= MAX_IMAGES) { showToast(`最多只能添加 ${MAX_IMAGES} 张配图`, 'warning'); return; }
+  images.value.push({ url: picture.url, preview: picture.url });
 }
 
 function appendImageFiles(files: File[]) {
@@ -1521,7 +1507,7 @@ function clearReplyTarget() {
 }
 
 function handleClickOutside(event: MouseEvent) {
-  if (showEmojiPicker.value && emojiContainerRef.value && !emojiContainerRef.value.contains(event.target as Node)) {
+  if (showEmojiPicker.value && emojiContainerRef.value && !emojiContainerRef.value.contains(event.target as Node) && !officialEmojiPanelRef.value?.contains(event.target as Node)) {
     showEmojiPicker.value = false;
   }
 }
@@ -1845,7 +1831,8 @@ async function handleSend() {
 
   const proceedSubmit = async () => {
     sending.value = true;
-    uploadingImages.value = images.value.length > 0;
+    imageUploadTotal.value = images.value.filter(image => !image.url && image.file).length;
+    uploadingImages.value = imageUploadTotal.value > 0;
     uploadedCount.value = 0;
 
     try {
@@ -1853,16 +1840,20 @@ async function handleSend() {
       if (images.value.length > 0) {
         const urls: string[] = [];
         for (const img of images.value) {
+          if (img.url) { urls.push(img.url); continue; }
+          if (!img.file) throw new Error('评论图片尚未准备好');
           const bytes = new Uint8Array(await img.file.arrayBuffer());
           const contentType = img.file.type || 'image/jpeg';
           const res = await CoolapkTauriAPI.uploadImage(bytes, img.file.name, contentType, 'feed');
-          urls.push(resolveUploadedUrl(res?.data));
+          img.url = resolveUploadedUrl(res?.data);
+          urls.push(img.url);
           uploadedCount.value += 1;
         }
         pic = urls.join(',');
       }
 
-      const finalMessage = buildFinalMessage(rawMsg);
+      // 官方 ReplyActivity 为纯图片回复补上 [图片]，服务端不接受空正文。
+      const finalMessage = buildFinalMessage(rawMsg || (pic ? '[图片]' : ''));
       const targetRid = replyTargetId.value || undefined;
 
       const executeReply = async (postToken?: string) => {
@@ -2000,7 +1991,12 @@ async function handleSend() {
 .inline-composer-layer { display: contents; }
 /* 挂在 body 上，避免帖子容器的变换/裁切和桌面侧栏遮挡；使用键盘上方的可视视口。 */
 .official-composer-layer { position: fixed; left: 0; right: 0; top: var(--app-viewport-top, 0px); height: var(--app-viewport-height, 100dvh); z-index: 1100; display: flex; flex-direction: column; justify-content: flex-end; pointer-events: none; }
-.official-composer-layer .comment-composer-box { position: relative; z-index: 1; flex-shrink: 0; width: 100%; box-sizing: border-box; margin: 0; max-height: min(70%, 600px); overflow-y: auto; border-radius: 18px 18px 0 0; padding: 30px max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); background: var(--surface); box-shadow: 0 -4px 28px #0002; pointer-events: auto; }
+.official-composer-layer .comment-composer-box { position: relative; z-index: 1; flex-shrink: 0; display: flex; flex-direction: column; width: 100%; box-sizing: border-box; margin: 0; max-height: calc(100% - 16px); overflow-y: auto; border-radius: 18px 18px 0 0; padding: 30px max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); background: var(--surface); box-shadow: 0 -4px 28px #0002; pointer-events: auto; }
+.official-composer-layer .comment-composer-toolbar { flex-shrink: 0; }
+.official-composer-layer .comment-rich-editor { flex-shrink: 0; min-height: 52px; max-height: min(120px, calc(var(--app-viewport-height, 100dvh) * .2)); }
+.official-composer-layer .comment-media-preview { flex-shrink: 0; max-height: 76px; overflow-y: auto; }
+.official-composer-emoji { height: min(320px, calc(var(--app-viewport-height, 100dvh) * .4)); min-height: 0; flex-shrink: 1; margin-top: 8px; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.official-composer-emoji :deep(.categorized-emoji-panel) { height: 100%; }
 .official-composer-backdrop { position: absolute; inset: 0; background: #0006; pointer-events: auto; }
 .official-composer-close { position: absolute; right: 10px; top: 4px; width: 30px; height: 30px; border: 0; background: transparent; color: var(--text-secondary); font-size: 18px; }
 .feed-comment-section {
@@ -2196,7 +2192,7 @@ async function handleSend() {
   background: var(--background);
 }
 
-.comment-media-thumb img {
+.comment-media-thumb :deep(.app-image-container), .comment-media-thumb :deep(img) {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -2289,14 +2285,13 @@ async function handleSend() {
   bottom: calc(100% + 8px);
   left: 0;
   z-index: 120;
-  width: 324px;
-  max-height: 280px;
-  overflow-y: auto;
+  width: min(360px, calc(100vw - 32px));
+  overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-card, 12px);
   box-shadow: var(--shadow-lg, 0 10px 25px rgba(0, 0, 0, 0.15));
-  padding: 8px 10px 10px 10px;
+  padding: 0;
 }
 
 .emoji-section-title {

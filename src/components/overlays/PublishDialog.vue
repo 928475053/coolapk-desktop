@@ -125,42 +125,8 @@
       <div class="publish-bottom-area">
       <PublishTopicRecommendations :node-type="publishTarget?.type === 'tag' ? '3' : publishTarget?.type === 'apk' ? '1' : publishTarget?.type === 'product_phone' ? '7' : '0'" :node-name="publishTarget?.title || ''" :uid="currentDraftAccount()" :text="topicSourceText" :cursor="topicInsertOffset" :refresh="topicRefresh" @select="insertRecommendedTopic" />
 
-      <!-- 表情面板 (参考微信：最近使用 + 所有表情，停靠在工具栏上方) -->
-      <div v-if="showEmojiPanel" class="emoji-panel custom-scrollbar">
-        <!-- 最近使用 -->
-        <template v-if="recentEmojis.length">
-          <div class="emoji-section-title">最近使用</div>
-          <div class="emoji-grid emoji-grid-recent">
-            <button
-              v-for="name in recentEmojis"
-              :key="'recent-' + name"
-              type="button"
-              class="emoji-item"
-              :title="name"
-              @mousedown.prevent
-              @click="insertEmoji(name)"
-            >
-              <img :src="getEmojiUrl(String(name))" :alt="name" />
-            </button>
-          </div>
-        </template>
-
-        <!-- 所有表情 -->
-        <div class="emoji-section-title">所有表情</div>
-        <div class="emoji-grid">
-          <button
-            v-for="(fileName, name) in EMOJI_MAP"
-            :key="name"
-            type="button"
-            class="emoji-item"
-            :title="name"
-            @mousedown.prevent
-            @click="insertEmoji(name)"
-          >
-            <img :src="getEmojiUrl(String(name))" :alt="name" />
-          </button>
-        </div>
-      </div>
+      <!-- 分类表情面板 -->
+      <div v-if="showEmojiPanel" class="emoji-panel custom-scrollbar"><EmojiPanel :key="publishMode" :disabled="submitting || processingMedia" :selected-urls="selectedFavoriteUrls" @select="insertEmoji" @picture="selectFavoritePicture" /></div>
 
       <!-- 话题选择器保留正文光标，选择后替换正在输入的井号片段。 -->
       <PublishTopicPicker v-if="showTopicPanel" :uid="currentDraftAccount()" :initial-query="topicQuery" @select="selectPublishTopic" @close="showTopicPanel = false" />
@@ -242,8 +208,11 @@ import { useAppStore } from '../../stores/app';
 import { useSettingsStore } from '../../stores/settings';
 import { useAuthStore } from '../../stores/auth';
 import { CoolapkTauriAPI } from '../../api/coolapk';
-import { renderCoolapkEmoji, EMOJI_MAP, getEmojiUrl } from '../../utils/coolapkEmoji';
+import { renderCoolapkEmoji, getEmojiUrl } from '../../utils/coolapkEmoji';
 import { useRecentEmojis } from '../../utils/recentEmojis';
+import EmojiPanel from '../common/EmojiPanel.vue';
+import { isSystemEmoji, type EmojiPicture } from '../../utils/emojiPanel';
+import { showToast } from '../../utils/toast';
 import { renderCoolapkRichText } from '../../utils/richText';
 import { extractFeedImageInputs, normalizeFeedImageItems } from '../../utils/livePhoto';
 import { listFullPublishDrafts, saveFullPublishDraft, deleteFullPublishDraft, restoreFullPublishDraft, type FullPublishDraft, type PublishDraftState } from '../../utils/publishDrafts';
@@ -280,6 +249,9 @@ type PublishMode = 'feed' | 'article';
 const publishMode = ref<PublishMode>('feed');
 function emptyArticle(): PublishArticleState { return { title: '', cover: null, blocks: [{ id: crypto.randomUUID(), type: 'text', text: '' }] }; }
 const articleState = ref<PublishArticleState>(emptyArticle());
+const selectedFavoriteUrls = computed(() => (publishMode.value === 'article'
+  ? articleState.value.blocks.flatMap(block => block.type === 'image' ? [block.image] : [])
+  : images.value).flatMap(image => image.url ? [image.url] : []));
 const articleComposer = ref<InstanceType<typeof PublishArticleComposer> | null>(null);
 const articleBodyLength = computed(() => articleState.value.blocks.reduce((count, block) => count + (block.type === 'text' ? block.text.length : 0), 0));
 const articleEmojiCount = computed(() => articleState.value.blocks.reduce((count, block) => count + (block.type === 'text' ? emojiCount(block.text) : 0), 0));
@@ -331,7 +303,7 @@ const imageUploadTotal = ref(0);
 const submitting = ref(false);
 const errorMessage = ref('');
 const showEmojiPanel = ref(false);
-const { recentEmojis, addRecent } = useRecentEmojis();
+const { addRecent } = useRecentEmojis();
 const showTopicPanel = ref(false);
 const showMentionPanel = ref(false);
 const mentionQuery = ref('');
@@ -745,7 +717,19 @@ function handleEditorCut(event: ClipboardEvent) {
 
 function insertEmoji(name: string) {
   addRecent(name);
-  insertPublishText(`[${name}]`);
+  insertPublishText(isSystemEmoji(name) ? name : `[${name}]`);
+}
+
+function selectFavoritePicture(picture: EmojiPicture) {
+  if (submitting.value || processingMedia.value || videoAttachment.value) return;
+  if (selectedFavoriteUrls.value.includes(picture.url)) { showToast('已经添加了', 'info'); return; }
+  if (publishMode.value !== 'article' && images.value.length >= MAX_IMAGES) {
+    errorMessage.value = `最多只能添加 ${MAX_IMAGES} 张图片`;
+    return;
+  }
+  const image: PublishImage = { url: picture.url, preview: picture.url };
+  if (publishMode.value === 'article') articleComposer.value?.insertPreparedPicture(image);
+  else images.value.push(image);
 }
 
 function insertRecommendedTopic(title: string) {
@@ -1406,11 +1390,10 @@ async function handlePublish() {
 .emoji-panel {
   margin-bottom: 8px;
   margin-top: 4px;
-  max-height: 220px;
-  overflow-y: auto;
+  overflow: hidden;
   border: 1px solid var(--border-light);
   border-radius: var(--radius-sm, 10px);
-  padding: 8px 10px 10px 10px;
+  padding: 0;
   background-color: var(--background);
   animation: panelSlideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }

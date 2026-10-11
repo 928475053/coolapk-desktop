@@ -1,5 +1,6 @@
 import { ref } from 'vue';
 import { EMOJI_MAP } from './coolapkEmoji';
+import { isSystemEmoji } from './emojiPanel';
 import { readTauriStoreValue, writeTauriStoreValue } from './tauriStore';
 
 const STORE_FILE = 'recent_emojis.json';
@@ -12,7 +13,7 @@ function normalizeRecentEmojis(value: unknown): string[] {
   try {
     const list = Array.isArray(value) ? value : [];
     return list
-      .filter((item): item is string => typeof item === 'string' && !!EMOJI_MAP[item])
+      .filter((item): item is string => typeof item === 'string' && (!!EMOJI_MAP[item] || isSystemEmoji(item)))
       .filter((item, index, self) => self.indexOf(item) === index)
       .slice(0, MAX_RECENT);
   } catch {
@@ -116,7 +117,7 @@ export function getRecentEmojis(): string[] {
  * 记录一次表情使用（排重并置顶，持久化至磁盘与 localStorage）
  */
 export function recordRecentEmoji(name: string): void {
-  if (!name || !EMOJI_MAP[name]) return;
+  if (!name || (!EMOJI_MAP[name] && !isSystemEmoji(name))) return;
   const list = [name, ...recentEmojis.value.filter((item) => item !== name)].slice(0, MAX_RECENT);
   recentEmojis.value = list;
   persist(list);

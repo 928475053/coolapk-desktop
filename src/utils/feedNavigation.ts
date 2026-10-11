@@ -5,10 +5,11 @@ import { useAppStore } from '../stores/app';
 export function openFeedDetail(
   router: Router,
   feedId: string | number,
-  context?: any
+  context?: any,
+  replyId?: string
 ): void {
   const id = String(feedId || '').trim();
   if (!id) return;
   if (context) useAppStore().setFeedDetailContext(id, context);
-  void router.push(`/feed/${id}`);
+  void router.push(replyId ? { path: `/feed/${id}`, query: { replyId } } : `/feed/${id}`);
 }

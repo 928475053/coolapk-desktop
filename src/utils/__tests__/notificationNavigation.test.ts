@@ -1,7 +1,28 @@
 import { describe, expect, it } from 'vitest';
-import { getNotificationExternalUrl, getNotificationFeedId, getNotificationProductName, getNotificationTargetRoute, resolveNotificationTargetRoute } from '../notificationNavigation';
+import { getNotificationExternalUrl, getNotificationFeedId, getNotificationReplyId, getNotificationProductName, getNotificationTargetRoute, resolveNotificationTargetRoute } from '../notificationNavigation';
 
 describe('通知目标导航', () => {
+  it('分别提取评论链接里的动态和评论 ID', () => {
+    const item = { id: 111, note: '<a href="/feed/333?rid=222">评论</a>' };
+    expect(getNotificationFeedId(item)).toBe('333');
+    expect(getNotificationReplyId(item)).toBe('222');
+    expect(getNotificationReplyId(item, '/feed/333?rid=444')).toBe('444');
+  });
+
+  it('识别官方 feed_reply 目标且不会把评论目标当成原动态', () => {
+    const item = { id: 111, target_type: 'feed_reply', target_id: '222' };
+    expect(getNotificationReplyId(item)).toBe('222');
+    expect(getNotificationFeedId(item)).toBe('');
+    expect(getNotificationReplyId({ id: 111, target_type: 'feed', target_id: '333' })).toBe('');
+    expect(getNotificationReplyId({ id: 111, targetRow: { id: 222, entityType: 'product' } })).toBe('');
+    expect(getNotificationReplyId({ id: 111, entityType: 'notification', type: 'comment' })).toBe('');
+  });
+
+  it('兼容独立评论链接和明确的评论字段', () => {
+    expect(getNotificationReplyId({ url: '/feed/reply/222' })).toBe('222');
+    expect(getNotificationReplyId({ reply_id: '222', feed_id: '333' })).toBe('222');
+    expect(getNotificationReplyId({ feedInfo: { id: '222', entityType: 'feed_reply' } })).toBe('222');
+  });
   it('不会把机型目标的 id 当成动态 id', () => {
     expect(getNotificationFeedId({ targetRow: { id: 123, entityType: 'product', title: '小米 13 Pro' } })).toBe('');
   });

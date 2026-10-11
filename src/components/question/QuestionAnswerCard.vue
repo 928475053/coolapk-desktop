@@ -136,6 +136,7 @@
 
     <div v-if="showComments" class="answer-comments-wrapper" @click.stop="touchActiveComments(answer.id)">
       <FeedCommentSection
+        :target-reply-id="targetReplyId"
         :feed-id="answer.id"
         :feed-uid="authorUid"
         :feed-username="answer.username || answer.userInfo?.username"
@@ -233,6 +234,7 @@ const props = withDefaults(defineProps<{
   questionTitle?: string;
   detailMode?: boolean;
   autoOpenComments?: boolean;
+  targetReplyId?: string;
   navigateToQuestion?: boolean;
   showAnswerHeading?: boolean;
   showReplySummary?: boolean;

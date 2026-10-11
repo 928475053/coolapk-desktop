@@ -20,7 +20,7 @@ function entityType(value: NotificationRecord): string {
 
 function hasExplicitFeedType(value: NotificationRecord): boolean {
   const type = entityType(value);
-  return type.includes('feed') || Boolean(value.feedId || value.feed_id || value.fid);
+  return (type.includes('feed') && !/reply|comment/.test(type)) || Boolean(value.feedId || value.feed_id || value.fid);
 }
 
 function isFeedLikeTarget(value: unknown): value is NotificationRecord {
@@ -28,6 +28,7 @@ function isFeedLikeTarget(value: unknown): value is NotificationRecord {
   if (!record) return false;
   if (hasExplicitFeedType(record)) return true;
   const type = entityType(record);
+  if (/reply|comment/.test(type)) return false;
   if (/product|device|apk|app|game|goods|user|topic|dyh|album/.test(type)) return false;
   return Boolean(record.message || record.message_raw_output || record.message_title || record.replyRows || record.replyRowsCount);
 }
@@ -50,6 +51,33 @@ function normalizeFeedId(value: unknown): string {
 function getFeedIdFromSource(value: unknown): string {
   const match = String(value || '').match(/(?:^|[/?#])feed\/(\d+)/i);
   return match?.[1] || '';
+}
+
+/** 评论链接和明确的 reply 实体才可提供评论 ID，通知自身的 id 不能使用。 */
+export function getNotificationReplyId(item: unknown, href?: string): string {
+  const record = asRecord(item);
+  if (!record) return '';
+  const candidates = [record, record.targetRow, record.feedInfo, record.targetFeed].map(asRecord)
+    .filter((candidate): candidate is NotificationRecord => Boolean(candidate));
+  const sources = [href, ...candidates.flatMap(candidate => [candidate.url, candidate.targetUrl,
+    candidate.target_url, candidate.note, candidate.message, candidate.infoHtml])];
+  for (const source of sources) {
+    const text = String(source || '').replace(/&amp;/g, '&');
+    const match = text.match(/(?:\/feed\/reply\/|\/reply\/)(\d+)/i)
+      || text.match(/[?&#](?:replyId|reply_id|rid)=(\d+)/i);
+    if (match?.[1] && match[1] !== '0') return match[1];
+  }
+  for (const candidate of candidates) {
+    for (const value of [candidate.replyId, candidate.reply_id,
+      ...(/reply|comment/.test(entityType(candidate))
+        ? [candidate.targetId, candidate.target_id] : []),
+      ...(/reply|comment/.test(String(candidate.entityType || candidate.entity_type || ''))
+        ? [candidate.id, candidate.entityId, candidate.entity_id] : [])]) {
+      const id = String(value || '').trim();
+      if (/^[1-9]\d*$/.test(id)) return id;
+    }
+  }
+  return '';
 }
 
 export function getNotificationFeedId(item: unknown): string {

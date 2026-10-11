@@ -224,6 +224,7 @@
     <div v-if="showComments" class="inline-comment-wrapper" @click.stop="touchActiveComments(feed.id)">
       <FeedCommentSection
         ref="commentSectionRef"
+        :target-reply-id="targetReplyId"
         :official-detail="officialMobileDetail"        :feed-id="feed.id"
         :feed-uid="authorUid"
         :feed-username="feed.username"
@@ -410,6 +411,7 @@ const props = defineProps<{
   detailMode?: boolean;
   officialMobileDetail?: boolean;
   autoOpenComments?: boolean;
+  targetReplyId?: string;
   cloudFavorite?: boolean;
   favoritePickerOnRemove?: boolean;
   maxLines?: number;

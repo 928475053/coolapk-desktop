@@ -1,5 +1,5 @@
 <template>
-  <div class="feed-comment-section" :class="{ 'official-detail-comments': officialDetail }">
+  <div ref="sectionRef" class="feed-comment-section" :class="{ 'official-detail-comments': officialDetail }">
     <div class="comment-toolbar">
       <div class="comment-toolbar-left">
         <strong class="comment-title"><template v-if="officialDetail">共 {{ commentCount }} 回复</template><template v-else>评论 <span>{{ commentCount }}</span></template></strong>
@@ -196,12 +196,16 @@
     </Teleport>
 
     <!-- 评论加载中 -->
-    <div v-if="loading" class="comment-loading">
+    <div v-if="targetReplyError" class="comment-error" role="status">
+      <span>{{ targetReplyError }}</span>
+      <button type="button" @click="loadTargetReply">重试</button>
+    </div>
+    <div v-if="loading && !targetComments.length" class="comment-loading">
       <i class="fa-solid fa-circle-notch fa-spin text-green"></i>
       <span>载入评论楼层中...</span>
     </div>
 
-    <div v-else-if="error" class="comment-error">
+    <div v-else-if="error && !targetComments.length" class="comment-error">
       <i class="fa-solid fa-triangle-exclamation"></i>
       <span>{{ error }}</span>
       <button type="button" @click="$emit('retry-comments')">重试</button>
@@ -219,6 +223,7 @@
         v-for="c in sortedComments"
         :key="c.id || c.uid"
         class="comment-row"
+        :class="{ 'notification-comment-target': String(c.id) === targetReplyId }"
         data-context-kind="comment"
         :data-context-feed-id="feedId"
         :data-context-comment-id="c.id"
@@ -350,6 +355,7 @@
               v-for="sub in getVisibleSubReplies(c)"
               :key="sub.id || sub.uid"
               class="sub-reply-row"
+              :class="{ 'notification-comment-target': String(sub.id) === targetReplyId }"
               data-context-kind="comment"
               :data-context-feed-id="feedId"
               :data-context-comment-id="sub.id"
@@ -584,6 +590,7 @@ import {
 const props = withDefaults(
   defineProps<{
     feedId?: string | number;
+    targetReplyId?: string;
     officialDetail?: boolean;
     defaultSortMode?: CommentSortMode;
     preserveApiOrder?: boolean;
@@ -601,6 +608,7 @@ const props = withDefaults(
   }>(),
   {
     feedId: '',
+    targetReplyId: '',
     preserveApiOrder: false,
     feedUid: '',
     feedUsername: '',
@@ -1655,12 +1663,19 @@ function filterAuthorOnlyComments(comments: any[]): any[] {
   return result;
 }
 
+const sectionRef = ref<HTMLElement | null>(null);
+const targetComments = ref<any[]>([]);
+const targetReplyError = ref('');
+let targetRequest = 0;
+let scrolledTarget = '';
+
 /**
  * 自动树形构建算法 (Tree Aggregation)：
  * 将平铺的回复数组聚合成真实的【一级楼层 -> 二级楼中楼 (replyRows)】嵌套树！
  */
 const nestedComments = computed(() => {
-  if (!props.comments || !props.comments.length) return [];
+  const comments = mergeReplies(props.comments || [], targetComments.value);
+  if (!comments.length) return [];
 
   const topMap = new Map<string, any>();
   const topList: any[] = [];
@@ -1669,7 +1684,7 @@ const nestedComments = computed(() => {
   // 第一遍扫描：识别一级楼层与已有 replyRows
   const feedIdStr = String(props.feedId || '');
 
-  props.comments.forEach((rawItem) => {
+  comments.forEach((rawItem) => {
     const enrichedItem = mergeReplyDetail(rawItem);
     const item = {
       ...enrichedItem,
@@ -1702,7 +1717,7 @@ const nestedComments = computed(() => {
     const parentId = String(subItem.rrid || subItem.rid || '');
     if (parentId && topMap.has(parentId)) {
       const parent = topMap.get(parentId);
-      parent.replyRows.push(subItem);
+      parent.replyRows = mergeReplies(parent.replyRows, [subItem]);
     } else {
       // 如果找不到父级，自身升格为楼层，但内嵌其回复关系
       topList.push({
@@ -1732,6 +1747,53 @@ const sortedComments = computed(() => {
   // APK 的楼主筛选由 fromFeedAuthor=1 决定顺序，不叠加当前排序按钮的本地排序。
   return authorOnly.value ? visibleComments : sortComments(visibleComments, commentSortMode.value);
 });
+
+async function loadTargetReply() {
+  const request = ++targetRequest;
+  const replyId = props.targetReplyId;
+  const feedId = String(props.feedId || '');
+  targetComments.value = [];
+  targetReplyError.value = '';
+  scrolledTarget = '';
+  if (!replyId || !feedId) return;
+  try {
+    const response = await CoolapkTauriAPI.getReplyDetail(replyId);
+    if (request !== targetRequest) return;
+    const reply = response?.data;
+    if (String(reply?.id || '') !== replyId) throw new Error('这条评论不存在或已被删除');
+    const replyFeedId = String(reply.feedId || reply.feed_id || '');
+    if (replyFeedId && replyFeedId !== feedId) throw new Error('这条评论不属于当前动态');
+    // rrid 表示根楼层，rid 表示被回复的评论；根楼层不在首屏时单独补齐。
+    const parentId = String(reply.rrid && String(reply.rrid) !== '0' ? reply.rrid : reply.rid || '');
+    let parent: any = null;
+    if (parentId && parentId !== '0' && parentId !== feedId && parentId !== replyId) {
+      const parentResponse = await CoolapkTauriAPI.getReplyDetail(parentId);
+      if (request !== targetRequest) return;
+      parent = parentResponse?.data;
+      if (String(parent?.id || '') !== parentId) throw new Error('评论所在楼层不存在或已被删除');
+      expandedFloorIds.value = new Set([...expandedFloorIds.value, parentId]);
+    }
+    authorOnly.value = false;
+    targetComments.value = parent ? [parent, reply] : [reply];
+  } catch (error) {
+    if (request === targetRequest) targetReplyError.value = error instanceof Error ? error.message : '目标评论加载失败';
+  }
+}
+
+watch([() => props.feedId, () => props.targetReplyId], () => { void loadTargetReply(); }, { immediate: true });
+onUnmounted(() => { targetRequest++; });
+
+async function scrollToTargetReply() {
+  const key = `${props.feedId}:${props.targetReplyId}`;
+  if (!props.targetReplyId || props.loading || scrolledTarget === key) return;
+  await nextTick();
+  const target = sectionRef.value?.querySelector<HTMLElement>('.notification-comment-target');
+  if (!target) return;
+  target.scrollIntoView?.({ block: 'center', behavior: 'auto' });
+  scrolledTarget = key;
+}
+watch([sortedComments, () => props.loading, () => props.error], () => { void scrollToTargetReply(); }, { flush: 'post' });
+onActivated(() => { scrolledTarget = ''; void scrollToTargetReply(); });
 
 const commentCount = computed(() => {
   const total = props.totalCommentCount;
@@ -1891,6 +1953,13 @@ async function handleSend() {
 </script>
 
 <style scoped>
+.notification-comment-target {
+  background: var(--primary-light, rgba(0, 190, 100, 0.1));
+  outline: 2px solid var(--primary-color, #00b968);
+  outline-offset: -2px;
+  border-radius: 8px;
+  scroll-margin-block: 80px;
+}
 .official-detail-comments { margin: 0 !important; padding: 0 16px 16px !important; border: 0 !important; border-radius: 0 !important; background: var(--surface) !important; }
 .official-detail-comments .comment-toolbar { position: sticky; top: 60px; z-index: 5; background: var(--surface); padding: 8px 0 12px; border: 0; scroll-margin-top: 70px; }
 .official-detail-comments .comment-toolbar-left { width: 100%; display: flex; flex-wrap: nowrap; align-items: center; justify-content: space-between; gap: 8px; }

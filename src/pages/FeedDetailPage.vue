@@ -14,6 +14,7 @@
         :answer="feedDetail"
         detail-mode
         :auto-open-comments="!loading"
+        :target-reply-id="targetReplyId"
         :question-id="answerQuestionId"
         :question-title="answerQuestionTitle"
         :show-related-content="false"
@@ -24,6 +25,7 @@
         :official-mobile-detail="officialMobileDetail"
         detail-mode
         :auto-open-comments="officialMobileDetail || !loading"
+        :target-reply-id="targetReplyId"
       />
       <EmptyState v-else title="原动态不存在" description="这条动态可能已经被删除" />
     </div>
@@ -32,7 +34,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { navigateBack } from '../utils/navigation';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAppStore } from '../stores/app';
@@ -52,6 +54,12 @@ const props = defineProps<{
 }>();
 
 const router = useRouter();
+const route = useRoute();
+const targetReplyId = computed(() => {
+  if (String(route.params.id || route.params.feedId || '') !== String(props.feedId)) return '';
+  const id = String(route.query.replyId || '');
+  return /^[1-9]\d*$/.test(id) ? id : '';
+});
 const appStore = useAppStore();
 const officialMobileDetail = useOfficialMobileFeedDetail();
 // 路由缓存通常会为每个动态保留独立实例；同时监听参数可兼容热更新或组件复用。
@@ -62,6 +70,7 @@ function normalizeContextFeed(item: any): any {
   const candidates = [item.feedInfo, item.targetRow, item.targetFeed, item];
   return candidates.find((candidate) => {
     if (!candidate || typeof candidate !== 'object') return false;
+    if (/reply|comment/i.test(String(candidate.entityType || candidate.entity_type || candidate.target_type || ''))) return false;
     // 必须有真实正文与发帖人信息，避免仅携带标题的历史记录外壳导致残缺首屏闪烁
     const hasMessage = Boolean(candidate.message || candidate.message_raw_output || candidate.note);
     const hasUser = Boolean(candidate.username || candidate.userInfo?.username || candidate.uid || candidate.userAvatar);

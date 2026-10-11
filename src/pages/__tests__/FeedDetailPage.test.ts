@@ -5,7 +5,7 @@ import { ref } from 'vue';
 const mocks = vi.hoisted(() => ({ detail: vi.fn(), context: vi.fn(), save: vi.fn(), back: vi.fn(), replace: vi.fn(), history: { back: '/' as string | null } }));
 vi.mock('../../api/coolapk', () => ({ CoolapkTauriAPI: { getFeedDetail: mocks.detail } }));
 vi.mock('../../stores/app', () => ({ useAppStore: () => ({ getFeedDetailContext: mocks.context, setFeedDetailContext: mocks.save }) }));
-vi.mock('vue-router', () => ({ useRouter: () => ({ back: mocks.back, replace: mocks.replace, options: { history: { state: mocks.history } } }) }));
+vi.mock('vue-router', () => ({ useRoute: () => ({ params: { feedId: '42' }, query: { replyId: '123' } }), useRouter: () => ({ back: mocks.back, replace: mocks.replace, options: { history: { state: mocks.history } } }) }));
 vi.mock('../../router', () => ({ router: { push: vi.fn(), resolve: vi.fn(() => ({ matched: [] })) } }));
 vi.mock('../../composables/usePageTabTitle', () => ({ usePageTabTitle: () => {} }));
 vi.mock('../../composables/useOfficialMobileFeedDetail', () => ({ useOfficialMobileFeedDetail: () => ref(true) }));
@@ -53,6 +53,7 @@ describe('官方详情评论加载', () => {
     finish({ data: { id: '42', uid: '1', username: '作者', message: '完整正文' } });
     await flushPromises();
     expect(wrapper.find('feed-card-stub').attributes('autoopencomments')).toBe('true');
+    expect(wrapper.find('feed-card-stub').attributes('targetreplyid')).toBe('123');
     wrapper.unmount();
   });
 });

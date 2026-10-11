@@ -113,7 +113,7 @@ import { getNotificationActor } from '../utils/notificationItem';
 import { renderCoolapkRichText } from '../utils/richText';
 import { handleAnchorClick } from '../utils/anchorClick';
 import { openFeedDetail } from '../utils/feedNavigation';
-import { getNotificationExternalUrl, getNotificationFeedId, getNotificationFeedTarget, getNotificationProductName, resolveNotificationTargetRoute } from '../utils/notificationNavigation';
+import { getNotificationExternalUrl, getNotificationFeedId, getNotificationFeedTarget, getNotificationReplyId, getNotificationProductName, resolveNotificationTargetRoute } from '../utils/notificationNavigation';
 import AppButton from '../components/common/AppButton.vue';
 import AppAvatar from '../components/common/AppAvatar.vue';
 import LoadingState from '../components/common/LoadingState.vue';
@@ -327,12 +327,30 @@ async function resolveNotificationTarget(item: any): Promise<string | null> {
   return resolveNotificationTargetRoute(item, (name) => CoolapkTauriAPI.getProductDetailByName(name));
 }
 
+async function openNotificationComment(item: any, href?: string): Promise<boolean> {
+  const replyId = getNotificationReplyId(item, href);
+  if (!replyId) return false;
+  let feedId = getNotificationFeedId(item);
+  if (!feedId) {
+    try {
+      const response = await CoolapkTauriAPI.getReplyDetail(replyId);
+      feedId = String(response?.data?.feedId || response?.data?.feed_id || '');
+    } catch {
+      return false;
+    }
+  }
+  if (!/^\d+$/.test(feedId)) return false;
+  openFeedDetail(router, feedId, item, replyId);
+  return true;
+}
+
 async function openNotificationTarget(item: any): Promise<boolean> {
   const externalUrl = getNotificationExternalUrl(item);
   if (externalUrl) {
     void CoolapkTauriAPI.openUrl(externalUrl);
     return true;
   }
+  if (await openNotificationComment(item)) return true;
   const feedId = getNotificationFeedId(item);
   if (feedId) {
     openFeedDetail(router, feedId, item);
@@ -439,6 +457,11 @@ function renderSafeHtml(text: string): string {
 async function handleNotifyClick(e: Event, item: any) {
   const anchor = (e.target as HTMLElement).closest('a');
   const href = anchor?.getAttribute('href') || '';
+  // 用户和其他正文链接保持独立；评论正文中的动态/评论链接携带定位信息。
+  if (href && /(?:\/feed\/\d+|\/feed\/reply\/\d+|\/reply\/\d+)/i.test(href)) {
+    e.preventDefault();
+    if (await openNotificationComment(item, href)) return;
+  }
   if (!anchor?.href || !href || href === '#' || href.startsWith('javascript:')) {
     await openNotificationTarget(item);
     return;

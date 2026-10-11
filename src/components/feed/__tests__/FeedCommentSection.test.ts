@@ -33,6 +33,61 @@ vi.mock('../../../api/coolapk', () => ({
 import FeedCommentSection from '../FeedCommentSection.vue';
 
 describe('评论完整信息展示', () => {
+  it('通知目标不在第一页时补齐根楼层和回复并高亮', async () => {
+    mocks.getReplyDetail.mockImplementation(async (id: string) => ({ data: id === '222'
+      ? { id: '222', feedId: '333', rrid: '111', rid: '111', message: '通知目标回复', username: '回复者' }
+      : { id: '111', feedId: '333', rid: '0', rrid: '0', message: '根评论', username: '评论者' } }));
+    const wrapper = mountSection({}, { feedId: '333', comments: [], targetReplyId: '222' });
+    await flushPromises();
+    expect(wrapper.findAll('.comment-row')).toHaveLength(1);
+    expect(wrapper.get('.comment-row').attributes('data-context-comment-id')).toBe('111');
+    expect(wrapper.get('.notification-comment-target').attributes('data-context-comment-id')).toBe('222');
+    expect(wrapper.get('.notification-comment-target').text()).toContain('通知目标回复');
+    wrapper.unmount();
+  });
+
+  it('目标评论已删除时显示提示，原动态入口不请求目标评论', async () => {
+    const wrapper = mountSection({}, { feedId: '333', targetReplyId: '222' });
+    await flushPromises();
+    expect(wrapper.get('[role="status"]').text()).toContain('这条评论不存在或已被删除');
+    await wrapper.setProps({ targetReplyId: '' });
+    expect(wrapper.find('[role="status"]').exists()).toBe(false);
+    expect(wrapper.find('.notification-comment-target').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('切换目标后忽略上一条评论的迟到响应', async () => {
+    let finish!: (value: unknown) => void;
+    mocks.getReplyDetail.mockImplementation((id: string) => id === '222'
+      ? new Promise(resolve => { finish = resolve; })
+      : Promise.resolve({ data: { id, feedId: '333', message: '新目标评论' } }));
+    const wrapper = mountSection({}, { feedId: '333', comments: [], targetReplyId: '222' });
+    await wrapper.setProps({ targetReplyId: '444' });
+    await flushPromises();
+    finish({ data: { id: '222', feedId: '333', message: '旧目标评论' } });
+    await flushPromises();
+    expect(wrapper.get('.notification-comment-target').attributes('data-context-comment-id')).toBe('444');
+    expect(wrapper.text()).not.toContain('旧目标评论');
+    wrapper.unmount();
+  });
+
+  it('首屏已有目标回复时不会重复展示，并等首屏加载完成后定位', async () => {
+    const reply = { id: '222', feedId: '333', rrid: '111', message: '目标回复' };
+    const floor = { id: '111', feedId: '333', message: '根评论', replyRows: [reply] };
+    mocks.getReplyDetail.mockImplementation(async (id: string) => ({ data: id === '222' ? reply : floor }));
+    const wrapper = mountSection({}, { feedId: '333', comments: [floor], targetReplyId: '222', loading: true });
+    await flushPromises();
+    expect(wrapper.findAll('.sub-reply-row')).toHaveLength(1);
+    const scroll = vi.fn();
+    (wrapper.get('.notification-comment-target').element as HTMLElement).scrollIntoView = scroll;
+    await flushPromises();
+    expect(scroll).not.toHaveBeenCalled();
+    await wrapper.setProps({ loading: false });
+    await flushPromises();
+    expect(scroll).toHaveBeenCalledWith({ block: 'center', behavior: 'auto' });
+    wrapper.unmount();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getReplyDetail.mockResolvedValue({ data: {} });

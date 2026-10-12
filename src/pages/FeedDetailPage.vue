@@ -1,5 +1,5 @@
 <template>
-  <div class="feed-detail-page custom-scrollbar" :class="{ 'is-official-mobile': officialMobileDetail }">
+  <div class="feed-detail-page custom-scrollbar" :class="{ 'is-official-mobile': officialMobileDetail, 'is-split': useSplitLayout }">
     <button v-if="officialMobileDetail && (!feedDetail || isAnswerDetail)" type="button" aria-label="返回" class="detail-fallback-back" @click="navigateBack(router)"><i class="fas fa-arrow-left"></i> 返回</button>
     <div class="feed-detail-shell">
       <LoadingState v-if="loading && !feedDetail" text="正在加载原动态..." />
@@ -18,6 +18,12 @@
         :question-id="answerQuestionId"
         :question-title="answerQuestionTitle"
         :show-related-content="false"
+      />
+      <!-- 分栏分支必须在 FeedCard 之前，否则永远命中不到。 -->
+      <FeedDetailSplitLayout
+        v-else-if="feedDetail && useSplitLayout"
+        :key="feedId"
+        :feed="feedDetail"
       />
       <FeedCard
         v-else-if="feedDetail"
@@ -39,13 +45,15 @@ import { navigateBack } from '../utils/navigation';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAppStore } from '../stores/app';
 import FeedCard from '../components/feed/FeedCard.vue';
+import FeedDetailSplitLayout from '../components/feed/FeedDetailSplitLayout.vue';
 import QuestionAnswerCard from '../components/question/QuestionAnswerCard.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import ErrorState from '../components/common/ErrorState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 import { isAnswerSearchEntity } from '../utils/searchEntities';
-import { useOfficialMobileFeedDetail } from '../composables/useOfficialMobileFeedDetail';
+import { useOfficialMobileFeedDetail, useWideSplitLayout } from '../composables/useOfficialMobileFeedDetail';
 import { usePageTabTitle } from '../composables/usePageTabTitle';
+import { useSettingsStore } from '../stores/settings';
 
 defineOptions({ name: 'FeedDetailPage' });
 
@@ -61,7 +69,15 @@ const targetReplyId = computed(() => {
   return /^[1-9]\d*$/.test(id) ? id : '';
 });
 const appStore = useAppStore();
+const settingsStore = useSettingsStore();
 const officialMobileDetail = useOfficialMobileFeedDetail();
+const isWideEnoughForSplit = useWideSplitLayout();
+// 分栏详情页：开关开 + 非官方移动详情 + 窗口 >= 1000px，三者缺一不可。
+const useSplitLayout = computed(() =>
+  settingsStore.settings.desktopFeedDetailOnClick
+  && !officialMobileDetail.value
+  && isWideEnoughForSplit.value
+);
 // 路由缓存通常会为每个动态保留独立实例；同时监听参数可兼容热更新或组件复用。
 const feedId = computed(() => String(props.feedId || ''));
 
@@ -166,6 +182,19 @@ watch(feedId, (nextFeedId) => {
   max-width: 100%;
   margin: 0;
   padding: 0 0 32px;
+}
+
+/* 分栏模式：滚动收进左右两栏，页面自身不再滚动。
+   必须给 shell 一层确定高度（height: 100% 的 flex 链），否则
+   FeedDetailSplitLayout 的 height: 100% 会退回内容高度，两栏的
+   overflow-y: auto 全部失效、整页随内容撑高。 */
+.feed-detail-page.is-split {
+  overflow: hidden;
+}
+
+.feed-detail-page.is-split .feed-detail-shell {
+  height: 100%;
+  padding-bottom: 0;
 }
 
 .feed-detail-shell :deep(.feed-card) {

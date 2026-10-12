@@ -341,7 +341,7 @@ import { feedPageVisibleKey, feedPageRenderKey } from '../../utils/feedPageVisib
 import { useRouter } from 'vue-router';
 import type { FeedItem } from '../../types/feed';
 import { navigateBack } from '../../utils/navigation';
-import { useOfficialMobileFeedDetail } from '../../composables/useOfficialMobileFeedDetail';
+import { useOfficialMobileFeedDetail, useMobileLayout } from '../../composables/useOfficialMobileFeedDetail';
 import OfficialFeedProductCard from './OfficialFeedProductCard.vue';
 import FeedHeader from './FeedHeader.vue';
 import FeedContent from './FeedContent.vue';
@@ -402,6 +402,21 @@ const settingsStore = useSettingsStore();
 const appStore = useAppStore();
 const router = useRouter();
 const mobileOfficialEnabled = useOfficialMobileFeedDetail();
+const mobileLayout = useMobileLayout();
+/**
+ * 点击卡片是否应跳详情页，而不是就地展开评论。
+ *
+ * 移动端布局由既有开关 `officialMobileFeedDetail` 决定（行为不变，且优先于宿主）；
+ * 桌面布局则由新开关 `desktopFeedDetailOnClick` 决定。
+ *
+ * 话题页三栏模式下宿主会传 `disableInlineComments`，要求点击卡片时
+ * emit('open-comment') 交给宿主在右栏显示评论 —— 这是该模式下唯一能
+ * 更新右栏的路径。此时新开关不参与判断，宿主约定优先。
+ */
+const opensDetailOnClick = computed(() =>
+  mobileOfficialEnabled.value
+  || (!mobileLayout.value && !props.disableInlineComments && settingsStore.settings.desktopFeedDetailOnClick)
+);
 const commentSectionRef = ref<InstanceType<typeof FeedCommentSection> | null>(null);
 const showDeviceInfo = computed(() => settingsStore.settings.showDeviceInfo);
 
@@ -1333,7 +1348,7 @@ function keepCollapsedCardVisible(card: HTMLElement, scrollContainer: HTMLElemen
 }
 
 async function toggleComments() {
-  if (!props.detailMode && mobileOfficialEnabled.value && !isQuestionCard.value && !isAnswerCard.value) { openOfficialDetail(); return; }
+  if (!props.detailMode && opensDetailOnClick.value && !isQuestionCard.value && !isAnswerCard.value) { openOfficialDetail(); return; }
   if (props.disableInlineComments) {
     emit('open-comment', props.feed);
     return;
@@ -1499,7 +1514,7 @@ function handleCardClick(e: MouseEvent) {
     }
   }
 
-  if (mobileOfficialEnabled.value) openOfficialDetail();
+  if (opensDetailOnClick.value) openOfficialDetail();
   else toggleComments();
 }
 

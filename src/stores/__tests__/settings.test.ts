@@ -108,6 +108,7 @@ describe('settings store', () => {
     favoriteCollectionSortMode: 'default',
     favoriteCollectionSortDirection: 'asc',
     topicHubShowCommentsByDefault: true,
+    desktopFeedDetailOnClick: false,
   };
 
   it('loads default settings when localStorage is empty', () => {
@@ -125,6 +126,7 @@ describe('settings store', () => {
     expect(store.settings.favoriteCollectionSortMode).toBe(defaults.favoriteCollectionSortMode);
     expect(store.settings.favoriteCollectionSortDirection).toBe(defaults.favoriteCollectionSortDirection);
     expect(store.settings.topicHubShowCommentsByDefault).toBe(defaults.topicHubShowCommentsByDefault);
+    expect(store.settings.desktopFeedDetailOnClick).toBe(defaults.desktopFeedDetailOnClick);
     expect(store.settings.navVisibility?.albums).toBe(true);
     expect(store.settings.navVisibility?.pictures).toBe(true);
     expect(store.settings.navVisibility?.downloads).toBe(true);
@@ -181,6 +183,9 @@ describe('settings store', () => {
     expect(normalized.disableAutoMobileMode).toBe(true);
     expect(normalized.topicHubShowCommentsByDefault).toBe(false);
     expect(normalized.messageEnterBehavior).toBe('newline');
+    expect(normalizeSettings({}).desktopFeedDetailOnClick).toBe(false);
+    expect(normalizeSettings({ desktopFeedDetailOnClick: 'yes' }).desktopFeedDetailOnClick).toBe(false);
+    expect(normalizeSettings({ desktopFeedDetailOnClick: true }).desktopFeedDetailOnClick).toBe(true);
     expect(normalizeSettings({ rememberWindowState: false }).rememberWindowState).toBe(false);
   });
 

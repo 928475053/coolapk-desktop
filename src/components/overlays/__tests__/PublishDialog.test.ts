@@ -39,6 +39,16 @@ beforeEach(() => {
   vi.mocked(CoolapkTauriAPI.getDeviceInfo).mockResolvedValue({ code: 200, data: { defaultProfile: { includeDeviceModel: false } } });
 });
 describe('完整发帖流程', () => {
+  it('iOS WebView 无 randomUUID 时仍可挂载全局发帖组件', () => {
+    vi.stubGlobal('crypto', { getRandomValues: (bytes: Uint8Array) => bytes.fill(0xaa) });
+    try {
+      const wrapper = mountDialog();
+      expect(wrapper.exists()).toBe(true);
+      wrapper.unmount();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
   it('收藏表情复用原地址并阻止重复添加，发布时不上传', async () => {
     vi.mocked(CoolapkTauriAPI.createFeed).mockResolvedValue({ code: 400, message: '测试停止发送' });
     const wrapper = await openDialog();

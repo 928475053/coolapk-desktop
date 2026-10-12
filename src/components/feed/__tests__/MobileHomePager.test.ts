@@ -128,4 +128,33 @@ describe('移动首页一体滑动', () => {
     const click = new MouseEvent('click', { bubbles: true, cancelable: true }); viewport.dispatchEvent(click); expect(click.defaultPrevented).toBe(true);
     pointer(window, 'pointerup', 200); finish(); await flushPromises(); expect(tabs.props('activeKey')).toBe('follow'); w.unmount();
   });
+
+  it('首页配置为空时展示基础频道，重试后恢复动态栏目', async () => {
+    api.config.mockResolvedValueOnce({ data: [] });
+    const w = await render();
+    expect(w.get('.pager-warning').text()).toContain('基础栏目');
+    expect(w.findAll('.pager-page')).toHaveLength(3);
+    await w.get('.pager-warning button').trigger('click');
+    await flushPromises();
+    expect(w.find('.pager-warning').exists()).toBe(false);
+    expect(w.findComponent({ name: 'FeedTabs' }).props('tabs').map((tab: any) => tab.title)).toEqual(['关注', '头条', '热榜']);
+    w.unmount();
+  });
+  it('忽略先出现的空配置卡片，采用后续有效的同 ID 配置', async () => {
+    api.config.mockResolvedValueOnce({ data: [
+      { entityId: '6390', entities: [] },
+      { entityId: '6390', entities: [{ title: '头条', page_name: 'digest', url: '/main/headline' }] },
+    ] });
+    const w = await render();
+    expect(w.find('.pager-warning').exists()).toBe(false);
+    expect(w.findAll('.pager-page')).toHaveLength(1);
+    w.unmount();
+  });
+  it('配置请求异常时显示基础频道而非空白错误页', async () => {
+    api.config.mockRejectedValueOnce(new Error('网络不可用'));
+    const w = await render();
+    expect(w.find('.pager-viewport').exists()).toBe(true);
+    expect(w.findAll('.pager-page')).toHaveLength(3);
+    w.unmount();
+  });
 });

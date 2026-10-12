@@ -115,7 +115,7 @@ describe('设置页面交互', () => {
     expect(settings.settings.topicHubShowCommentsByDefault).toBe(false);
     expect(settings.settings.fontSize).toBe(16);
     const appearanceRows = wrapper.findAll('.setting-row');
-    const desktopDetailRow = appearanceRows.find((row) => row.text().includes('桌面端点击动态进入详情页'))!;
+    const desktopDetailRow = appearanceRows.find((row) => row.text().includes('桌面端使用分栏详情页'))!;
     await desktopDetailRow.find('.switch-input').setValue(true);
     expect(settings.settings.desktopFeedDetailOnClick).toBe(true);
     expect(settings.settings.navVisibility?.home).toBe(false);

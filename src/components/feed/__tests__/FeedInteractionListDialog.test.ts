@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
+import { createPinia, setActivePinia } from 'pinia';
 
 const mocks = vi.hoisted(() => ({
   getFeedForwardList: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock('vue-router', () => ({
 }));
 
 import FeedInteractionListDialog from '../FeedInteractionListDialog.vue';
+import AppDialog from '../../common/AppDialog.vue';
 
 function mountDialog(mode: 'likes' | 'forwards' = 'likes') {
   return mount(FeedInteractionListDialog, {
@@ -80,5 +82,35 @@ describe('动态互动列表弹窗', () => {
 
     expect(mocks.getFeedForwardList).toHaveBeenCalledWith('42', 'article', 2);
     expect(wrapper.text()).toContain('下一页用户');
+  });
+});
+
+describe('互动列表弹窗的内嵌模式', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getFeedLikeList.mockResolvedValue({ data: [] });
+    mocks.getFeedForwardList.mockResolvedValue({ data: [] });
+    setActivePinia(createPinia());
+  });
+
+  const mountIt = (inline: boolean) =>
+    mount(FeedInteractionListDialog, {
+      props: { show: true, mode: 'likes' as const, feedId: '42', inline },
+      global: { stubs: { AppDialog: { template: '<div class="app-dialog-stub"><slot /></div>' } } },
+    });
+
+  it('默认（inline 未传）包在 AppDialog 里', async () => {
+    const wrapper = mountIt(false);
+    await flushPromises();
+    expect(wrapper.findComponent(AppDialog).exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('inline 为 true 时不包 AppDialog，但仍渲染列表内容', async () => {
+    const wrapper = mountIt(true);
+    await flushPromises();
+    expect(wrapper.findComponent(AppDialog).exists()).toBe(false);
+    expect(wrapper.find('.interaction-dialog').exists()).toBe(true);
+    wrapper.unmount();
   });
 });

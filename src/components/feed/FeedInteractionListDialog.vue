@@ -1,5 +1,5 @@
 <template>
-  <AppDialog :is-open="show" :title="dialogTitle" :width="560" @close="close">
+  <component :is="inline ? 'div' : AppDialog" v-bind="wrapperProps">
     <div class="interaction-dialog">
       <p class="interaction-description">{{ dialogDescription }}</p>
 
@@ -54,7 +54,7 @@
         <span v-else-if="items.length" class="interaction-no-more">没有更多了</span>
       </div>
     </div>
-  </AppDialog>
+  </component>
 </template>
 
 <script setup lang="ts">
@@ -82,6 +82,11 @@ const props = defineProps<{
   mode: FeedInteractionMode;
   feedId: string | number;
   feedType?: string;
+  /**
+   * 内嵌模式：不包 `AppDialog`，直接渲染列表内容，供分栏详情页的右栏使用。
+   * 取数、分页、模板内容与弹窗模式完全一致。默认 false，即弹窗。
+   */
+  inline?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -102,6 +107,12 @@ const loadingText = computed(() => props.mode === 'likes' ? '正在加载点赞�
 const emptyTitle = computed(() => props.mode === 'likes' ? '暂无点赞用户' : '暂无转发记录');
 const emptyDescription = computed(() => props.mode === 'likes' ? '这条动态还没有人点赞' : '这条动态还没有被转发');
 const interactionActionText = computed(() => props.mode === 'likes' ? '点赞了这条动态' : '转发了这条动态');
+
+const wrapperProps = computed(() =>
+  props.inline
+    ? {}
+    : { isOpen: props.show, title: dialogTitle.value, width: 560, onClose: close }
+);
 
 function close() {
   requestVersion += 1;

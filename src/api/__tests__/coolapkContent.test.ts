@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { CoolapkTauriAPI } from '../coolapk';
 import { clearFeedFullTextCache, getFeedFullTextRequestStats, loadFeedFullText } from '../../utils/feedFullTextCache';
+import { clearResourceMemoryCache, loadImageResource } from '../../utils/resourceCache';
 
 function okResponse(data: unknown) {
   return { code: 200, data };
@@ -12,6 +13,7 @@ describe('CoolapkTauriAPI 内容新页接口封装', () => {
     vi.mocked(invoke).mockReset();
     vi.mocked(invoke).mockResolvedValue(okResponse([]));
     clearFeedFullTextCache();
+    clearResourceMemoryCache();
     delete window.initNECaptcha;
     document.head.innerHTML = '';
   });
@@ -19,6 +21,30 @@ describe('CoolapkTauriAPI 内容新页接口封装', () => {
   afterEach(() => {
     delete window.initNECaptcha;
     vi.restoreAllMocks();
+  });
+
+  it('图片下载还原动图封面，任意文件链接完整保留参数并使用通用下载', async () => {
+    await CoolapkTauriAPI.saveImage('https://image.coolapk.com/feed/demo.gif.m.jpg?size=1', '/downloads');
+    expect(invoke).toHaveBeenLastCalledWith('save_file', expect.objectContaining({ url: 'https://image.coolapk.com/feed/demo.gif?size=1', dir: '/downloads' }));
+    for (const extension of ['webp', 'mp4', 'zip', 'custom']) {
+      const url = `https://example.com/file.${extension}?token=123`;
+      await CoolapkTauriAPI.saveFile(url);
+      expect(invoke).toHaveBeenLastCalledWith('save_file', expect.objectContaining({ url, dir: '' }));
+    }
+  });
+
+  it('已加载的原图直接保存缓存数据，静态动图封面不冒充原文件', async () => {
+    const original = 'https://image.coolapk.com/feed/demo.gif';
+    const cover = `${original}.m.jpg`;
+    await loadImageResource(cover, async () => 'data:image/jpeg;base64,Y292ZXI=');
+    await CoolapkTauriAPI.saveImage(cover);
+    expect(vi.mocked(invoke).mock.calls.at(-1)?.[1]).not.toHaveProperty('cachedDataUrl');
+    const dataUrl = 'data:image/gif;base64,R0lGODlh';
+    await loadImageResource(original, async () => dataUrl);
+    await CoolapkTauriAPI.saveImage(original);
+    expect(invoke).toHaveBeenLastCalledWith('save_file', expect.objectContaining({ url: original, cachedDataUrl: dataUrl }));
+    await CoolapkTauriAPI.saveImage('https://example.com/large.gif', '', dataUrl);
+    expect(invoke).toHaveBeenLastCalledWith('save_file', expect.objectContaining({ url: 'https://example.com/large.gif', cachedDataUrl: dataUrl }));
   });
 
   it('验证码脚本连续加载失败时仍取得网页全文并释放并发槽', async () => {

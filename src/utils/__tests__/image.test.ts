@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getImageUrlByQuality, getStaticAnimatedImageUrl, isAnimatedImageUrl, isLivePhotoUrl, isPortraitLongImage } from '../image';
+import { getImageUrlByQuality, getOriginalImageUrl, getStaticAnimatedImageUrl, isAnimatedImageUrl, isLivePhotoUrl, isPortraitLongImage } from '../image';
 
 describe('动图地址判断', () => {
   it('识别 GIF、GIFV 以及带参数的地址', () => {
@@ -16,6 +16,16 @@ describe('动图地址判断', () => {
   it('高清处理不会破坏 GIF 原地址', () => {
     const url = 'https://image.coolapk.com/a/demo.gif';
     expect(getImageUrlByQuality(url, 'hd')).toBe(url);
+  });
+
+  it('下载时将带参数的静态封面还原为 GIF 原图', () => {
+    for (const size of ['xs', 's', 'm', 'b', 't']) {
+      const cover = `https://image.coolapk.com/a/demo.gif.${size}.jpg?token=1#frame`;
+      expect(getOriginalImageUrl(cover)).toBe('https://image.coolapk.com/a/demo.gif?token=1#frame');
+    }
+    expect(getOriginalImageUrl('https://example.com/demo.gif.m.jpg?token=1')).toBe('https://example.com/demo.gif.m.jpg?token=1');
+    const privateImage = 'https://api.coolapk.com/v6/message/showImage?id=123&token=1';
+    expect(getOriginalImageUrl(privateImage)).toBe(privateImage);
   });
 
   it('关闭自动播放时可为酷安 GIF 生成静态封面', () => {

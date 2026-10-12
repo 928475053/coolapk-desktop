@@ -9,6 +9,9 @@ import { logDiagnostic, summarizeDiagnosticError } from '../utils/diagnosticLogg
 import { extractCaptchaParamsFromError, verifyWithCaptcha } from '../utils/neteaseCaptcha';
 import type { UpdatePackageType } from '../utils/updateChecker';
 import { showToast } from '../utils/toast';
+import { getOriginalImageUrl } from '../utils/image';
+import { getMemoryCachedResourceSync } from '../utils/resourceCache';
+import { useSettingsStore } from '../stores/settings';
 
 async function safeFetchOnce(pythonEndpoint: string, tauriCmd: string, tauriArgs: any = {}) {
   let rustError: unknown;
@@ -1396,8 +1399,34 @@ export class CoolapkTauriAPI {
     });
   }
 
-  static async saveImage(url: string, dir?: string) {
-    return await invoke<string>('save_image', { url, dir: dir || '' });
+  static async saveImage(url: string, dir?: string, loadedDataUrl?: string) {
+    // 所有下载入口统一取原图，静态动图封面不能作为下载内容。
+    const originalUrl = getOriginalImageUrl(url);
+    return await this.saveFile(originalUrl, dir, loadedDataUrl);
+  }
+
+  static async saveFile(url: string, dir?: string, loadedDataUrl?: string) {
+    let cachedDataUrl = loadedDataUrl || getMemoryCachedResourceSync(url) || undefined;
+    if (url.startsWith('blob:')) {
+      // Blob 是本地完整资源，读取现有字节不会重新请求远端服务器。
+      const blob = await (await fetch(url)).blob();
+      cachedDataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(blob);
+      });
+    }
+    const args: Record<string, unknown> = { url, dir: dir || '' };
+    if (cachedDataUrl?.startsWith('data:')) args.cachedDataUrl = cachedDataUrl;
+    try {
+      const settings = useSettingsStore().settings;
+      args.cacheDir = settings.cachePath || '';
+      args.cacheTtlDays = settings.cacheTtlDays;
+    } catch {
+      // 无 Store 的调用环境仍可使用原生默认缓存目录。
+    }
+    return await invoke<string>('save_file', args);
   }
 
   static async installApkDownload(path: string) {

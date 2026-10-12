@@ -53,6 +53,7 @@ type ContextState = {
   linkUrl: string;
   linkText: string;
   imageUrl: string;
+  imageDataUrl?: string;
   imageUrls: string[];
   feedId: string;
   feedText: string;
@@ -184,6 +185,8 @@ function buildContext(event: ContextPoint): ContextState | null {
       linkUrl: '',
       linkText: '',
       imageUrl,
+      // 大图可能超过内存缓存上限；直接复用当前元素持有的完整原图数据。
+      imageDataUrl: getLoadedOriginalImage(element, imageUrl),
       imageUrls: [],
       feedId: '',
       feedText: '',
@@ -195,14 +198,17 @@ function buildContext(event: ContextPoint): ContextState | null {
   }
 
   const link = element.closest<HTMLAnchorElement>('a[href]');
-  if (link && link.href) {
+  // 视频和音频也复用链接菜单，以媒体资源地址执行通用下载。
+  const media = element.closest<HTMLMediaElement>('video, audio');
+  const linkUrl = media?.currentSrc || media?.src || media?.querySelector('source')?.src || link?.href || '';
+  if (linkUrl) {
     return {
       x: event.clientX,
       y: event.clientY,
       kind: 'link',
       selectedText: text,
-      linkUrl: link.href,
-      linkText: link.textContent?.trim() || link.href,
+      linkUrl,
+      linkText: link?.textContent?.trim() || linkUrl,
       imageUrl: '',
       imageUrls: [],
       feedId: '',
@@ -356,7 +362,7 @@ function createItems(state: ContextState): MenuItem[] {
       item('view-image', '查看大图', 'fas fa-expand', () => appStore.openImageViewer([state.imageUrl])),
       item('view-original', '查看原图', 'fas fa-file-image', () => appStore.openImageViewer([state.imageUrl])),
       separator('image-separator'),
-      item('save-image', '保存图片', 'fas fa-download', () => saveImage(state.imageUrl)),
+      item('save-image', '保存图片', 'fas fa-download', () => saveImage(state.imageUrl, state.imageDataUrl)),
       item('copy-image', '复制图片', 'far fa-copy', () => copyImage(state.imageUrl)),
       item('copy-image-url', '复制图片地址', 'fas fa-link', () => copyText(state.imageUrl)),
       item('open-image-system', '使用系统程序打开', 'fas fa-external-link-alt', () => CoolapkTauriAPI.openImageInSystemViewer(state.imageUrl)),
@@ -368,6 +374,7 @@ function createItems(state: ContextState): MenuItem[] {
       item('open-link-app', '在应用内打开', 'fas fa-window-maximize', () => openLink(state.linkUrl)),
       item('open-link-system', '使用系统浏览器打开', 'fas fa-external-link-alt', () => CoolapkTauriAPI.openUrl(state.linkUrl, 'system')),
       item('copy-link', '复制链接地址', 'fas fa-link', () => copyText(state.linkUrl)),
+      item('save-file', '下载链接文件', 'fas fa-download', () => saveFile(state.linkUrl), { disabled: !/^(https?:\/\/|blob:|data:)/i.test(state.linkUrl) }),
       separator('link-separator'),
       item('search-link-text', '搜索链接文字', 'fas fa-search', () => searchInApp(state.linkText), { disabled: !state.linkText }),
     ];
@@ -447,18 +454,36 @@ async function copyImage(url: string) {
   await copyText(url);
 }
 
-async function saveImage(url: string) {
+/** 仅在已加载地址与原图地址一致时复用，静态动图封面必须重新获取原文件。 */
+function getLoadedOriginalImage(element: HTMLElement, url: string): string | undefined {
+  const image = element.closest('img') as HTMLImageElement | null;
+  const resourceUrl = image?.dataset.resourceUrl || image?.dataset.originalUrl;
+  const dataUrl = image?.currentSrc || image?.src || '';
+  return resourceUrl === getOriginalImageUrl(url) && dataUrl.startsWith('data:image/') ? dataUrl : undefined;
+}
+
+async function saveImage(url: string, loadedDataUrl?: string) {
   try {
-    const savedPath = url.startsWith('data:image/')
-      ? await CoolapkTauriAPI.saveImageDataUrl(
-          url,
-          `coolapk_image_${Date.now()}.png`,
-          settingsStore.settings.downloadPath
-        )
-      : await CoolapkTauriAPI.saveImage(url, settingsStore.settings.downloadPath);
+    const savedPath = await CoolapkTauriAPI.saveImage(url, settingsStore.settings.downloadPath, loadedDataUrl);
     showToast(savedPath ? `图片已保存：${savedPath}` : '图片保存成功');
   } catch (error) {
     showToast(`图片保存失败：${String(error)}`, 'error', 2400);
+  }
+}
+
+// 同一资源下载期间忽略重复点击，桌面右键和移动端长按共用入口。
+const downloadingUrls = new Set<string>();
+async function saveFile(url: string) {
+  if (downloadingUrls.has(url)) return;
+  downloadingUrls.add(url);
+  showToast('正在下载文件…', 'success', 3000);
+  try {
+    const savedPath = await CoolapkTauriAPI.saveFile(url, settingsStore.settings.downloadPath);
+    showToast(`文件已保存：${savedPath}`, 'success', 3000);
+  } catch (error) {
+    showToast(`文件下载失败：${String(error)}`, 'error', 3000);
+  } finally {
+    downloadingUrls.delete(url);
   }
 }
 

@@ -2862,7 +2862,100 @@ pub fn get_download_directory(app: tauri::AppHandle, dir: Option<String>) -> Res
     Ok(user_save_dir(&app, dir.as_deref())?.to_string_lossy().to_string())
 }
 
-/// 下载并保存图片原始数据，目录为空时使用系统下载目录。
+/// 通用下载不限制文件格式，完成前仅写临时文件，失败时清理半成品。
+#[tauri::command]
+pub async fn save_file(state: State<'_, AppState>, app: tauri::AppHandle, url: String, dir: Option<String>, cached_data_url: Option<String>, cache_dir: Option<String>, cache_ttl_days: Option<u64>) -> Result<String, String> {
+    use tokio::io::AsyncReadExt;
+    let target_dir = user_save_dir(&app, dir.as_deref())?;
+    tokio::fs::create_dir_all(&target_dir).await.map_err(|error| format!("创建下载目录失败：{error}"))?;
+    // 精确匹配原资源缓存，绝不拿静态缩略图代替动图原文件。
+    let cached = if cached_data_url.is_some() { cached_data_url }
+        else if url.starts_with("data:") { Some(url.clone()) }
+        else if let Ok(cache_file) = image_cache_file(&app, cache_dir.as_deref(), &url) { read_image_cache(&cache_file, cache_ttl_days.unwrap_or(7)).await }
+        else { None };
+    if let Some(data_url) = cached {
+        let (mime_type, bytes) = decode_file_data_url(&data_url)?;
+        let file_name = build_download_file_name(&url, "", mime_type, &bytes);
+        let target_path = save_image_bytes(&target_dir, &file_name, &bytes).await?;
+        return publish_user_file(&app, &target_path).await;
+    }
+    let sequence = IMAGE_TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let nonce = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_nanos();
+    let temp_path = target_dir.join(format!(".coolapk-download-{}-{nonce}-{sequence}.part", std::process::id()));
+    let result = async {
+        let (mime_type, disposition, final_url) = state.client.download_file_to(&url, &temp_path).await?;
+        // 只读取文件头判断格式，大文件下载无需整份载入内存。
+        let mut file = tokio::fs::File::open(&temp_path).await.map_err(|error| error.to_string())?;
+        let mut header = [0u8; 64];
+        let length = file.read(&mut header).await.map_err(|error| error.to_string())?;
+        drop(file);
+        let file_name = build_download_file_name(&final_url, &disposition, &mime_type, &header[..length]);
+        let target_path = {
+            let _lock = IMAGE_SAVE_LOCK.lock().map_err(|_| "文件保存锁已损坏".to_string())?;
+            let target_path = next_available_file_path(&target_dir, &file_name);
+            std::fs::rename(&temp_path, &target_path).map_err(|error| format!("保存下载文件失败：{error}"))?;
+            target_path
+        };
+        publish_user_file(&app, &target_path).await
+    }.await;
+    if result.is_err() { let _ = tokio::fs::remove_file(&temp_path).await; }
+    result
+}
+
+/// 优先采用服务器文件名，未知格式保留原扩展名；无格式信息时使用 bin。
+fn build_download_file_name(url: &str, disposition: &str, mime_type: &str, header: &[u8]) -> String {
+    // 引号内的分号属于文件名，不能当成参数分隔符。
+    let mut parts = Vec::new();
+    let mut start = 0;
+    let mut quoted = false;
+    let mut escaped = false;
+    for (index, character) in disposition.char_indices() {
+        if escaped { escaped = false; continue; }
+        if quoted && character == '\\' { escaped = true; continue; }
+        if character == '"' { quoted = !quoted; }
+        else if character == ';' && !quoted { parts.push(&disposition[start..index]); start = index + 1; }
+    }
+    parts.push(&disposition[start..]);
+    let parameters: Vec<(&str, &str)> = parts.into_iter().filter_map(|part| part.trim().split_once('=')).collect();
+    let extended = parameters.iter().find(|(key, _)| key.eq_ignore_ascii_case("filename*")).and_then(|(_, value)| {
+        let mut fields = value.trim_matches('"').splitn(3, '\'');
+        if !fields.next()?.eq_ignore_ascii_case("utf-8") { return None; }
+        fields.next()?;
+        Some(decode_download_name(fields.next()?))
+    });
+    let declared = extended.or_else(|| parameters.iter().find(|(key, _)| key.eq_ignore_ascii_case("filename")).map(|(_, value)| value.trim().trim_matches('"').to_string()));
+    let source_name = declared.filter(|name| !name.trim().is_empty()).unwrap_or_else(|| {
+        reqwest::Url::parse(url).ok().and_then(|parsed| parsed.path_segments().and_then(|mut segments| segments.next_back()).map(decode_download_name)).unwrap_or_default()
+    });
+    // 丢弃目录部分和各平台非法字符，同时保留中文名称。
+    let leaf = source_name.rsplit(['/', '\\']).next().unwrap_or_default();
+    let safe_name: String = leaf.chars().filter(|character| !character.is_control() && !"<>:\"/\\|?*".contains(*character)).take(120).collect();
+    let safe_name = safe_name.trim_matches([' ', '.']);
+    let mut name = if safe_name.is_empty() { "coolapk_file".to_string() } else { safe_name.to_string() };
+    let detected = detect_image_mime(header);
+    let mime = detected.unwrap_or_else(|| mime_type.split(';').next().unwrap_or_default().trim());
+    let extension = match mime.to_ascii_lowercase().as_str() {
+        mime if mime.starts_with("image/") => image_extension(mime),
+        "video/mp4" => "mp4", "video/webm" => "webm", "video/quicktime" => "mov", "audio/mpeg" => "mp3", "audio/mp4" => "m4a", "audio/flac" => "flac", "audio/ogg" => "ogg", "audio/wav" | "audio/x-wav" => "wav",
+        "application/zip" | "application/x-zip-compressed" => "zip", "application/pdf" => "pdf", "application/x-7z-compressed" => "7z", "application/vnd.rar" | "application/x-rar-compressed" => "rar", "application/gzip" => "gz", "text/plain" => "txt", "text/html" => "html", "application/json" => "json", _ => "",
+    };
+    let has_extension = Path::new(&name).extension().is_some();
+    let named_image = Path::new(&name).extension().and_then(|value| value.to_str()).is_some_and(|value| ["jpg", "jpeg", "png", "gif", "gifv", "webp", "avif", "bmp", "svg", "tif", "tiff", "ico", "heic", "heif"].contains(&value.to_ascii_lowercase().as_str()));
+    if detected.is_some() || !has_extension || (named_image && mime.starts_with("image/") && extension != "bin") {
+        let stem = Path::new(&name).file_stem().and_then(|value| value.to_str()).unwrap_or("coolapk_file");
+        name = format!("{stem}.{}", if extension.is_empty() { "bin" } else { extension });
+    }
+    // Windows 设备名不能直接作为文件名，包括带扩展名的情况。
+    let stem = name.split('.').next().unwrap_or_default().to_ascii_uppercase();
+    if ["CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"].contains(&stem.as_str()) { name = format!("coolapk_{name}"); }
+    name
+}
+
+/// 文件名解码保留加号，异常编码维持原名称，避免对中文字符串按错误字节位置切片。
+fn decode_download_name(value: &str) -> String {
+    decode_percent_bytes(value).map(|bytes| String::from_utf8_lossy(&bytes).into_owned()).unwrap_or_else(|_| value.to_string())
+}
+
 #[tauri::command]
 pub async fn save_image(
     state: State<'_, AppState>,
@@ -3009,32 +3102,74 @@ async fn save_image_bytes(
 }
 
 fn decode_image_data_url(data_url: &str) -> Result<(&str, Vec<u8>), String> {
+    let (mime_type, bytes) = decode_file_data_url(data_url)?;
+    if !mime_type.starts_with("image/") { return Err("下载内容不是图片".to_string()); }
+    Ok((mime_type, bytes))
+}
+
+/// 已加载的完整文件可直接保存，支持任意 MIME，不经过画布截图或格式转换。
+fn decode_file_data_url(data_url: &str) -> Result<(&str, Vec<u8>), String> {
     let (header, payload) = data_url
         .split_once(',')
-        .ok_or_else(|| "图片数据格式无效".to_string())?;
+        .ok_or_else(|| "文件数据格式无效".to_string())?;
     let mime_type = header
         .strip_prefix("data:")
         .and_then(|value| value.split(';').next())
-        .filter(|value| value.starts_with("image/"))
-        .ok_or_else(|| "下载内容不是图片".to_string())?;
-    if !header.ends_with(";base64") {
-        return Err("图片数据不是 Base64 格式".to_string());
-    }
-    let bytes = BASE64
-        .decode(payload)
-        .map_err(|error| format!("图片数据解码失败：{error}"))?;
+        .ok_or_else(|| "文件数据类型无效".to_string())?;
+    let mime_type = if mime_type.is_empty() { "text/plain" } else { mime_type };
+    let bytes = if header.ends_with(";base64") {
+        BASE64.decode(payload).map_err(|error| format!("文件数据解码失败：{error}"))?
+    } else {
+        // 普通 Data URL 使用百分号编码，不能通过有损 UTF-8 转换处理二进制字节。
+        decode_percent_bytes(payload)?
+    };
+    // CDN 可能把动图声明为 JPEG；以文件头为准，保留原始字节和正确扩展名。
+    let mime_type = detect_image_mime(&bytes).unwrap_or(mime_type);
     Ok((mime_type, bytes))
+}
+
+fn decode_percent_bytes(value: &str) -> Result<Vec<u8>, String> {
+    let mut bytes = Vec::new();
+    let mut remaining = value.as_bytes();
+    while !remaining.is_empty() {
+        if remaining[0] == b'%' {
+            let hex = remaining.get(1..3).and_then(|digits| std::str::from_utf8(digits).ok()).and_then(|digits| u8::from_str_radix(digits, 16).ok()).ok_or_else(|| "文件数据包含无效百分号编码".to_string())?;
+            bytes.push(hex);
+            remaining = &remaining[3..];
+        } else {
+            bytes.push(remaining[0]);
+            remaining = &remaining[1..];
+        }
+    }
+    Ok(bytes)
+}
+
+/// 使用文件头识别图片格式，不对原始数据进行转码。
+fn detect_image_mime(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") { Some("image/gif") }
+    else if bytes.starts_with(b"\x89PNG\r\n\x1a\n") { Some("image/png") }
+    else if bytes.starts_with(b"\xff\xd8\xff") { Some("image/jpeg") }
+    else if bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"WEBP") { Some("image/webp") }
+    else if bytes.starts_with(b"BM") { Some("image/bmp") }
+    else if bytes.starts_with(b"II\x2a\0") || bytes.starts_with(b"MM\0\x2a") { Some("image/tiff") }
+    else if bytes.get(4..8) == Some(b"ftyp") && matches!(bytes.get(8..12), Some(b"avif" | b"avis")) { Some("image/avif") }
+    else { None }
 }
 
 fn image_extension(mime_type: &str) -> &'static str {
     match mime_type.to_ascii_lowercase().as_str() {
+        "image/jpeg" => "jpg",
         "image/png" => "png",
         "image/gif" => "gif",
         "image/webp" => "webp",
         "image/avif" => "avif",
         "image/bmp" => "bmp",
         "image/svg+xml" => "svg",
-        _ => "jpg",
+        "image/tiff" => "tiff",
+        "image/x-icon" | "image/vnd.microsoft.icon" => "ico",
+        "image/heic" => "heic",
+        "image/heif" => "heif",
+        _ => "bin",
     }
 }
 
@@ -5378,7 +5513,7 @@ pub async fn bind_feed_to_goods_list(
 #[cfg(test)]
 mod cache_tests {
     use super::{
-        build_generated_image_file_name, build_image_file_name, decode_image_data_url, next_available_file_path, read_image_cache,
+        build_download_file_name, build_generated_image_file_name, build_image_file_name, decode_file_data_url, decode_image_data_url, next_available_file_path, read_image_cache,
         save_image_bytes, validate_custom_dir, write_image_cache,
     };
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -5437,6 +5572,48 @@ mod cache_tests {
             root.join("abc123_2.png")
         );
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn image_save_detects_gif_bytes_despite_jpeg_content_type() {
+        // 模拟 CDN 错报 JPEG，确认下载内容保持 GIF 字节且文件名使用 GIF 扩展名。
+        for payload in ["R0lGODlh", "R0lGODdh"] {
+            let data_url = format!("data:image/jpeg;charset=utf-8;base64,{payload}");
+            let (mime_type, bytes) = decode_image_data_url(&data_url).unwrap();
+            assert_eq!(mime_type, "image/gif");
+            assert!(bytes.starts_with(b"GIF89a") || bytes.starts_with(b"GIF87a"));
+            assert_eq!(build_image_file_name("https://image.coolapk.com/feed/demo.jpg", mime_type), "demo.gif");
+        }
+    }
+
+    #[test]
+    fn generic_download_names_preserve_any_format_and_server_names() {
+        assert_eq!(build_download_file_name("https://example.com/demo.jpg", "", "image/jpeg", b"GIF89a"), "demo.gif");
+        assert_eq!(build_download_file_name("https://example.com/demo.jpg", "", "image/jpeg", b"RIFFxxxxWEBP"), "demo.webp");
+        assert_eq!(build_download_file_name("https://example.com/demo.jpg", "", "image/jpeg", b"\0\0\0\x18ftypavif"), "demo.avif");
+        assert_eq!(build_download_file_name("https://example.com/demo.jpg", "", "image/heic", b"\0\0\0\x18ftypheic"), "demo.heic");
+        assert_eq!(build_download_file_name("https://example.com/demo.jpg", "", "image/svg+xml", b"<svg/>"), "demo.svg");
+        for extension in ["mp4", "zip", "7z", "apk", "custom"] {
+            let expected = format!("demo.{extension}");
+            assert_eq!(build_download_file_name(&format!("https://example.com/{expected}?token=1"), "", "application/octet-stream", b"binary"), expected);
+        }
+        assert_eq!(build_download_file_name("https://example.com/download", "attachment; filename=backup.zip", "application/zip", b"PK\x03\x04"), "backup.zip");
+        assert_eq!(build_download_file_name("https://example.com/download", "attachment; filename=\"报告;2026.custom\"", "application/octet-stream", b""), "报告;2026.custom");
+        assert_eq!(build_download_file_name("https://example.com/download", "attachment; filename*=UTF-8''%中文.custom", "application/octet-stream", b""), "%中文.custom");
+        assert_eq!(build_download_file_name("https://example.com/download", "attachment; filename=fallback.zip; filename*=UTF-8''%E6%B5%8B%E8%AF%95%2B.zip", "application/zip", b"PK\x03\x04"), "测试+.zip");
+        assert_eq!(build_download_file_name("https://example.com/download", "attachment; filename=../../CON.zip", "application/zip", b""), "coolapk_CON.zip");
+        assert_eq!(build_download_file_name("https://example.com/", "", "application/octet-stream", b"unknown"), "coolapk_file.bin");
+        assert_eq!(build_download_file_name("https://example.com/", "", "video/mp4", b""), "coolapk_file.mp4");
+    }
+
+    #[test]
+    fn loaded_file_data_is_decoded_without_changing_binary_bytes() {
+        let (mime, bytes) = decode_file_data_url("data:application/octet-stream;base64,AP/+AQ==").unwrap();
+        assert_eq!(mime, "application/octet-stream");
+        assert_eq!(bytes, [0, 255, 254, 1]);
+        assert_eq!(decode_file_data_url("data:application/zip,%00%FF%FE%01").unwrap().1, bytes);
+        assert_eq!(decode_file_data_url("data:,a+b%20c").unwrap(), ("text/plain", b"a+b c".to_vec()));
+        assert!(decode_file_data_url("data:application/zip,%GG").is_err());
     }
 
     #[test]

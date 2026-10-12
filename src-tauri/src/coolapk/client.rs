@@ -3740,7 +3740,8 @@ impl CoolapkClient {
         Ok(json!({ "code": 200, "data": search_apks }))
     }
 
-    pub async fn get_image_data_url(&self, source_url: &str) -> Result<String, String> {
+    /// 图片代理与通用文件下载共用认证、来源站点和网络策略。
+    fn resource_request(&self, source_url: &str, upgrade_http: bool) -> Result<reqwest::RequestBuilder, String> {
         let mut url =
             reqwest::Url::parse(source_url).map_err(|e| format!("invalid image URL: {e}"))?;
         let scheme = url.scheme().to_ascii_lowercase();
@@ -3766,7 +3767,7 @@ impl CoolapkClient {
             return Err(format!("disallowed private or local host: {host}"));
         }
 
-        if url.scheme() == "http" {
+        if upgrade_http && url.scheme() == "http" {
             url.set_scheme("https")
                 .map_err(|_| "failed to upgrade image URL to HTTPS".to_string())?;
         }
@@ -3813,7 +3814,35 @@ impl CoolapkClient {
             }
         }
 
-        let response = req
+        Ok(req)
+    }
+
+    /// 流式保存任意 HTTP 文件，返回服务器文件名、类型及最终地址供保存端命名。
+    pub async fn download_file_to(&self, source_url: &str, path: &std::path::Path) -> Result<(String, String, String), String> {
+        let response = self.resource_request(source_url, false)?.header("Accept", "*/*").timeout(std::time::Duration::from_secs(3600)).send().await.map_err(|error| format!("下载文件失败：{error}"))?;
+        Self::write_download_response(response, path).await
+    }
+
+    /// 原样写入响应体，HTTP 错误或中途断流不能报告保存成功。
+    async fn write_download_response(mut response: reqwest::Response, path: &std::path::Path) -> Result<(String, String, String), String> {
+        use tokio::io::AsyncWriteExt;
+        if !response.status().is_success() { return Err(format!("文件下载返回 HTTP {}", response.status())); }
+        let mime_type = response.headers().get("content-type").and_then(|value| value.to_str().ok()).unwrap_or("application/octet-stream").to_string();
+        let disposition = response.headers().get("content-disposition").and_then(|value| value.to_str().ok()).unwrap_or_default().to_string();
+        let final_url = response.url().to_string();
+        let mut file = tokio::fs::OpenOptions::new().write(true).create_new(true).open(path).await.map_err(|error| format!("创建下载临时文件失败：{error}"))?;
+        while let Some(chunk) = response.chunk().await.map_err(|error| format!("读取下载内容失败：{error}"))? {
+            file.write_all(&chunk).await.map_err(|error| format!("写入下载文件失败：{error}"))?;
+        }
+        file.flush().await.map_err(|error| format!("刷新下载文件失败：{error}"))?;
+        file.sync_all().await.map_err(|error| format!("保存下载文件失败：{error}"))?;
+        Ok((mime_type, disposition, final_url))
+    }
+
+    pub async fn get_image_data_url(&self, source_url: &str) -> Result<String, String> {
+        let source = reqwest::Url::parse(source_url).map_err(|error| error.to_string())?;
+        let host = source.host_str().unwrap_or_default();
+        let response = self.resource_request(source_url, true)?
             .send()
             .await
             .map_err(|e| format!("failed to fetch image: {e}"))?;
@@ -9513,6 +9542,42 @@ mod api_failure_log_tests {
 #[cfg(test)]
 #[path = "client_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+mod download_file_tests {
+    use super::CoolapkClient;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    #[tokio::test]
+    async fn generic_download_stream_keeps_bytes_and_rejects_truncated_response() {
+        for truncated in [false, true] {
+            // 本地响应仅用于验证流式写入，生产下载仍使用原有地址校验。
+            let payload: Vec<u8> = (0..128 * 1024).map(|index| (index % 256) as u8).collect();
+            let expected = payload.clone();
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let server = tokio::spawn(async move {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut request = [0; 4096];
+                stream.read(&mut request).await.unwrap();
+                let declared_size = payload.len() + usize::from(truncated);
+                let header = format!("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Disposition: attachment; filename=test.custom\r\nContent-Length: {declared_size}\r\nConnection: close\r\n\r\n");
+                stream.write_all(header.as_bytes()).await.unwrap();
+                for chunk in payload.chunks(4096) { stream.write_all(chunk).await.unwrap(); }
+            });
+            let path = std::env::temp_dir().join(format!("coolapk-download-{}-{truncated}.part", address.port()));
+            let response = reqwest::Client::new().get(format!("http://{address}/test.custom")).send().await.unwrap();
+            let result = CoolapkClient::write_download_response(response, &path).await;
+            server.await.unwrap();
+            if truncated { assert!(result.is_err()); }
+            else {
+                assert_eq!(result.unwrap().0, "application/octet-stream");
+                assert_eq!(tokio::fs::read(&path).await.unwrap(), expected);
+            }
+            tokio::fs::remove_file(path).await.unwrap();
+        }
+    }
+}
 
 #[cfg(test)]
 #[path = "api_tests.rs"]

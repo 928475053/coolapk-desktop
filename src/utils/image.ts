@@ -76,7 +76,15 @@ export function getHdImageUrl(url: string): string {
  * 获取无损原图 URL（剥离 .m.jpg / .s.jpg 缩略图后缀）
  */
 export function getOriginalImageUrl(url: string): string {
-  return getImageUrlByQuality(url, 'raw');
+  // 只还原图片 CDN 的缩略图后缀，保留鉴权参数及私信接口等其他地址。
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname !== 'image.coolapk.com') return url;
+    parsed.pathname = parsed.pathname.replace(/\.(?:xs|s|m|b|t)\.jpg$/i, '');
+    return parsed.toString();
+  } catch {
+    return url;
+  }
 }
 
 /**

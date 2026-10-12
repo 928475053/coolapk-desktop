@@ -67,6 +67,7 @@
             ref="imageRef"
             :src="displaySrc"
             :data-original-url="originalUrl || undefined"
+            :data-resource-url="currentUrl || undefined"
             alt="Viewer Image"
             class="viewer-img"
             :style="mediaTransformStyle"
@@ -1098,7 +1099,8 @@ async function saveOriginal() {
   try {
     const path = await CoolapkTauriAPI.saveImage(
       originalUrl.value,
-      settingsStore.settings.downloadPath
+      settingsStore.settings.downloadPath,
+      currentUrl.value === originalUrl.value && displaySrc.value.startsWith('data:') ? displaySrc.value : undefined
     );
     showToast(`原图已保存：${path}`, 'success', 3000);
   } catch (error) {

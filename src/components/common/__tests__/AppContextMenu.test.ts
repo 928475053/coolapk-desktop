@@ -5,6 +5,7 @@ import AppContextMenu from '../AppContextMenu.vue';
 const mocks = vi.hoisted(() => ({
   writeText: vi.fn().mockResolvedValue(undefined),
   openUrl: vi.fn().mockResolvedValue(undefined),
+  saveFile: vi.fn().mockResolvedValue('/downloads/file.custom'),
 }));
 
 vi.mock('vue-router', () => ({
@@ -20,6 +21,7 @@ vi.mock('../../../api/coolapk', () => ({
   CoolapkTauriAPI: {
     openUrl: mocks.openUrl,
     saveImage: vi.fn(),
+    saveFile: mocks.saveFile,
   },
 }));
 
@@ -59,6 +61,22 @@ describe('AppContextMenu', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it.each(['a', 'video', 'audio'])('右键 %s 可以原样下载带参数的任意文件资源', async (tag) => {
+    const wrapper = mount(AppContextMenu, { attachTo: document.body });
+    const resource = document.createElement(tag);
+    const url = 'https://example.com/file.custom?token=123';
+    resource.setAttribute(tag === 'a' ? 'href' : 'src', url);
+    document.body.appendChild(resource);
+    resource.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 100, clientY: 100 }));
+    await wrapper.vm.$nextTick();
+    const action = Array.from(document.querySelectorAll<HTMLElement>('.context-menu-item')).find(element => element.textContent?.includes('下载链接文件'));
+    expect(action).toBeDefined();
+    action!.click();
+    expect(mocks.saveFile).toHaveBeenCalledWith(url, expect.any(String));
+    document.body.removeChild(resource);
+    wrapper.unmount();
   });
 
   it('右键私信消息时展示复制选项并正确复制消息全文', async () => {

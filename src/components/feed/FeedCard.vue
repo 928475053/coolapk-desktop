@@ -395,6 +395,7 @@ import {
   getFeedRelationType,
 } from '../../utils/feedRelations';
 import { getUserUid } from '../../utils/userRoute';
+import { getFeedInteractionType } from '../../utils/feedInteractions';
 import { hasActiveTextSelection } from '../../utils/selection';
 import { queueFavoriteContentIndexEntry, removeFavoriteContentIndexEntry } from '../../utils/favoriteContentIndex';
 
@@ -794,7 +795,7 @@ const historyError = ref('');
 const historyList = ref<any[]>([]);
 const historyLoaded = ref(false);
 
-const interactionFeedType = computed(() => String((props.feed as any).feedType || (props.feed as any).feed_type || (props.feed as any).entityType || 'feed'));
+const interactionFeedType = computed(() => getFeedInteractionType(props.feed));
 
 function openForwardDialog() {
   if (!authStore.isLoggedIn) {

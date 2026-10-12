@@ -85,6 +85,8 @@ const props = defineProps<{
   /**
    * 内嵌模式：不包 `AppDialog`，直接渲染列表内容，供分栏详情页的右栏使用。
    * 取数、分页、模板内容与弹窗模式完全一致。默认 false，即弹窗。
+   * 注意：消费方必须同时传 `show: true` —— `loadPage` 有 `!props.show` 早退，
+   * 只传 `inline` 不传 `show` 会得到永远为空的列表。
    */
   inline?: boolean;
 }>();

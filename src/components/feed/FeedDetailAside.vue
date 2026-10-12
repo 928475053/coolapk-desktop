@@ -47,6 +47,8 @@
       :load-more-error="commentsLoadMoreError"
       :default-sort-mode="sortMode"
       preserve-api-order
+      :hide-collapse-button="true"
+      @delete-comment="removeComment"
       @load-more-comments="loadMoreComments"
       @retry-comments="reloadComments"
       @retry-more-comments="loadMoreComments"
@@ -60,7 +62,7 @@
       :show="true"
       :mode="activeTab"
       :feed-id="feed.id"
-      :feed-type="feed.entityType || 'feed'"
+      :feed-type="getFeedInteractionType(feed)"
     />
   </aside>
 </template>
@@ -71,6 +73,7 @@ import { CoolapkTauriAPI } from '../../api/coolapk';
 import { useSettingsStore } from '../../stores/settings';
 import FeedCommentSection from './FeedCommentSection.vue';
 import FeedInteractionListDialog from './FeedInteractionListDialog.vue';
+import { getFeedInteractionType } from '../../utils/feedInteractions';
 import {
   COMMENT_SORT_OPTIONS,
   DEFAULT_COMMENT_SORT_MODE,
@@ -143,6 +146,12 @@ function updateCommentCursor(pageReplies: any[], resetFirst = false) {
   const cursor = getReplyPageCursor(pageReplies);
   if (resetFirst || !commentsFirstItem) commentsFirstItem = cursor.firstItem;
   if (cursor.lastItem) commentsLastItem = cursor.lastItem;
+}
+
+// 删除成功后在本地移除该条评论：FeedCommentSection 只负责发 API + emit，
+// 列表本身由右栏维护，不接这个事件的话界面上评论会删不掉（与 FeedCard 单栏路径一致）。
+function removeComment(id: string | number) {
+  comments.value = comments.value.filter((c: any) => String(c.id) !== String(id));
 }
 
 // 重取第一页并重置游标：首屏、错误重试、刷新、切换只看楼主/排序共用同一段逻辑。

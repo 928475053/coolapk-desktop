@@ -32,6 +32,15 @@ function firstText(record: Record<string, any>, keys: string[]): string {
   return '';
 }
 
+/** 互动列表请求的 feedType 取值：单栏与分栏两条路径必须共用这一个函数，
+ *  按 feedType → feed_type → entityType 依次回退，最后落到 'feed'。
+ *  该值会作为 /v6/feed/forwardList 等接口的 type 参数，两条路径不一致会
+ *  让某些 feed 类型（feedArticle、rating 等）的转发/点赞列表错误或为空。 */
+export function getFeedInteractionType(feed: unknown): string {
+  const record = asRecord(feed);
+  return String(record.feedType || record.feed_type || record.entityType || 'feed');
+}
+
 function findList(value: unknown, depth = 0): unknown[] {
   if (Array.isArray(value)) return value;
   if (depth > 5) return [];

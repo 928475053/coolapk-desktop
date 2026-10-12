@@ -1,5 +1,5 @@
 <template>
-  <div class="feed-detail-page custom-scrollbar" :class="{ 'is-official-mobile': officialMobileDetail, 'is-split': useSplitLayout }">
+  <div class="feed-detail-page custom-scrollbar" :class="{ 'is-official-mobile': officialMobileDetail, 'is-split': showSplit }">
     <button v-if="officialMobileDetail && (!feedDetail || isAnswerDetail)" type="button" aria-label="返回" class="detail-fallback-back" @click="navigateBack(router)"><i class="fas fa-arrow-left"></i> 返回</button>
     <div class="feed-detail-shell">
       <LoadingState v-if="loading && !feedDetail" text="正在加载原动态..." />
@@ -21,7 +21,7 @@
       />
       <!-- 分栏分支必须在 FeedCard 之前，否则永远命中不到。 -->
       <FeedDetailSplitLayout
-        v-else-if="feedDetail && useSplitLayout"
+        v-else-if="showSplit"
         :key="feedId"
         :feed="feedDetail"
       />
@@ -100,6 +100,12 @@ usePageTabTitle(computed(() => {
   return username ? `${username} 的动态` : null;
 }));
 const isAnswerDetail = computed(() => Boolean(feedDetail.value && isAnswerSearchEntity(feedDetail.value)));
+// is-split 只能挂在真正渲染分栏的分支上：回答详情、加载中/出错/空态渲染的都是其它分支，
+// 挂上 is-split 会把页面设成 overflow:hidden、shell 设成 height:100%，而这些分支没有
+// 内部滚动容器（QuestionAnswerCard 根元素 overflow:hidden），首屏之外的内容会被裁掉且滚不动。
+const showSplit = computed(() =>
+  useSplitLayout.value && Boolean(feedDetail.value) && !isAnswerDetail.value
+);
 const answerQuestionId = computed(() => String(
   feedDetail.value?.questionId
     ?? feedDetail.value?.question_id

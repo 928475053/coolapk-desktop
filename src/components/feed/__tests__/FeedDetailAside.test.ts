@@ -28,10 +28,18 @@ describe('分栏详情页右栏', () => {
     setActivePinia(createPinia());
   });
 
-  const mountAside = (activeTab: 'replies' | 'likes' | 'forwards' = 'replies') =>
+  const mountAside = (
+    activeTab: 'replies' | 'likes' | 'forwards' = 'replies',
+    feed: Record<string, any> = { id: '42', uid: '456', username: '作者', message: '正文' },
+  ) =>
     mount(FeedDetailAside, {
-      props: { feed: { id: '42', uid: '456', username: '作者', message: '正文' }, activeTab },
-      global: { stubs: { FeedCommentSection: { template: '<div class="comment-section-stub" />' }, FeedInteractionListDialog: { template: '<div class="interaction-stub" />' } } },
+      props: { feed, activeTab },
+      global: {
+        stubs: {
+          FeedCommentSection: { name: 'FeedCommentSection', props: ['comments', 'hideCollapseButton'], template: '<div class="comment-section-stub" />' },
+          FeedInteractionListDialog: { name: 'FeedInteractionListDialog', props: ['feedType'], template: '<div class="interaction-stub" />' },
+        },
+      },
     });
 
   it('渲染三个 tab，当前 tab 高亮', async () => {
@@ -95,6 +103,44 @@ describe('分栏详情页右栏', () => {
     expect(mocks.getFeedReplies).toHaveBeenLastCalledWith(
       '42', 1, expect.objectContaining({ listType: 'popular', fromFeedAuthor: 0 }),
     );
+    wrapper.unmount();
+  });
+
+  it('互动列表 feedType 与单栏路径一致：优先 feedType，其次 feed_type，回退 entityType', async () => {
+    const article = mountAside('forwards', { id: '42', uid: '456', username: '作者', message: '正文', feedType: 'feedArticle', entityType: 'feed' });
+    await flushPromises();
+    expect(article.findComponent({ name: 'FeedInteractionListDialog' }).props('feedType')).toBe('feedArticle');
+    article.unmount();
+
+    const rating = mountAside('forwards', { id: '42', uid: '456', username: '作者', message: '正文', feed_type: 'rating', entityType: 'feed' });
+    await flushPromises();
+    expect(rating.findComponent({ name: 'FeedInteractionListDialog' }).props('feedType')).toBe('rating');
+    rating.unmount();
+
+    const fallback = mountAside('forwards', { id: '42', uid: '456', username: '作者', message: '正文', entityType: 'feedArticle' });
+    await flushPromises();
+    expect(fallback.findComponent({ name: 'FeedInteractionListDialog' }).props('feedType')).toBe('feedArticle');
+    fallback.unmount();
+  });
+
+  it('删除评论后本地移除该条（delete-comment 与单栏路径一致）', async () => {
+    mocks.getFeedReplies.mockResolvedValue({ data: [{ id: 'a', message: '评论A' }, { id: 'b', message: '评论B' }] });
+    const wrapper = mountAside();
+    await flushPromises();
+
+    const section = wrapper.findComponent({ name: 'FeedCommentSection' });
+    expect(section.props('comments').map((c: any) => c.id)).toEqual(['a', 'b']);
+
+    await section.vm.$emit('delete-comment', 'a');
+    await flushPromises();
+    expect(section.props('comments').map((c: any) => c.id)).toEqual(['b']);
+    wrapper.unmount();
+  });
+
+  it('右栏评论组件抑制收起评论按钮（右栏没有「收起」语义）', async () => {
+    const wrapper = mountAside();
+    await flushPromises();
+    expect(wrapper.findComponent({ name: 'FeedCommentSection' }).props('hideCollapseButton')).toBe(true);
     wrapper.unmount();
   });
 });

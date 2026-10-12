@@ -635,4 +635,18 @@ describe('评论完整信息展示', () => {
     expect(dim).toHaveBeenLastCalledWith(expect.any(Symbol), false);
   });
 
+  it('hideCollapseButton 抑制收起评论按钮与 Esc 的 collapse，默认行为不变', async () => {
+    const visible = mountSection();
+    expect(visible.find('.comment-toolbar-collapse-btn').exists()).toBe(true);
+    await visible.find('.comment-textarea').trigger('keydown', { key: 'Escape' });
+    expect(visible.emitted('collapse')).toHaveLength(1);
+    visible.unmount();
+
+    const hidden = mountSection({}, { hideCollapseButton: true });
+    expect(hidden.find('.comment-toolbar-collapse-btn').exists()).toBe(false);
+    await hidden.find('.comment-textarea').trigger('keydown', { key: 'Escape' });
+    expect(hidden.emitted('collapse')).toBeUndefined();
+    hidden.unmount();
+  });
+
 });

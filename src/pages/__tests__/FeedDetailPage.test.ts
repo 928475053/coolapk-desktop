@@ -93,6 +93,19 @@ describe('详情页在桌面布局下按开关切换分栏', () => {
   it('开关开且窗口 >= 1000px 时渲染分栏', async () => {
     const wrapper = await mountPage(true);
     expect(wrapper.find('.split-stub').exists()).toBe(true);
+    expect(wrapper.classes()).toContain('is-split');
+    wrapper.unmount();
+  });
+
+  it('开关开 + 宽窗口 + 回答详情时根元素不含 is-split（否则页面 overflow:hidden 不可滚动）', async () => {
+    // 从回答卡片点进详情：渲染的是 QuestionAnswerCard，不是分栏；
+    // is-split 若挂上会把页面锁死成 overflow:hidden，回答卡又没有内部滚动容器，正文会被裁掉。
+    mocks.detail.mockResolvedValue({ data: { id: '42', uid: '456', username: '作者', message: '回答正文', feedType: 'answer' } });
+    const wrapper = await mountPage(true);
+    await flushPromises();
+    expect(wrapper.find('.split-stub').exists()).toBe(false);
+    expect(wrapper.find('question-answer-card-stub').exists()).toBe(true);
+    expect(wrapper.classes()).not.toContain('is-split');
     wrapper.unmount();
   });
 

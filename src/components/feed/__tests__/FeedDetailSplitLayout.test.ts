@@ -24,15 +24,19 @@ describe('分栏详情页容器', () => {
     wrapper.unmount();
   });
 
-  it('把左栏的三个事件转成右栏的 tab', async () => {
+  it.each([
+    ['open-comment', 'replies'],
+    ['open-like-list', 'likes'],
+    ['open-forward-list', 'forwards'],
+  ])('把左栏事件 %s 转成右栏 tab %s', async (event, tab) => {
     setActivePinia(createPinia());
     const wrapper = mount(FeedDetailSplitLayout, {
       props: { feed: { id: '42', uid: '456', username: '作者', message: '正文' } },
       global: { stubs: { FeedCard: true, FeedDetailAside: true } },
     });
     const left = wrapper.findComponent({ name: 'FeedCard' });
-    await left.vm.$emit('open-forward-list');
-    expect(wrapper.findComponent({ name: 'FeedDetailAside' }).props('activeTab')).toBe('forwards');
+    await left.vm.$emit(event);
+    expect(wrapper.findComponent({ name: 'FeedDetailAside' }).props('activeTab')).toBe(tab);
     wrapper.unmount();
   });
 });

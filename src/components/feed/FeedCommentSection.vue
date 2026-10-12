@@ -25,7 +25,7 @@
         </div>
       </div>
       <button
-        v-if="!officialDetail"
+        v-if="!officialDetail && !hideCollapseButton"
         type="button"
         class="comment-toolbar-collapse-btn"
         :title="showShortcutHints ? '收起评论 (Esc)' : '收起评论'"
@@ -571,6 +571,9 @@ const props = withDefaults(
     officialDetail?: boolean;
     defaultSortMode?: CommentSortMode;
     preserveApiOrder?: boolean;
+    /** 抑制工具栏「收起评论」按钮与 Esc 的 collapse 事件：
+     *  给分栏详情页右栏这种没有「收起」语义的宿主用；默认 false，既有调用点行为不变。 */
+    hideCollapseButton?: boolean;
     feedUid?: string | number;
     feedUsername?: string;
     comments: any[];
@@ -587,6 +590,7 @@ const props = withDefaults(
     feedId: '',
     targetReplyId: '',
     preserveApiOrder: false,
+    hideCollapseButton: false,
     feedUid: '',
     feedUsername: '',
     totalCommentCount: undefined,
@@ -1460,7 +1464,7 @@ function handleKeydown(e: KeyboardEvent) {
     e.preventDefault();
     if (replyTargetUser.value) {
       clearReplyTarget();
-    } else {
+    } else if (!props.hideCollapseButton) {
       emit('collapse');
     }
   }

@@ -37,12 +37,11 @@ const activeTab = ref<'replies' | 'likes' | 'forwards'>('replies');
 </script>
 
 <style scoped>
-/* 容器给出有高度约束的 flex 上下文：FeedDetailAside 根元素是 height:100% + overflow-y:auto，
+/* 高度约束完全来自 height: 100%：FeedDetailAside 根元素是 height:100% + overflow-y:auto，
    只有父层有确定高度时它才会独立滚动；两栏各自 overflow-y:auto，互不干扰。 */
 .feed-detail-split {
   display: flex;
   height: 100%;
-  min-height: 0;
 }
 
 .feed-detail-split-left {

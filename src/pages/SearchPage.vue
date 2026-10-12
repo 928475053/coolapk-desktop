@@ -29,6 +29,9 @@
           </button>
         </div>
 
+        <!-- 综合与动态共用官方动态排序，综合选择排序后查询动态结果。 -->
+        <EntityFilterBar v-if="queryStr && (activeTab === 'all' || activeTab === 'feed')" class="search-feed-sort" v-model:sort="feedSearchSort" :sort-options="FEED_SEARCH_SORT_OPTIONS" :show-search="false" @change="switchFeedSearchSort" />
+
         <div v-if="queryStr && !isScopedSearch && isAskTab" class="search-ask-filter" role="tablist" aria-label="问答类型">
           <button
             v-for="option in askFeedTypeOptions"
@@ -79,6 +82,7 @@ import { computed, onMounted, onUnmounted, onActivated, onDeactivated, reactive,
 import { useRoute, useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import EmptyState from '../components/common/EmptyState.vue';
+import EntityFilterBar from '../components/common/EntityFilterBar.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import SearchHotListCard from '../components/search/SearchHotListCard.vue';
 import SearchResultItem from '../components/search/SearchResultItem.vue';
@@ -87,6 +91,7 @@ import type { SearchEntity, SearchTabDefinition, SearchTabState } from '../types
 import { DEFAULT_SEARCH_TABS } from '../types/search';
 import { addSearchHistory, clearSearchHistory, loadSearchHistory, removeSearchHistory, searchHistory } from '../utils/searchHistory';
 import { extractSearchEntities, extractSearchTabs, getSearchEntityId, getSearchEntitySearchTarget, getSearchEntityTitle, isSponsorSearchEntity, normalizeSearchEntityForTab } from '../utils/searchEntities';
+import { FEED_SEARCH_SORT_OPTIONS, resolveFeedSearchSort } from '../utils/coolapkFeedSearch';
 
 const route = useRoute();
 const router = useRouter();
@@ -109,6 +114,7 @@ const askFeedTypeOptions = [
   { key: 'answer', label: '回答', icon: 'fas fa-comment-dots' },
 ];
 const askFeedType = ref(normalizeAskFeedType(readQueryString(route.query.feedType)));
+const feedSearchSort = ref(normalizeFeedSearchSort(readQueryString(route.query.sort)));
 const hotItems = ref<SearchEntity[]>([]);
 const tabStates = reactive<Record<string, SearchTabState>>({});
 const showSuggestions = ref(false);
@@ -157,6 +163,15 @@ const isAskTab = computed(() => {
   const tab = searchTabs.value.find((item) => item.key === activeTab.value);
   return tab?.searchType === 'ask' || activeTab.value === 'ask';
 });
+
+function normalizeFeedSearchSort(value: string): string {
+  return FEED_SEARCH_SORT_OPTIONS.some((option) => option.key === value) ? value : 'default';
+}
+
+function switchFeedSearchSort() {
+  // 排序只更新筛选条件，保留用户当前选择的搜索页签。
+  void router.push({ path: '/search', query: { ...route.query, q: queryStr.value, tab: activeTab.value, sort: feedSearchSort.value } });
+}
 
 function normalizeAskFeedType(value: string): string {
   return ['all', 'question', 'answer'].includes(value.toLowerCase()) ? value.toLowerCase() : 'all';
@@ -242,21 +257,34 @@ async function fetchTab(tabKey: string, loadMore = false) {
   if (loadMore) state.loadingMore = true;
   else { state.loading = true; state.error = ''; }
   try {
-    const response: any = await CoolapkTauriAPI.searchByType({
-      searchType: tab.searchType,
+    let requestedPage = loadMore ? state.cursor.page : 1;
+    // 综合页的动态排序使用 feed 接口，结果仍保存在综合页，不改变页签。
+    const searchType = tab.searchType === 'all' && readQueryString(route.query.sort) ? 'feed' : tab.searchType;
+    const requestPage = () => CoolapkTauriAPI.searchByType({
+      searchType,
       query: queryStr.value,
-      page: loadMore ? state.cursor.page : 1,
+      page: requestedPage,
       firstItem: loadMore ? state.cursor.firstItem : '',
       lastItem: loadMore ? state.cursor.lastItem : '',
-      pageType: scoped ? scopedPageType.value : tab.searchType === 'feed' ? 'search' : '',
+      pageType: scoped ? scopedPageType.value : searchType === 'feed' ? 'search' : '',
       pageParam: scoped ? scopedPageParam.value : '',
-      feedType: tab.searchType === 'ask' ? askFeedType.value : tab.searchType === 'feed' ? 'all' : '',
-      sort: tab.searchType === 'feed' ? 'default' : '',
+      feedType: searchType === 'ask' ? askFeedType.value : searchType === 'feed' ? 'all' : '',
+      sort: searchType === 'feed' ? resolveFeedSearchSort(feedSearchSort.value).sort : '',
+      isStrict: searchType === 'feed' ? resolveFeedSearchSort(feedSearchSort.value).isStrict : 0,
     });
+    let response: any = await requestPage();
     if (requestVersion !== state.requestVersion || sequence !== searchSequence) return;
-    const rows = extractSearchEntities(response)
+    const extractRows = (result: unknown) => extractSearchEntities(result)
       .map((item) => normalizeSearchEntityForTab(item, tab.searchType))
       .filter((item) => !isSponsorSearchEntity(item));
+    let rows = extractRows(response);
+    // 官方 APK 首屏没有结果时仍会请求第二页，避免服务端空首页截断搜索结果。
+    if (requestedPage === 1 && rows.length === 0) {
+      requestedPage = 2;
+      response = await requestPage();
+      if (requestVersion !== state.requestVersion || sequence !== searchSequence) return;
+      rows = extractRows(response);
+    }
     const existing = new Set(state.items.map((item) => entityKey(item, 0)));
     const uniqueRows = rows.filter((item, index) => {
       const key = entityKey(item, index);
@@ -271,7 +299,7 @@ async function fetchTab(tabKey: string, loadMore = false) {
     const responseFirst = String(response?.firstItem ?? response?.first_item ?? response?.data?.firstItem ?? response?.data?.first_item ?? '').trim();
     const responseLast = String(response?.lastItem ?? response?.last_item ?? response?.data?.lastItem ?? response?.data?.last_item ?? '').trim();
     state.cursor = {
-      page: loadMore ? state.cursor.page + 1 : 2,
+      page: requestedPage + 1,
       firstItem: responseFirst || first || state.cursor.firstItem,
       lastItem: responseLast || last || state.cursor.lastItem,
       noMore: responseFlag(response?.noMore ?? response?.data?.noMore) || rows.length === 0,
@@ -336,6 +364,8 @@ function doSearch(value: string, requestedSearchType = '') {
     const targetDefinition = searchTabs.value.find((tab) => tab.key === targetTab);
     if (targetDefinition?.searchType === 'ask' || targetTab === 'ask') query.feedType = askFeedType.value;
   }
+  if (query.tab === 'feed') query.sort = feedSearchSort.value;
+  if (query.tab === 'all' && readQueryString(route.query.sort)) query.sort = feedSearchSort.value;
   void router.push({ path: '/search', query });
 }
 
@@ -346,6 +376,7 @@ function switchTab(key: string) {
   const targetTab = searchTabs.value.find((tab) => tab.key === key);
   const query: Record<string, string> = { q: queryStr.value, tab: key };
   if (targetTab?.searchType === 'ask' || key === 'ask') query.feedType = askFeedType.value;
+  if (key === 'feed') query.sort = feedSearchSort.value;
   void router.push({ path: '/search', query });
 }
 
@@ -410,11 +441,13 @@ watch(() => [
   readQueryString(route.query.pageType),
   readQueryString(route.query.pageParam),
   readQueryString(route.query.feedType),
-], ([nextQuery, nextTab, , , nextFeedType]) => {
+  readQueryString(route.query.sort),
+], ([nextQuery, nextTab, , , nextFeedType, nextSort]) => {
   const normalizedQuery = nextQuery;
   queryStr.value = normalizedQuery;
   searchQuery.value = normalizedQuery;
   askFeedType.value = normalizeAskFeedType(nextFeedType);
+  feedSearchSort.value = normalizeFeedSearchSort(nextSort);
   if (isScopedSearch.value) {
     activeTab.value = 'feed';
   } else if (configLoaded) {
@@ -424,7 +457,8 @@ watch(() => [
   searchSuggestions.value = [];
   showSuggestions.value = false;
   resetTabStates();
-  if (normalizedQuery) void fetchTab(activeTab.value);
+  // 等页签配置就绪再发起首次搜索，避免初始化重置使空首页补查失效。
+  if (normalizedQuery && configLoaded) void fetchTab(activeTab.value);
 }, { immediate: true });
 
 function bindGlobalListeners() {
@@ -473,6 +507,7 @@ onUnmounted(() => {
 .remove-history:hover { color: var(--danger); }
 .search-tabs { display: flex; gap: clamp(8px, 2vw, 24px); min-width: 0; padding: 0 20px; overflow-x: auto; scrollbar-width: none; }
 .search-tabs::-webkit-scrollbar { display: none; }
+.search-feed-sort { margin: 0; padding: 8px 20px; }
 .search-tab-item { display: inline-flex; align-items: center; gap: 7px; position: relative; flex: 0 0 auto; min-height: 44px; padding: 0 8px; color: var(--text-secondary); font-size: var(--font-size-sub); font-weight: var(--font-weight-medium); white-space: nowrap; background: transparent; border: 0; cursor: pointer; }
 .search-tab-item.active { color: var(--brand-primary); font-weight: var(--font-weight-bold); }
 .search-tab-item.active::after { position: absolute; right: 8px; bottom: 0; left: 8px; height: 3px; content: ''; background: var(--brand-primary); border-radius: 3px 3px 0 0; }
@@ -495,6 +530,7 @@ onUnmounted(() => {
   .search-tab-item { min-height: 42px; padding: 0 7px; }
   .search-tab-item.active::after { right: 7px; left: 7px; }
   .search-ask-filter { padding: 8px 12px 10px; }
+  .search-feed-sort { padding: 8px 12px; }
   .search-results-section, .search-welcome { padding: 12px 12px 24px; }
 }
 </style>

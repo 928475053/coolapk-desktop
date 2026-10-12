@@ -1,5 +1,27 @@
 use super::*;
 
+/// 只读核对官方精确搜索参数；仅手动运行，避免普通测试依赖在线接口。
+#[tokio::test]
+#[ignore]
+async fn probe_exact_feed_search_sort_parameter() {
+    let client = CoolapkClient::new();
+    let mut official_ids = Vec::new();
+    for (page_type, include_empty_sort) in [("search", false), ("search", true), ("", true)] {
+        let mut params = vec![("type", "feed".to_string()), ("feedType", "all".to_string()), ("searchValue", "伪回锁".to_string()), ("isStrict", "1".to_string()), ("page", "1".to_string()), ("showAnonymous", "-1".to_string())];
+        if !page_type.is_empty() { params.push(("pageType", page_type.to_string())); }
+        if include_empty_sort { params.push(("sort", String::new())); }
+        let response = client.api_get("/v6/search", &params).await.expect("精确搜索接口应返回 JSON");
+        let items = response["data"].as_array().expect("搜索结果应为数组");
+        let ids: Vec<_> = items.iter().filter_map(|item| item["id"].as_str().map(str::to_string)).collect();
+        println!("[精确搜索] page_type={} empty_sort={} count={} ids={:?}", page_type, include_empty_sort, items.len(), ids);
+        if page_type == "search" && include_empty_sort { official_ids = ids; }
+    }
+    // 验证实际客户端调用也保留空 sort，而不只是探测请求携带该字段。
+    let actual = client.search_by_type("feed", "伪回锁", 1, "", "", "search", "", "all", "", 1, "", "").await.expect("客户端精确搜索应成功");
+    let actual_ids: Vec<_> = actual["data"].as_array().unwrap().iter().filter_map(|item| item["id"].as_str().map(str::to_string)).collect();
+    assert_eq!(actual_ids, official_ids, "客户端精确搜索应与官方空 sort 参数的响应一致");
+}
+
 /// 辅助：打印截断的响应用于调试
 fn clip(body: &str, n: usize) -> String {
     body.chars().take(n).collect()

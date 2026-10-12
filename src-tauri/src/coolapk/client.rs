@@ -3185,7 +3185,8 @@ impl CoolapkClient {
             if !feed_type.is_empty() {
                 params.push(("feedType", feed_type.to_string()));
             }
-            if !sort.is_empty() {
+            // 精确搜索与官方一致，明确发送 sort="" 和 isStrict=1。
+            if (search_type == "feed" && is_strict == 1) || !sort.is_empty() {
                 params.push(("sort", sort.to_string()));
             }
             if !page_type.is_empty() {

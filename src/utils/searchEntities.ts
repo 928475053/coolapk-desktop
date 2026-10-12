@@ -1,6 +1,7 @@
 import type { Router } from 'vue-router';
 import type { SearchEntity, SearchTabDefinition } from '../types/search';
 import { DEFAULT_SEARCH_TABS } from '../types/search';
+import { FEED_SEARCH_SORT_OPTIONS } from './coolapkFeedSearch';
 
 function textValue(value: unknown): string {
   return typeof value === 'string' ? value.trim() : value === null || value === undefined ? '' : String(value).trim();
@@ -136,11 +137,15 @@ function sanitizeSearchValue(value: unknown): unknown {
 
 function collectSearchRows(value: unknown, rows: SearchEntity[]): void {
   if (Array.isArray(value)) {
-    value.forEach((item) => collectSearchRows(item, rows));
+    // 完整排序菜单属于控件配置，不能将其子项拆成五条搜索结果。
+    const sortItems = value.filter(isSearchSortEntity);
+    const hasSortMenu = FEED_SEARCH_SORT_OPTIONS.every((option) => sortItems.some((item) => getSearchEntityTitle(item) === option.label));
+    value.forEach((item) => { if (!hasSortMenu || !isSearchSortEntity(item)) collectSearchRows(item, rows); });
     return;
   }
   if (!value || typeof value !== 'object') return;
   const entity = value as SearchEntity;
+  if (isSearchSortEntity(entity) && /sort|filter/i.test(`${getSearchEntityType(entity)} ${getSearchEntityTemplate(entity)} ${getSearchEntityUrl(entity)}`)) return;
   const template = getSearchEntityTemplate(entity);
   const type = getSearchEntityType(entity);
   const isHotContainer = template.includes('searchhot') || type.includes('searchhot');
@@ -151,6 +156,15 @@ function collectSearchRows(value: unknown, rows: SearchEntity[]): void {
   }
   const sanitized = sanitizeSearchValue(entity);
   if (sanitized && typeof sanitized === 'object') rows.push(sanitized as SearchEntity);
+}
+
+/** 排序配置没有帖子正文、应用或用户标识；只在菜单结构或排序动作中排除。 */
+function isSearchSortEntity(value: unknown): value is SearchEntity {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const entity = value as SearchEntity;
+  return FEED_SEARCH_SORT_OPTIONS.some((option) => option.label === getSearchEntityTitle(entity))
+    && !entity.message && !entity.message_title && !entity.messageTitle && !getSearchEntityUid(entity) && !getSearchEntityPackageName(entity)
+    && !['feed', 'question', 'answer', 'apk', 'user', 'product'].includes(getSearchEntityType(entity));
 }
 
 export function extractSearchEntities(response: unknown): SearchEntity[] {

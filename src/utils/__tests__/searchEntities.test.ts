@@ -12,6 +12,14 @@ import {
 } from '../searchEntities';
 
 describe('搜索实体归一化', () => {
+  it('综合搜索的排序菜单不会被拆成结果，保留同名真实帖子', () => {
+    const menu = ['综合', '实时', '热度', '评论', '精确'].map((title) => ({ entityType: 'textLink', title }));
+    const feed = { entityType: 'feed', id: '1', title: '综合', message: '真实搜索结果' };
+    expect(extractSearchEntities({ data: [{ entityType: 'entityCard', entities: [...menu, feed] }] })).toEqual([feed]);
+    expect(extractSearchEntities({ data: [...menu, feed] })).toEqual([feed]);
+    expect(extractSearchEntities({ data: [{ entityType: 'textLink', title: '评论', url: '/search?type=feed&sort=reply' }, feed] })).toEqual([feed]);
+    expect(extractSearchEntities({ data: [{ entityType: 'textLink', title: '评论', url: '/other' }] })).toHaveLength(1);
+  });
   it('递归移除 sponsorForSearch，不影响其它实体', () => {
     const response = {
       data: [{

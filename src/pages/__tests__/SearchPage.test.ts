@@ -4,6 +4,7 @@ import { createMemoryHistory, createRouter } from 'vue-router';
 import { describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  getTabConfig: vi.fn().mockResolvedValue({ data: [] }),
   getHotSearches: vi.fn(),
   searchByType: vi.fn(),
   getSearchSuggestionsApp: vi.fn(),
@@ -13,6 +14,105 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../api/coolapk', () => ({ CoolapkTauriAPI: mocks }));
 
 import SearchPage from '../SearchPage.vue';
+
+describe('综合搜索空首页', () => {
+  async function mountSearch() {
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/search', component: SearchPage }] });
+    await router.push({ path: '/search', query: { q: '伪回锁', tab: 'all' } });
+    await router.isReady();
+    const wrapper = mount(SearchPage, { global: { plugins: [createPinia(), router], stubs: { SearchResultItem: true, SearchHotListCard: true, LoadingState: true, EmptyState: true } } });
+    return { wrapper, router };
+  }
+
+  it('排序配置不显示为结果卡片，选择热度和精确时发送正确请求', async () => {
+    vi.clearAllMocks();
+    const menu = ['综合', '实时', '热度', '评论', '精确'].map((title) => ({ entityType: 'textLink', title }));
+    mocks.searchByType.mockReset().mockResolvedValue({ data: [{ entityType: 'entityCard', entities: menu }, { entityType: 'feed', id: '1', message: '伪回锁' }] });
+    const { wrapper, router } = await mountSearch();
+    try {
+      await flushPromises();
+      expect(wrapper.findAll('search-result-item-stub')).toHaveLength(1);
+      expect(wrapper.findAll('.search-feed-sort .filter-btn').map((option) => option.text())).toEqual(['综合', '实时', '热度', '评论', '精确']);
+      await wrapper.findAll('.search-feed-sort .filter-btn')[2].trigger('click');
+      await flushPromises();
+      expect(router.currentRoute.value.query).toMatchObject({ q: '伪回锁', tab: 'all', sort: 'hot' });
+      expect(wrapper.get('.search-tab-item.active').text()).toBe('综合');
+      expect(mocks.searchByType.mock.calls.at(-1)?.[0]).toMatchObject({ searchType: 'feed', sort: 'hot', isStrict: 0, page: 1 });
+      await wrapper.findAll('.search-feed-sort .filter-btn')[4].trigger('click');
+      await flushPromises();
+      expect(router.currentRoute.value.query).toMatchObject({ tab: 'all', sort: 'accurate' });
+      expect(wrapper.get('.search-tab-item.active').text()).toBe('综合');
+      expect(mocks.searchByType.mock.calls.at(-1)?.[0]).toMatchObject({ searchType: 'feed', sort: '', isStrict: 1, page: 1 });
+      await wrapper.get('.search-field').setValue('新关键词');
+      await wrapper.get('.search-field').trigger('keydown.enter');
+      await flushPromises();
+      expect(mocks.searchByType.mock.calls.at(-1)?.[0]).toMatchObject({ query: '新关键词', sort: '', isStrict: 1 });
+      expect(wrapper.get('.search-tab-item.active').text()).toBe('综合');
+    } finally { wrapper.unmount(); }
+  });
+
+  it('首页为空时继续第二页，并从第三页加载更多', async () => {
+    vi.clearAllMocks();
+    mocks.searchByType.mockReset();
+    mocks.searchByType.mockResolvedValueOnce({ data: [] }).mockResolvedValueOnce({ data: [{ id: '1', entityType: 'feed', message: '伪回锁' }], firstItem: 'first', lastItem: 'last' }).mockResolvedValue({ data: [] });
+    const { wrapper } = await mountSearch();
+    try {
+      await flushPromises();
+      expect(mocks.searchByType.mock.calls.map(([request]) => request.page)).toEqual([1, 2]);
+      expect(mocks.searchByType.mock.calls[1][0]).toMatchObject({ searchType: 'all', query: '伪回锁', firstItem: '', lastItem: '' });
+      expect(wrapper.findAll('search-result-item-stub')).toHaveLength(1);
+      await wrapper.get('.search-scroll-container').trigger('scroll');
+      await flushPromises();
+      expect(mocks.searchByType.mock.calls.at(-1)?.[0]).toMatchObject({ page: 3, firstItem: 'first', lastItem: 'last' });
+      await wrapper.get('.search-scroll-container').trigger('scroll');
+      await flushPromises();
+      expect(mocks.searchByType).toHaveBeenCalledTimes(3);
+    } finally { wrapper.unmount(); }
+  });
+
+  it('连续两页为空时停止，不无限请求', async () => {
+    vi.clearAllMocks();
+    mocks.searchByType.mockReset().mockResolvedValue({ data: [] });
+    const { wrapper } = await mountSearch();
+    try {
+      await flushPromises();
+      await wrapper.get('.search-scroll-container').trigger('scroll');
+      await flushPromises();
+      expect(mocks.searchByType.mock.calls.map(([request]) => request.page)).toEqual([1, 2]);
+      expect(wrapper.find('empty-state-stub').attributes('title')).toBe('未搜索到相关结果');
+    } finally { wrapper.unmount(); }
+  });
+
+  it('第二页失败时显示失败并允许重新搜索', async () => {
+    vi.clearAllMocks();
+    mocks.searchByType.mockReset().mockResolvedValueOnce({ data: [] }).mockRejectedValueOnce(new Error('网络错误')).mockResolvedValue({ data: [{ id: '2', entityType: 'feed' }] });
+    const { wrapper } = await mountSearch();
+    try {
+      await flushPromises();
+      expect(wrapper.find('empty-state-stub').attributes('title')).toBe('搜索失败');
+      await wrapper.get('.retry-button').trigger('click');
+      await flushPromises();
+      expect(mocks.searchByType.mock.calls.map(([request]) => request.page)).toEqual([1, 2, 1]);
+      expect(wrapper.findAll('search-result-item-stub')).toHaveLength(1);
+    } finally { wrapper.unmount(); }
+  });
+
+  it('切换关键词后忽略旧搜索的第二页', async () => {
+    vi.clearAllMocks();
+    let resolveOldPage!: (value: unknown) => void;
+    mocks.searchByType.mockReset().mockResolvedValueOnce({ data: [] }).mockImplementationOnce(() => new Promise((resolve) => { resolveOldPage = resolve; })).mockResolvedValue({ data: [{ id: 'new', entityType: 'feed' }] });
+    const { wrapper, router } = await mountSearch();
+    try {
+      await flushPromises();
+      await router.push({ path: '/search', query: { q: '新关键词', tab: 'all' } });
+      await flushPromises();
+      resolveOldPage({ data: [{ id: 'old', entityType: 'feed' }] });
+      await flushPromises();
+      expect(wrapper.findAll('search-result-item-stub')).toHaveLength(1);
+      expect((wrapper.findComponent({ name: 'SearchResultItem' }).props('entity') as { id: string }).id).toBe('new');
+    } finally { wrapper.unmount(); }
+  });
+});
 
 describe('话题内搜索', () => {
   it('个人动态搜索在重新输入、分页和切换用户后保留 UID 范围', async () => {
@@ -30,7 +130,7 @@ describe('话题内搜索', () => {
       await input.setValue('镜头');
       await input.trigger('keydown.enter');
       await flushPromises();
-      expect(router.currentRoute.value.query).toEqual({ q: '镜头', tab: 'feed', pageType: 'user', pageParam: '123' });
+      expect(router.currentRoute.value.query).toEqual({ q: '镜头', tab: 'feed', pageType: 'user', pageParam: '123', sort: 'default' });
       expect(mocks.searchByType.mock.calls.at(-1)?.[0]).toMatchObject({ searchType: 'feed', pageType: 'user', pageParam: '123', query: '镜头', page: 1 });
       expect(wrapper.find('.search-tabs').exists()).toBe(false);
       await wrapper.get('.search-scroll-container').trigger('scroll');
@@ -77,7 +177,7 @@ describe('话题内搜索', () => {
       pageType: 'tag',
       pageParam: '数码',
       feedType: 'all',
-      sort: 'default',
+      sort: 'none',
     });
     expect(wrapper.find('.search-tabs').exists()).toBe(false);
     expect(wrapper.find('.search-field').attributes('placeholder')).toContain('数码');

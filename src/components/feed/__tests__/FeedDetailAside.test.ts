@@ -137,6 +137,20 @@ describe('分栏详情页右栏', () => {
     wrapper.unmount();
   });
 
+  it('切到点赞/转发 tab 时隐藏只看楼主与排序（它们只作用于评论）', async () => {
+    const likes = mountAside('likes');
+    await flushPromises();
+    expect(likes.find('.only-author-toggle').exists()).toBe(false);
+    expect(likes.find('.aside-sort-select').exists()).toBe(false);
+    likes.unmount();
+
+    const replies = mountAside('replies');
+    await flushPromises();
+    expect(replies.find('.only-author-toggle').exists()).toBe(true);
+    expect(replies.find('.aside-sort-select').exists()).toBe(true);
+    replies.unmount();
+  });
+
   it('右栏评论组件抑制收起评论按钮（右栏没有「收起」语义）', async () => {
     const wrapper = mountAside();
     await flushPromises();

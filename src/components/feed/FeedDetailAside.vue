@@ -16,12 +16,20 @@
         </button>
       </div>
 
-      <label class="only-author-toggle" title="只看楼主的评论">
+      <!-- 只看楼主与排序都只作用于评论列表：切到点赞/转发 tab 时隐藏，
+           否则操作它们只会触发一次用户看不见的评论重取（服务端此时也会忽略排序）。 -->
+      <label v-if="activeTab === 'replies'" class="only-author-toggle" title="只看楼主的评论">
         <input v-model="onlyAuthor" type="checkbox" />
         <span>只看楼主</span>
       </label>
 
-      <select v-model="sortMode" class="aside-sort-select" aria-label="评论排序" title="评论排序">
+      <select
+        v-if="activeTab === 'replies'"
+        v-model="sortMode"
+        class="aside-sort-select"
+        aria-label="评论排序"
+        title="评论排序"
+      >
         <option v-for="option in commentSortOptions" :key="option.value" :value="option.value">
           {{ option.label }}
         </option>

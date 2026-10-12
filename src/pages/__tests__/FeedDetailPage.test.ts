@@ -109,6 +109,24 @@ describe('详情页在桌面布局下按开关切换分栏', () => {
     wrapper.unmount();
   });
 
+  it('触摸设备即使窗口 >= 1000px 也不进分栏（判据必须是布局，不是那个设置开关）', async () => {
+    // 关键场景：平板上用户把「官方样式动态详情」关掉了。
+    // 旧判据用 !officialMobileDetail —— 它 = 设置 && 布局，设置一旦关掉就恒为 false，
+    // 于是触摸设备会误入分栏。现在判据是 !mobileLayout（纯布局判据），与点击侧一致。
+    const originalUa = Object.getOwnPropertyDescriptor(Navigator.prototype, 'userAgent');
+    Object.defineProperty(navigator, 'userAgent', {
+      value: 'Mozilla/5.0 (Linux; Android 14; Pixel Tablet) AppleWebKit/537.36',
+      configurable: true,
+    });
+
+    const wrapper = await mountPage(true);
+    expect(wrapper.find('.split-stub').exists()).toBe(false);
+    expect(wrapper.classes()).not.toContain('is-split');
+    wrapper.unmount();
+
+    if (originalUa) Object.defineProperty(navigator, 'userAgent', originalUa);
+  });
+
   it('开关开但窗口 < 1000px 时回退单栏', async () => {
     Object.defineProperty(window, 'innerWidth', { value: 800, configurable: true, writable: true });
     const wrapper = await mountPage(true);

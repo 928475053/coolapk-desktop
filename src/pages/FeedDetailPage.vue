@@ -51,7 +51,7 @@ import LoadingState from '../components/common/LoadingState.vue';
 import ErrorState from '../components/common/ErrorState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 import { isAnswerSearchEntity } from '../utils/searchEntities';
-import { useOfficialMobileFeedDetail, useWideSplitLayout } from '../composables/useOfficialMobileFeedDetail';
+import { useMobileLayout, useOfficialMobileFeedDetail, useWideSplitLayout } from '../composables/useOfficialMobileFeedDetail';
 import { usePageTabTitle } from '../composables/usePageTabTitle';
 import { useSettingsStore } from '../stores/settings';
 
@@ -71,11 +71,16 @@ const targetReplyId = computed(() => {
 const appStore = useAppStore();
 const settingsStore = useSettingsStore();
 const officialMobileDetail = useOfficialMobileFeedDetail();
+// 注意：判据用 `mobileLayout`（纯布局）而不是 `officialMobileDetail`。
+// 后者是「布局 × officialMobileFeedDetail 开关」的合取 —— 用户关掉那个开关后，
+// 触摸设备上它也是 false，于是平板会误入分栏。与点击侧（FeedCard 的
+// opensDetailOnClick 同样用 mobileLayout）保持同一判据。
+const mobileLayout = useMobileLayout();
 const isWideEnoughForSplit = useWideSplitLayout();
-// 分栏详情页：开关开 + 非官方移动详情 + 窗口 >= 1000px，三者缺一不可。
+// 分栏详情页：开关开 + 非移动端布局 + 窗口 >= 1000px，三者缺一不可。
 const useSplitLayout = computed(() =>
   settingsStore.settings.desktopFeedDetailOnClick
-  && !officialMobileDetail.value
+  && !mobileLayout.value
   && isWideEnoughForSplit.value
 );
 // 路由缓存通常会为每个动态保留独立实例；同时监听参数可兼容热更新或组件复用。

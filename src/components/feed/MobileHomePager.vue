@@ -5,8 +5,8 @@
     <FeedTabs :active-key="activeKey" :tabs="tabs" :manager-tabs="serverTabs" :swipe-progress="position" :active-sub-tab-key="activePanel?.activeFollowSubChannelKey || ''" @update:active-key="select" @select-sub-tab="selectSubTab" />
     <FeedLayoutToggle v-if="!mobile" v-model="settings.settings.feedLayout" />
     </div>
-    <div v-if="error" class="pager-state"><p>{{ error }}</p><button type="button" @click="loadTabs">重试</button></div>
-    <div v-else-if="!tabs.length" class="pager-state">正在加载栏目…</div>
+    <div v-if="error" class="pager-warning" role="status"><span>{{ error }}</span><button type="button" @click="loadTabs">重试</button></div>
+    <div v-if="!tabs.length" class="pager-state">正在加载栏目…</div>
     <div v-else ref="viewport" class="pager-viewport" @pointerdown="startDrag" @click.capture="blockSwipeClick" @wheel="wheel">
       <div class="pager-track" :style="{ transform: `translate3d(${-position * width}px,0,0)` }">
         <section v-for="(tab, index) in tabs" :key="getHomeTabKey(tab)" class="pager-page" :style="{ left: `${index * 100}%` }" :inert="index !== activeIndex" :aria-hidden="index !== activeIndex" :data-tab-key="getHomeTabKey(tab)">
@@ -30,6 +30,7 @@ import { getHomeTabKey, resolvePreferredHomeTab, type HomeSubChannelSelection } 
 import type { ConfigPageTab } from '../../types/settings';
 import { homePagerMovingKey } from '../../utils/feedPageVisibility';
 import { observeResizeOnFrame } from '../../utils/observeResizeOnFrame';
+import { logDiagnostic, summarizeDiagnosticError } from '../../utils/diagnosticLogger';
 
 const props = withDefaults(defineProps<{ mobile?: boolean }>(), { mobile: true });
 const sidebarMounted = ref(!props.mobile);
@@ -56,18 +57,37 @@ const tabs = computed(() => {
   });
 });
 const activeIndex = computed(() => Math.max(0, tabs.value.findIndex(tab => getHomeTabKey(tab) === activeKey.value)));
+// 服务端异常时先提供可用频道，重试成功后恢复完整的动态栏目。
+const fallbackHomeTabs: ConfigPageTab[] = [
+  { title: '头条', page_name: 'V9_HOME_TAB_HEADLINE', url: '/main/headline' },
+  { title: '热榜', page_name: 'V9_HOME_TAB_RANKING', url: 'V9_HOME_TAB_RANKING' },
+  { title: '快讯', page_name: 'V11_HOME_TAB_NEWS', url: 'V11_HOME_TAB_NEWS' },
+];
 async function loadTabs() {
   error.value = '';
   try {
     const response = await CoolapkTauriAPI.getTabConfig();
-    const card = response?.data?.find((item: any) => String(item.entityId) === '6390' || (item.entityTemplate === 'configCard' && (item.title === '首页' || String(item.title).includes('TAB配置'))));
-    if (!Array.isArray(card?.entities) || !card.entities.length) throw new Error('未获取到首页栏目');
-    serverTabs.value = card.entities.filter((tab: ConfigPageTab) => tab.page_name !== 'V9_HOME_TAB_TOPIC' && !tab.url?.includes('V9_HOME_TAB_TOPIC') && tab.title !== '话题');
-    activeKey.value = resolvePreferredHomeTab(tabs.value, settings.settings.defaultHomeTab);
-    position.value = activeIndex.value;
-    visited.add(activeKey.value);
-    await nextTick(); measure();
-  } catch (err) { error.value = err instanceof Error ? err.message : String(err); }
+    const data = response?.data;
+    if (!Array.isArray(data)) throw new Error('首页栏目配置数据不是数组');
+    const card = data.find((item: any) =>
+      (String(item?.entityId) === '6390' ||
+        (item?.entityTemplate === 'configCard' &&
+          (item?.title === '首页' || String(item?.title || '').includes('TAB配置')))) &&
+      Array.isArray(item?.entities) && item.entities.length > 0);
+    if (!card) throw new Error(`未获取到首页栏目（配置卡片数：${data.length}）`);
+    serverTabs.value = card.entities.filter((tab: ConfigPageTab) =>
+      tab.page_name !== 'V9_HOME_TAB_TOPIC' && !tab.url?.includes('V9_HOME_TAB_TOPIC') && tab.title !== '话题');
+    if (!serverTabs.value.length) throw new Error('首页栏目全部不可用');
+  } catch (err) {
+    const hadTabs = serverTabs.value.length > 0;
+    if (!hadTabs) serverTabs.value = fallbackHomeTabs.map(tab => ({ ...tab }));
+    error.value = hadTabs ? '栏目暂时无法更新，已保留当前栏目' : '栏目暂时无法加载，已启用基础栏目';
+    logDiagnostic('warn', 'home', 'tab_config_fallback', summarizeDiagnosticError(err));
+  }
+  activeKey.value = resolvePreferredHomeTab(tabs.value, settings.settings.defaultHomeTab);
+  position.value = activeIndex.value;
+  visited.add(activeKey.value);
+  await nextTick(); measure();
 }
 let frame = 0, clickUntil = 0;
 let stopObservingResize: (() => void) | undefined;
@@ -204,6 +224,8 @@ onUnmounted(() => { unbind(); stopObservingResize?.(); });
 .pager-viewport { position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: pan-y; }
 .pager-track { position: relative; height: 100%; width: 100%; will-change: transform; }
 .pager-page { position: absolute; top: 0; width: 100%; height: 100%; overflow: hidden; }
+.pager-warning { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 8px 12px; font-size: 12px; color: var(--text-secondary); }
+.pager-warning button { min-height: 32px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: inherit; cursor: pointer; }
 .pager-state { padding: 24px; text-align: center; color: var(--text-secondary); }
 .pager-state button { min-height: 44px; }
 </style>

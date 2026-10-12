@@ -432,6 +432,8 @@ const props = defineProps<{
   maxLines?: number;
   highlightKeyword?: string;
   disableInlineComments?: boolean;
+  /** 分栏详情页用：点赞/转发列表交给宿主渲染（右栏），本组件不弹窗。 */
+  externalInteractionLists?: boolean;
   questionMode?: boolean;
   answerMode?: boolean;
 }>();
@@ -552,6 +554,8 @@ const emit = defineEmits<{
   (e: 'deleted', id: string | number): void;
   (e: 'favorite-changed', payload: { id: string | number; favorited: boolean }): void;
   (e: 'open-comment', feed: FeedItem): void;
+  (e: 'open-like-list'): void;
+  (e: 'open-forward-list'): void;
 }>();
 
 const authStore = useAuthStore();
@@ -805,10 +809,12 @@ function handleForwardSuccess() {
 }
 
 function openLikeList() {
+  if (props.externalInteractionLists) { emit('open-like-list'); return; }
   interactionMode.value = 'likes';
 }
 
 function openForwardList() {
+  if (props.externalInteractionLists) { emit('open-forward-list'); return; }
   interactionMode.value = 'forwards';
 }
 
@@ -822,6 +828,11 @@ function toggleMoreMenu() {
 
 function openInteractionListFromMoreMenu(mode: 'likes' | 'forwards') {
   moreMenuOpen.value = false;
+  if (props.externalInteractionLists) {
+    if (mode === 'likes') emit('open-like-list');
+    else emit('open-forward-list');
+    return;
+  }
   if (mode === 'likes') openLikeList();
   else openForwardList();
 }

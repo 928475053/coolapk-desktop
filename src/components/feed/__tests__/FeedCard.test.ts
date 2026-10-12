@@ -1031,3 +1031,35 @@ describe('桌面端点击动态的行为', () => {
     wrapper.unmount();
   });
 });
+
+describe('互动列表外置', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getFeedReplies.mockResolvedValue({ data: [] });
+    setActivePinia(createPinia());
+  });
+
+  it('默认（prop 未传）时点赞入口打开弹窗，不向上抛事件', async () => {
+    const wrapper = mount(FeedCard, {
+      props: { feed: { id: '42', uid: '456', username: '作者', message: '正文' } },
+      global: { stubs: { FeedHeader: true, FeedContent: true, FeedCommentSection: true, FeedDyhShareDialog: true, FeedShareImageDialog: true, FeedCollectionPickerDialog: true, AppDialog: true, ForwardDialog: true, FeedInteractionListDialog: true } },
+    });
+    await wrapper.findComponent({ name: 'FeedActionBar' }).vm.$emit('open-like-list');
+    await flushPromises();
+    expect(wrapper.emitted('open-like-list')).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it('externalInteractionLists 为 true 时向上抛事件，不开弹窗', async () => {
+    const wrapper = mount(FeedCard, {
+      props: { feed: { id: '42', uid: '456', username: '作者', message: '正文' }, externalInteractionLists: true },
+      global: { stubs: { FeedHeader: true, FeedContent: true, FeedCommentSection: true, FeedDyhShareDialog: true, FeedShareImageDialog: true, FeedCollectionPickerDialog: true, AppDialog: true, ForwardDialog: true } },
+    });
+    await wrapper.findComponent({ name: 'FeedActionBar' }).vm.$emit('open-like-list');
+    await wrapper.findComponent({ name: 'FeedActionBar' }).vm.$emit('open-forward-list');
+    await flushPromises();
+    expect(wrapper.emitted('open-like-list')).toHaveLength(1);
+    expect(wrapper.emitted('open-forward-list')).toHaveLength(1);
+    wrapper.unmount();
+  });
+});

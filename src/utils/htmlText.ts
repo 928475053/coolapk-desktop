@@ -1,3 +1,5 @@
+import DOMPurify from 'dompurify';
+
 /** HTML 实体只解码一次，避免 &amp;lt; 被连续还原成可执行标签。 */
 export function decodeHtmlEntities(value: string): string {
   const named: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
@@ -23,8 +25,8 @@ export function htmlToPlainText(value: string, breaks = false, separator = ''): 
     }
     return decodeHtmlEntities(result).replace(/\u00a0/g, ' ');
   }
-  const doc = new DOMParser().parseFromString(value, 'text/html');
-  doc.querySelectorAll('script, style, iframe, object, embed').forEach(node => node.remove());
+  // 清洗后直接获得安全片段，不把来自编辑框或接口的文字交给 HTML 解析入口。
+  const fragment = DOMPurify.sanitize(value, { RETURN_DOM_FRAGMENT: true, FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed'] });
   let result = '';
   const visit = (node: Node) => {
     if (node.nodeType === Node.TEXT_NODE) { result += node.textContent || ''; return; }
@@ -34,6 +36,6 @@ export function htmlToPlainText(value: string, breaks = false, separator = ''): 
     node.childNodes.forEach(visit);
     result += breaks && /^(P|DIV|LI|TR|H[1-6])$/.test(node.tagName) ? '\n' : separator;
   };
-  doc.body.childNodes.forEach(visit);
+  fragment.childNodes.forEach(visit);
   return result.replace(/\u00a0/g, ' ');
 }

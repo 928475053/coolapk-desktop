@@ -69,7 +69,7 @@ const auth = useAuthStore();
 const settings = useSettingsStore();
 const notifications = useNotificationStore();
 const uid = computed(() => String(auth.user?.uid || ''));
-const isDark = computed(() => settings.settings.theme === 'dark' || (settings.settings.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches));
+const isDark = computed(() => settings.resolvedTheme === 'dark');
 const experiencePercent = computed(() => Math.max(0, Math.min(100, (auth.user?.exp ?? 0) / (auth.user?.maxExp || 1) * 100)));
 const profileData = ref<Record<string, unknown> | null>(null);
 const compact = ref(false);

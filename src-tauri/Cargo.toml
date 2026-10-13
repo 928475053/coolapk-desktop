@@ -82,6 +82,7 @@ rustls-platform-verifier = "0.7"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libloading = "0.7"
+zbus = "5.18"
 
 [features]
 default = ["custom-protocol"]

@@ -383,7 +383,7 @@ const {
   close,
 } = useDesktopWindow();
 
-const isDark = computed(() => settingsStore.settings.theme === 'dark');
+const isDark = computed(() => settingsStore.resolvedTheme === 'dark');
 
 function toggleTheme() {
   const nextTheme = settingsStore.settings.theme === 'dark' ? 'light' : 'dark';

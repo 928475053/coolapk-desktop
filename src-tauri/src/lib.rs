@@ -3,6 +3,7 @@ pub mod diagnostics;
 mod performance_diagnostics;
 pub mod download_manager;
 mod windows_tile;
+mod system_theme;
 
 use coolapk::client::CoolapkClient;
 use coolapk::commands::{get_user_plugins, save_user_plugins, claim_user_plugin};
@@ -1007,6 +1008,8 @@ pub fn run() {
         .manage(state)
         .setup(|app| {
             diagnostics::begin_session(app.handle());
+            #[cfg(target_os = "linux")]
+            system_theme::monitor(app.handle().clone());
             #[cfg(any(target_os = "windows", target_os = "linux"))]
             {
                 use tauri_plugin_deep_link::DeepLinkExt;
@@ -1424,6 +1427,7 @@ pub fn run() {
             get_platform_info,
             set_close_to_tray,
             set_window_theme,
+            system_theme::get_linux_system_theme,
             set_android_system_bar_theme,
             pick_font_family,
             set_live_tile_enabled,

@@ -1,8 +1,9 @@
 import { defineStore } from 'pinia';
-import { ref, watch } from 'vue';
+import { ref, watch, onScopeDispose } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { resolveDeviceIdentity } from '../utils/devicePresets';
+import { isLinuxDesktopRuntime, observeLinuxSystemTheme, type SystemTheme } from '../utils/linuxSystemTheme';
 import type {
   AppSettings,
   ThemeMode,
@@ -385,6 +386,8 @@ const ACCENT_PALETTES: Record<AccentColor, { light: AccentPalette; dark: AccentP
 
 export const useSettingsStore = defineStore('settings', () => {
   const settings = ref<AppSettings>(cloneDefaultSettings());
+  const resolvedTheme = ref<'dark' | 'light'>('light');
+  const linuxSystemTheme = ref<SystemTheme>(null);
   const androidProfileBackground = ref(false);
   const androidSystemBarDimOwners = new Set<symbol>();
   const profileToolbarCompact = ref(false);
@@ -578,7 +581,8 @@ export const useSettingsStore = defineStore('settings', () => {
       windowTheme = 'light';
     } else {
       // Follow system
-      const prefersDark = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      const prefersDark = linuxSystemTheme.value !== null ? linuxSystemTheme.value === 'dark'
+        : typeof window !== 'undefined' && typeof window.matchMedia === 'function'
         ? window.matchMedia('(prefers-color-scheme: dark)').matches
         : false;
       if (prefersDark) {
@@ -586,19 +590,32 @@ export const useSettingsStore = defineStore('settings', () => {
       } else {
         root.removeAttribute('data-theme');
       }
-      windowTheme = null;
+      // Linux setTheme(null) 可能把 GTK 重置为浅色，让原生窗口与最终页面主题一致。
+      windowTheme = isLinuxDesktopRuntime() ? (prefersDark ? 'dark' : 'light') : null;
     }
+    resolvedTheme.value = root.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
     syncWindowTheme(windowTheme);
   }
 
   const systemThemeMedia = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
     ? window.matchMedia('(prefers-color-scheme: dark)')
     : null;
-  systemThemeMedia?.addEventListener('change', () => {
+  const onSystemThemeChange = () => {
     if (settings.value.theme !== 'system') return;
     applyTheme('system');
     applyAccent(settings.value.accentColor);
-  });
+  };
+  systemThemeMedia?.addEventListener('change', onSystemThemeChange);
+  onScopeDispose(() => systemThemeMedia?.removeEventListener('change', onSystemThemeChange));
+  if (isLinuxDesktopRuntime()) {
+    const stop = observeLinuxSystemTheme(theme => {
+      linuxSystemTheme.value = theme;
+      if (settings.value.theme !== 'system') return;
+      applyTheme('system');
+      applyAccent(settings.value.accentColor);
+    });
+    onScopeDispose(stop);
+  }
 
   function applyAccent(color: AccentColor) {
     const palette = ACCENT_PALETTES[color] || ACCENT_PALETTES.green;
@@ -830,6 +847,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
   return {
     settings,
+    resolvedTheme,
     profileToolbarCompact,
     setAndroidProfileBackground,
     setAndroidSystemBarDimmed,

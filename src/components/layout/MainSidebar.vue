@@ -206,7 +206,7 @@ function requestUpdateCheck() {
 const isCollapsed = computed(() => settingsStore.settings.sidebarCollapsed);
 
 const isDark = computed(() => {
-  return settingsStore.settings.theme === 'dark';
+  return settingsStore.resolvedTheme === 'dark';
 });
 
 // 主侧边栏精简保留核心主干

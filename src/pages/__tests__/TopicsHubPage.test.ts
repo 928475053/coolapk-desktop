@@ -106,6 +106,7 @@ describe('TopicsHubPage 三栏/双栏/单栏响应式与过渡', () => {
     // 点击返回大网格
     await wrapper.find('.btn-back-grid').trigger('click');
     expect(store.viewMode).toBe('grid');
+    wrapper.unmount();
   });
 
   it('总开关关闭时点击动态也不显示右栏，重新开启后允许临时收起和展开', async () => {
@@ -171,8 +172,11 @@ describe('TopicsHubPage 三栏/双栏/单栏响应式与过渡', () => {
   it('右栏宽度超过可用空间时自动收缩，避免评论被窗口裁切', async () => {
     const previousInnerWidth = window.innerWidth;
     const previousRightWidth = localStorage.getItem('coolapk_topic_hub_right_width');
+    // 此用例验证开启右侧评论后的宽度适配，不能依赖默认关闭的设置。
+    useSettingsStore().settings.desktopCommentsOnRight = true;
     localStorage.setItem('coolapk_topic_hub_right_width', '640');
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1600 });
+    let mountedWrapper: ReturnType<typeof mount> | null = null;
 
     mocks.getTopicHubData.mockResolvedValue({
       tabs: [],
@@ -193,7 +197,7 @@ describe('TopicsHubPage 三栏/双栏/单栏响应式与过渡', () => {
       await router.push('/topics');
       await router.isReady();
 
-      const wrapper = mount(TopicsHubPage, {
+      const wrapper = mountedWrapper = mount(TopicsHubPage, {
         global: {
           plugins: [router],
           stubs: {
@@ -233,6 +237,7 @@ describe('TopicsHubPage 三栏/双栏/单栏响应式与过渡', () => {
       expect(wrapper.find('.split-right-wrapper').exists()).toBe(false);
       expect(wrapper.find('.topic-page-stub').attributes('data-disable-inline-comments')).toBe('false');
     } finally {
+      mountedWrapper?.unmount();
       if (previousRightWidth === null) {
         localStorage.removeItem('coolapk_topic_hub_right_width');
       } else {

@@ -4,6 +4,7 @@
     :class="{ 'is-macos': usesMacOverlay, 'has-window-controls': showWindowControls }"
     data-tauri-drag-region="deep"
   >
+    <slot name="narrow-navigation"></slot>
     <div
       class="titlebar-sidebar-offset"
       :class="{ 'is-collapsed': settingsStore.settings.sidebarCollapsed }"
@@ -322,6 +323,7 @@
 </template>
 
 <script setup lang="ts">
+import { htmlToPlainText } from '../../utils/htmlText';
 import { computed, ref, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAppStore } from '../../stores/app';
@@ -581,7 +583,7 @@ function getNotificationItemTime(item: any): number {
 }
 
 function stripNotificationHtml(value: unknown): string {
-  return String(value || '').replace(/<[^>]+>/g, '').trim();
+  return htmlToPlainText(String(value || '')).trim();
 }
 
 function getNotificationPreviewAvatar(preview: NotificationPreview): string {

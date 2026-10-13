@@ -1,3 +1,4 @@
+import { htmlToPlainText } from './htmlText';
 import { normalizeCoolapkNativeRoute, normalizeCoolapkRoute } from './coolapkRoute';
 
 type NotificationRecord = Record<string, any>;
@@ -134,12 +135,12 @@ function routeFromSource(value: unknown): string | null {
 
 function containsRatingIntent(value: unknown): boolean {
   if (typeof value !== 'string') return false;
-  return /点评|评分/.test(value.replace(/<[^>]*>/g, ''));
+  return /点评|评分/.test(htmlToPlainText(value));
 }
 
 function containsProductRatingInvite(value: unknown): boolean {
   if (typeof value !== 'string') return false;
-  const text = value.replace(/<[^>]*>/g, '');
+  const text = htmlToPlainText(value);
   return /点评|邀请.*评分|机主/.test(text);
 }
 
@@ -184,7 +185,7 @@ function isAccountSecurityNotification(candidates: NotificationRecord[]): boolea
     candidate.targetTitle,
   ].some((value) => {
     if (typeof value !== 'string') return false;
-    const text = value.replace(/<[^>]*>/g, '');
+    const text = htmlToPlainText(value);
     return /账号安全|陌生设备|手机验证码登录|登录设备|登录地点/.test(text);
   }));
 }

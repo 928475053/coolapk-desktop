@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
+import { CoolapkTauriAPI } from '../../../api/coolapk';
 import { createPinia, setActivePinia } from 'pinia';
 import TopicFeedCommentAside from '../TopicFeedCommentAside.vue';
 import { reactiveUserProfileMap } from '../../../utils/userProfilePreloader';
@@ -18,6 +19,21 @@ vi.mock('../../../api/coolapk', () => ({
 }));
 
 describe('TopicFeedCommentAside 话题评论侧栏头像与头部信息', () => {
+  it('挂载只请求一次评论第一页，切换动态后只请求新动态', async () => {
+    setActivePinia(createPinia());
+    vi.mocked(CoolapkTauriAPI.getFeedReplies).mockClear();
+    const wrapper = mount(TopicFeedCommentAside, {
+      props: { feed: { id: 'first', username: '作者' } },
+      global: { stubs: { AppAvatar: true, UserHoverCard: true, FeedCommentSection: true } },
+    });
+    await flushPromises();
+    expect(CoolapkTauriAPI.getFeedReplies).toHaveBeenCalledTimes(1);
+    await wrapper.setProps({ feed: { id: 'second', username: '另一位作者' } });
+    await flushPromises();
+    expect(CoolapkTauriAPI.getFeedReplies).toHaveBeenCalledTimes(2);
+    expect(CoolapkTauriAPI.getFeedReplies).toHaveBeenLastCalledWith('second', 1, expect.any(Object));
+    wrapper.unmount();
+  });
   it('正确使用动态作者头像渲染 AppAvatar', () => {
     setActivePinia(createPinia());
     const wrapper = mount(TopicFeedCommentAside, {

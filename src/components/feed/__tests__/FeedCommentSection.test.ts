@@ -154,6 +154,23 @@ describe('评论完整信息展示', () => {
     wrapper.unmount();
   });
 
+  it('分栏共用排序按钮发出服务端筛选事件，不重排或过滤接口评论', async () => {
+    const wrapper = mountSection({}, {
+      preserveApiOrder: true,
+      showSortControls: true,
+      asideLayout: true,
+      defaultSortMode: 'default',
+      comments: [{ id: 'first', uid: 'other', message: '第一条', likenum: 1 }, { id: 'second', uid: 'author', message: '第二条', likenum: 99 }],
+      feedUid: 'author',
+    });
+    await wrapper.findAll('.comment-sort-button')[2].trigger('click');
+    expect(wrapper.emitted('comment-sort-change')?.[0]).toEqual([{ mode: 'likes', authorOnly: false }]);
+    await wrapper.findAll('.comment-sort-button')[3].trigger('click');
+    expect(wrapper.emitted('comment-sort-change')?.[1]).toEqual([{ mode: 'likes', authorOnly: true }]);
+    expect(wrapper.findAll('.comment-text').map(item => item.text())).toEqual(['第一条', '第二条']);
+    wrapper.unmount();
+  });
+
   it('评论与楼中楼转换型号，悬停仍显示原始型号、系统和 Build', async () => {
     const wrapper = mountSection({
       device_title: 'Redmi 23090RA98C', deviceRom: 'Android 16 · HyperOS 3.0.305.0', deviceBuild: 'BP2A.250605.031.A3',
@@ -515,12 +532,47 @@ describe('评论完整信息展示', () => {
     const replyBtn = wrapper.find('.comment-reply-btn');
     await replyBtn.trigger('click');
 
-    expect(wrapper.find('.comment-reply-target-bar').exists()).toBe(true);
-    expect(wrapper.find('.reply-target-name').text()).toBe('@测试酷友');
+    const composer = new DOMWrapper(document.body.querySelector('.desktop-reply-composer')!);
+    expect(composer.find('.comment-reply-target-bar').exists()).toBe(true);
+    expect(composer.find('.reply-target-name').text()).toBe('@测试酷友');
 
     // 点击取消回复
-    await wrapper.find('.reply-target-clear-btn').trigger('click');
+    await composer.find('.reply-target-clear-btn').trigger('click');
     expect(wrapper.find('.comment-reply-target-bar').exists()).toBe(false);
+    expect(document.body.querySelector('.desktop-reply-composer')).toBeNull();
+    wrapper.unmount();
+  });
+
+  it.each([true, false])('回复深层楼中楼时不滚动聚焦、不刷新主列表，并保留原楼层：接口返回正文 %s', async returnsReply => {
+    const auth = useAuthStore(); auth.isLoggedIn = true; auth.user = { uid: 12345, username: '发布者' } as any;
+    useSettingsStore().settings.deviceFingerprint.deviceId = 'DU-MOCK-SAMPLE-DEVICE-ID-12345';
+    const reply = { id: 'new-sub', username: '发布者', message: '新回复', rid: 'reply-1' };
+    mocks.replyFeed.mockResolvedValue({ code: 200, data: returnsReply ? reply : undefined });
+    mocks.getSubReplies.mockResolvedValue({ data: [reply] });
+    const wrapper = mountSection({ replyRows: [{ id: 'old-sub', username: '原回复者', message: '原楼中楼' }] });
+    const editor = wrapper.get('.comment-rich-editor').element as HTMLElement;
+    const focus = vi.spyOn(editor, 'focus');
+    wrapper.element.scrollTop = 3000;
+    await wrapper.get('.sub-reply-row').trigger('click');
+    await flushPromises();
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+    expect(wrapper.element.scrollTop).toBe(3000);
+    const composer = new DOMWrapper(document.body.querySelector('.desktop-reply-composer')!);
+    const floatingEditor = composer.get('.comment-rich-editor');
+    floatingEditor.element.textContent = '新回复';
+    await floatingEditor.trigger('input');
+    await composer.get('.stub-button').trigger('click');
+    await flushPromises();
+    expect(mocks.replyFeed).toHaveBeenCalledWith('feed-1', '新回复', 'old-sub', undefined);
+    expect(wrapper.emitted('retry-comments')).toBeUndefined();
+    expect(wrapper.text()).toContain('原楼中楼');
+    expect(wrapper.text()).toContain('新回复');
+    expect(wrapper.element.scrollTop).toBe(3000);
+    if (returnsReply) expect(mocks.getSubReplies).not.toHaveBeenCalled();
+    else expect(mocks.getSubReplies).toHaveBeenCalledWith('feed-1', 'reply-1', 1, { lastItem: '' });
+    expect(document.body.querySelector('.desktop-reply-composer')).toBeNull();
+    focus.mockRestore();
+    wrapper.unmount();
   });
 
   it('登录状态下成功提交评论并触发 replyFeed', async () => {
@@ -633,6 +685,20 @@ describe('评论完整信息展示', () => {
     expect(dim).toHaveBeenLastCalledWith(expect.any(Symbol), true);
     wrapper.unmount();
     expect(dim).toHaveBeenLastCalledWith(expect.any(Symbol), false);
+  });
+
+  it('hideCollapseButton 抑制收起评论按钮与 Esc 的 collapse，默认行为不变', async () => {
+    const visible = mountSection();
+    expect(visible.find('.comment-toolbar-collapse-btn').exists()).toBe(true);
+    await visible.find('.comment-textarea').trigger('keydown', { key: 'Escape' });
+    expect(visible.emitted('collapse')).toHaveLength(1);
+    visible.unmount();
+
+    const hidden = mountSection({}, { hideCollapseButton: true });
+    expect(hidden.find('.comment-toolbar-collapse-btn').exists()).toBe(false);
+    await hidden.find('.comment-textarea').trigger('keydown', { key: 'Escape' });
+    expect(hidden.emitted('collapse')).toBeUndefined();
+    hidden.unmount();
   });
 
 });

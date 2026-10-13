@@ -19,6 +19,11 @@ describe('酷安应用路由', () => {
 });
 
 describe('酷安站内路由', () => {
+  it('产品列表名称不作为详情 ID，产品详情保留查询参数', () => {
+    expect(normalizeCoolapkRoute('/product/releasedProductList?category=phone')).toBeNull();
+    expect(normalizeCoolapkRoute('/product/unreleasedProductList')).toBeNull();
+    expect(normalizeCoolapkRoute('/product/5457?tab=rating')).toBe('/product/5457?tab=rating');
+  });
   it('通知点击支持冷启动和已有实例的私信、通知、动态路由', () => {
     expect(normalizeCoolapkDeepLink('coolmarket://com.coolapk.desktop/messages?uid=123')).toBe('/messages?uid=123');
     expect(normalizeCoolapkDeepLink('coolmarket://com.coolapk.desktop/notifications')).toBe('/notifications');

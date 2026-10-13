@@ -12,6 +12,11 @@ const routerMocks = vi.hoisted(() => ({
 vi.mock('../../router', () => ({ router: routerMocks }));
 
 describe('系统浏览器打开链接', () => {
+  it.each(['JaVaScRiPt:alert(1)', 'data:text/html,<script>alert(1)</script>', 'file:///C:/secret.txt'])('危险协议不进入原生或浏览器打开入口：%s', async url => {
+    await expect(CoolapkTauriAPI.openUrl(url, 'system')).resolves.toBe(false);
+    expect(invoke).not.toHaveBeenCalled();
+    expect(window.open).not.toHaveBeenCalled();
+  });
   const originalBridge = Object.getOwnPropertyDescriptor(window, '__TAURI_INTERNALS__');
 
   beforeEach(() => {

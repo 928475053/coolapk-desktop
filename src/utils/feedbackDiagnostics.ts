@@ -1,3 +1,4 @@
+import { htmlToPlainText } from './htmlText';
 import { invoke } from '@tauri-apps/api/core';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { APP_VERSION } from '../constants/version';
@@ -35,7 +36,7 @@ export function normalizeDiagnosticImageUrl(value: string): string {
 }
 
 export function getDiagnosticLink(text: string): string {
-  const value = text.replace(/<[^>]*>/g, '').match(/诊断日志(?:图片|附件)：\s*(https?:\/\/[^\s<>"']+)/)?.[1];
+  const value = htmlToPlainText(text).match(/诊断日志(?:图片|附件)：\s*(https?:\/\/[^\s<>"']+)/)?.[1];
   if (!value) return '';
   try { return normalizeDiagnosticImageUrl(value); } catch { return ''; }
 }

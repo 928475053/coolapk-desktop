@@ -1,8 +1,9 @@
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
+import { androidIconSvgPlugin } from './scripts/icon-svg-plugin';
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [vue(), androidIconSvgPlugin()],
   clearScreen: false,
   server: {
     host: process.env.TAURI_DEV_HOST || '127.0.0.1',

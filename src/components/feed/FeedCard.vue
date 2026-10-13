@@ -334,6 +334,7 @@
 </template>
 
 <script setup lang="ts">
+import { htmlToPlainText } from '../../utils/htmlText';
 import { isFeedEdited } from '../../utils/feedEditStatus';
 import { computed, ref, watch, onMounted, nextTick, onUnmounted, onActivated, onDeactivated, inject } from 'vue';
 import { useViewportContent } from '../../composables/useViewportContent';
@@ -342,6 +343,7 @@ import { useRouter } from 'vue-router';
 import type { FeedItem } from '../../types/feed';
 import { navigateBack } from '../../utils/navigation';
 import { useOfficialMobileFeedDetail, useMobileLayout } from '../../composables/useOfficialMobileFeedDetail';
+import { openDesktopFeedCommentsKey } from '../../utils/desktopFeedComments';
 import OfficialFeedProductCard from './OfficialFeedProductCard.vue';
 import FeedHeader from './FeedHeader.vue';
 import FeedContent from './FeedContent.vue';
@@ -395,6 +397,7 @@ import {
   getFeedRelationType,
 } from '../../utils/feedRelations';
 import { getUserUid } from '../../utils/userRoute';
+import { getFeedInteractionType } from '../../utils/feedInteractions';
 import { hasActiveTextSelection } from '../../utils/selection';
 import { queueFavoriteContentIndexEntry, removeFavoriteContentIndexEntry } from '../../utils/favoriteContentIndex';
 
@@ -403,6 +406,7 @@ const appStore = useAppStore();
 const router = useRouter();
 const mobileOfficialEnabled = useOfficialMobileFeedDetail();
 const mobileLayout = useMobileLayout();
+const openDesktopFeedComments = inject(openDesktopFeedCommentsKey, null);
 /**
  * 点击卡片是否应跳详情页，而不是就地展开评论。
  *
@@ -432,6 +436,8 @@ const props = defineProps<{
   maxLines?: number;
   highlightKeyword?: string;
   disableInlineComments?: boolean;
+  /** 分栏详情页用：点赞/转发列表交给宿主渲染（右栏），本组件不弹窗。 */
+  externalInteractionLists?: boolean;
   questionMode?: boolean;
   answerMode?: boolean;
 }>();
@@ -552,6 +558,8 @@ const emit = defineEmits<{
   (e: 'deleted', id: string | number): void;
   (e: 'favorite-changed', payload: { id: string | number; favorited: boolean }): void;
   (e: 'open-comment', feed: FeedItem): void;
+  (e: 'open-like-list'): void;
+  (e: 'open-forward-list'): void;
 }>();
 
 const authStore = useAuthStore();
@@ -729,7 +737,7 @@ const privateShareContacts = ref<any[]>([]);
 const privateShareLoading = ref(false);
 const privateShareError = ref('');
 async function copyFeed(link: boolean) {
-  const text = link ? `https://www.coolapk.com/feed/${props.feed.id}` : String(props.feed.message || '').replace(/<[^>]+>/g, '');
+  const text = link ? `https://www.coolapk.com/feed/${props.feed.id}` : htmlToPlainText(String(props.feed.message || ''));
   try { await navigator.clipboard.writeText(text); moreMenuOpen.value = false; showToast('已复制'); }
   catch { showToast('复制失败，请检查剪贴板权限', 'error'); }
 }
@@ -790,7 +798,7 @@ const historyError = ref('');
 const historyList = ref<any[]>([]);
 const historyLoaded = ref(false);
 
-const interactionFeedType = computed(() => String((props.feed as any).feedType || (props.feed as any).feed_type || (props.feed as any).entityType || 'feed'));
+const interactionFeedType = computed(() => getFeedInteractionType(props.feed));
 
 function openForwardDialog() {
   if (!authStore.isLoggedIn) {
@@ -805,10 +813,12 @@ function handleForwardSuccess() {
 }
 
 function openLikeList() {
+  if (props.externalInteractionLists) { emit('open-like-list'); return; }
   interactionMode.value = 'likes';
 }
 
 function openForwardList() {
+  if (props.externalInteractionLists) { emit('open-forward-list'); return; }
   interactionMode.value = 'forwards';
 }
 
@@ -822,6 +832,11 @@ function toggleMoreMenu() {
 
 function openInteractionListFromMoreMenu(mode: 'likes' | 'forwards') {
   moreMenuOpen.value = false;
+  if (props.externalInteractionLists) {
+    if (mode === 'likes') emit('open-like-list');
+    else emit('open-forward-list');
+    return;
+  }
   if (mode === 'likes') openLikeList();
   else openForwardList();
 }
@@ -1353,6 +1368,8 @@ async function toggleComments() {
     emit('open-comment', props.feed);
     return;
   }
+  // 详情入口关闭时，普通动态列表也能独立使用右侧评论，不再落到内联展开。
+  if (!props.detailMode && !mobileLayout.value && settingsStore.settings.desktopCommentsOnRight && openDesktopFeedComments?.(props.feed)) return;
   if (showComments.value) {
     showComments.value = false;
     return;

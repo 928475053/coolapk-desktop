@@ -275,7 +275,8 @@ function navigateNative(target: string, title: string) {
   const user = clean.match(/^\/user\/([^/?#]+)/);
   const feed = clean.match(/^\/feed\/([^/?#]+)/);
   const app = clean.match(/^\/apk\/([^/?#]+)/);
-  const product = clean.match(/^\/product\/([^/?#]+)/);
+  // 列表地址与详情共用前缀，只有数字产品 ID 才打开详情。
+  const product = clean.match(/^\/product\/(\d+)(?=[/?#]|$)/);
   const topic = clean.match(/^\/topic\/([^/?#]+)/);
   const dyh = clean.match(/^\/dyh\/([^/?#]+)/);
   const live = clean.match(/^\/live\/([^/?#]+)/);

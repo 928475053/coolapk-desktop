@@ -3,6 +3,7 @@ import {
   extractFeedInteractionRows,
   formatFeedInteractionDate,
   getFeedInteractionKey,
+  getFeedInteractionType,
   hasMoreFeedInteractions,
   normalizeFeedInteractionRow,
 } from '../feedInteractions';
@@ -42,5 +43,14 @@ describe('动态互动列表归一化', () => {
   it('按服务端时间戳显示相对时间', () => {
     expect(formatFeedInteractionDate(1_700_000_000, 1_700_000_060)).toBe('1分钟前');
     expect(formatFeedInteractionDate('刚刚', 1_700_000_060)).toBe('刚刚');
+  });
+
+  it('互动列表 feedType 按 feedType → feed_type → entityType 回退（单栏与分栏共用）', () => {
+    // feedType 与 entityType 确实会不同（feedArticle、rating），必须优先取 feedType。
+    expect(getFeedInteractionType({ feedType: 'feedArticle', entityType: 'feed' })).toBe('feedArticle');
+    expect(getFeedInteractionType({ feed_type: 'rating', entityType: 'feed' })).toBe('rating');
+    expect(getFeedInteractionType({ entityType: 'feedArticle' })).toBe('feedArticle');
+    expect(getFeedInteractionType({})).toBe('feed');
+    expect(getFeedInteractionType(null)).toBe('feed');
   });
 });

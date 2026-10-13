@@ -65,6 +65,7 @@
     <div class="aside-content custom-scrollbar">
       <div v-if="feed" class="feed-comment-container">
         <FeedCommentSection
+          aside-layout
           :feed-id="feed.id"
           :default-sort-mode="commentsSortMode"
           :feed-uid="authorUid"
@@ -93,7 +94,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useDeviceModelNames } from '../../utils/deviceModelNames';
 
 const displayDeviceName = useDeviceModelNames();
@@ -155,20 +156,11 @@ const preloadedProfile = computed(() => {
   return reactiveUserProfileMap[currentUid.value] || getCachedUserProfileSync(currentUid.value);
 });
 
-onMounted(() => {
-  if (currentUid.value) {
-    preloadUserProfile(currentUid.value);
-  }
-  if (props.feed?.id) {
-    loadComments();
-  }
-});
-
 watch(currentUid, (newUid) => {
   if (newUid) {
     preloadUserProfile(newUid);
   }
-});
+}, { immediate: true });
 
 // 动态详情有时只带用户 ID，头像需要从预加载的用户资料补齐。
 // 不能把 feed.pic 当作头像：它是动态正文配图，失败时会直接显示破图。
@@ -556,14 +548,6 @@ watch(
 .feed-comment-container {
   flex: 1;
   padding: 12px 16px 24px;
-}
-
-.feed-comment-container :deep(.feed-comment-section) {
-  margin-top: 0;
-  padding: 0;
-  background: transparent;
-  border: none;
-  box-shadow: none;
 }
 
 .aside-empty-placeholder {

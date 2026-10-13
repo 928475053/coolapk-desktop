@@ -245,7 +245,9 @@
         <div
           class="resizer-handle resizer-handle-right"
           title="按住左右拖拽调整宽度，双击恢复默认"
-          @mousedown="startResizeRight"
+          @pointerdown="startResizeRight"
+          role="separator" tabindex="0" aria-label="调节话题评论栏宽度" aria-orientation="vertical" :aria-valuemin="MIN_RIGHT_WIDTH" :aria-valuemax="MAX_RIGHT_WIDTH" :aria-valuenow="Math.round(visibleRightAsideWidth)"
+          @keydown="resizeRightWithKeyboard"
           @dblclick="resetRightWidth"
         >
           <div class="resizer-line"></div>
@@ -276,6 +278,7 @@
 <script setup lang="ts">
 import { observeResizeOnFrame } from '../utils/observeResizeOnFrame';
 import { ref, computed, onMounted, onUnmounted, onActivated, nextTick, watch } from 'vue';
+import { usePersistedColumnResize } from '../composables/usePersistedColumnResize';
 import { useRoute, useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useSettingsStore } from '../stores/settings';
@@ -309,10 +312,10 @@ const activeFeed = computed(() => topicHubStore.activeFeed);
 
 const isCategoryPickerOpen = ref(false);
 const isMobileSubtopicPickerOpen = ref(false);
-const isRightAsideUserClosed = ref(!settingsStore.settings.topicHubShowCommentsByDefault);
+const isRightAsideUserClosed = ref(!settingsStore.settings.desktopCommentsOnRight);
 const isLeftSidebarCollapsed = ref(false);
 const isSidebarHovered = ref(false);
-watch(() => settingsStore.settings.topicHubShowCommentsByDefault, (show) => { isRightAsideUserClosed.value = !show; }, { immediate: true });
+watch(() => settingsStore.settings.desktopCommentsOnRight, (show) => { isRightAsideUserClosed.value = !show; }, { immediate: true });
 
 // 宽度调节状态（支持持久化）
 const DEFAULT_LEFT_WIDTH = 300;
@@ -324,7 +327,8 @@ const MIN_RIGHT_WIDTH = 280;
 const MAX_RIGHT_WIDTH = 640;
 
 const leftSidebarWidth = ref(DEFAULT_LEFT_WIDTH);
-const rightAsideWidth = ref(DEFAULT_RIGHT_WIDTH);
+// 共用调节逻辑，沿用话题栏已有的存储键以保留之前保存的宽度。
+const { visibleWidth: rightAsideWidth, startResize: startResizeRight, resetWidth: resetRightWidth, resizeWithKeyboard: resizeRightWithKeyboard } = usePersistedColumnResize({ storageKey: 'coolapk_topic_hub_right_width', defaultWidth: () => DEFAULT_RIGHT_WIDTH, limits: () => ({ min: MIN_RIGHT_WIDTH, max: MAX_RIGHT_WIDTH }), direction: -1 });
 
 const pageRootRef = ref<HTMLElement | null>(null);
 const categoryPickerRef = ref<HTMLElement | null>(null);
@@ -375,9 +379,10 @@ const availableRightWidth = computed(() => {
   return pageContentWidth.value - leftWidth - MIN_CENTER_WIDTH;
 });
 
-// 右侧评论区仅在宽度允许三栏且未被手动关闭时展示
+// 总开关关闭时禁止显示右侧评论，页面内的临时展开状态不能绕过设置。
 const showRightAsidePanel = computed(() => {
-  return isThreeColumnMode.value
+  return settingsStore.settings.desktopCommentsOnRight
+    && isThreeColumnMode.value
     && !isRightAsideUserClosed.value
     && availableRightWidth.value >= MIN_RIGHT_WIDTH;
 });
@@ -392,7 +397,7 @@ const visibleRightAsideWidth = computed(() => {
 
 // 浮动展开按钮仅在三栏模式且被手动关闭时展示
 const canShowFloatingExpandBtn = computed(() => {
-  return isThreeColumnMode.value && isRightAsideUserClosed.value;
+  return settingsStore.settings.desktopCommentsOnRight && isThreeColumnMode.value && isRightAsideUserClosed.value;
 });
 
 function toggleLeftSidebar() {
@@ -444,48 +449,6 @@ function resetLeftWidth() {
   } catch {}
 }
 
-let isDraggingRight = false;
-let startRightX = 0;
-let startRightW = DEFAULT_RIGHT_WIDTH;
-
-function startResizeRight(e: MouseEvent) {
-  isDraggingRight = true;
-  startRightX = e.clientX;
-  startRightW = rightAsideWidth.value;
-  document.body.style.cursor = 'col-resize';
-  document.body.style.userSelect = 'none';
-
-  window.addEventListener('mousemove', onMouseMoveRight);
-  window.addEventListener('mouseup', stopResizeRight);
-}
-
-function onMouseMoveRight(e: MouseEvent) {
-  if (!isDraggingRight) return;
-  // 向左拖拽（delta 为负）增大右侧栏宽度
-  const delta = startRightX - e.clientX;
-  const newWidth = Math.min(MAX_RIGHT_WIDTH, Math.max(MIN_RIGHT_WIDTH, startRightW + delta));
-  rightAsideWidth.value = newWidth;
-}
-
-function stopResizeRight() {
-  if (!isDraggingRight) return;
-  isDraggingRight = false;
-  document.body.style.cursor = '';
-  document.body.style.userSelect = '';
-  window.removeEventListener('mousemove', onMouseMoveRight);
-  window.removeEventListener('mouseup', stopResizeRight);
-  try {
-    localStorage.setItem('coolapk_topic_hub_right_width', String(rightAsideWidth.value));
-  } catch {}
-}
-
-function resetRightWidth() {
-  rightAsideWidth.value = DEFAULT_RIGHT_WIDTH;
-  try {
-    localStorage.setItem('coolapk_topic_hub_right_width', String(DEFAULT_RIGHT_WIDTH));
-  } catch {}
-}
-
 function loadPersistedSettings() {
   try {
     const savedLeftW = localStorage.getItem('coolapk_topic_hub_left_width');
@@ -493,13 +456,6 @@ function loadPersistedSettings() {
       const n = Number(savedLeftW);
       if (!isNaN(n) && n >= MIN_LEFT_WIDTH && n <= MAX_LEFT_WIDTH) {
         leftSidebarWidth.value = n;
-      }
-    }
-    const savedRightW = localStorage.getItem('coolapk_topic_hub_right_width');
-    if (savedRightW) {
-      const n = Number(savedRightW);
-      if (!isNaN(n) && n >= MIN_RIGHT_WIDTH && n <= MAX_RIGHT_WIDTH) {
-        rightAsideWidth.value = n;
       }
     }
     const savedLeftCollapsed = localStorage.getItem('coolapk_topic_hub_left_collapsed');
@@ -726,7 +682,7 @@ watch(
 // 中间动态选中事件
 function handleFeedSelected(feed: any) {
   topicHubStore.selectFeed(feed);
-  if (isThreeColumnMode.value) {
+  if (settingsStore.settings.desktopCommentsOnRight && isThreeColumnMode.value) {
     isRightAsideUserClosed.value = false;
   }
 }
@@ -940,7 +896,7 @@ onMounted(() => {
   document.addEventListener('click', handleClickOutside);
 });
 
-onActivated(() => { isRightAsideUserClosed.value = !settingsStore.settings.topicHubShowCommentsByDefault; });
+onActivated(() => { isRightAsideUserClosed.value = !settingsStore.settings.desktopCommentsOnRight; });
 
 onUnmounted(() => {
   isUnmounted = true;
@@ -1379,6 +1335,7 @@ onUnmounted(() => {
   bottom: 0;
   width: 8px;
   cursor: col-resize;
+  touch-action: none;
   z-index: 40;
   display: flex;
   align-items: center;
@@ -1400,6 +1357,7 @@ onUnmounted(() => {
   transition: background-color 0.2s ease;
 }
 
+.resizer-handle:focus-visible .resizer-line,
 .resizer-handle:hover .resizer-line,
 .resizer-handle:active .resizer-line {
   background-color: var(--brand-primary, #10b981);

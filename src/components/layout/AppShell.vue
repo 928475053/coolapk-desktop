@@ -10,7 +10,12 @@
     }"
   >
     <NetworkStatusBanner />
-    <TopBar />
+    <TopBar>
+      <!-- 桌面窄窗口的返回入口固定在原生窗口按钮所在的标题栏，不随帖子滚动。 -->
+      <template #narrow-navigation>
+        <button v-if="showWindowControls && !isMobileLayoutDisabled && mobileLayout && route.path !== '/'" type="button" class="narrow-titlebar-back" aria-label="返回" title="返回上一页" data-tauri-drag-region="false" @click="navigateBack(router)"><i class="fas fa-arrow-left" aria-hidden="true"></i></button>
+      </template>
+    </TopBar>
     <MobileTopBar
       v-if="!isMobileLayoutDisabled && !route.path.startsWith('/my-plugins')"
       :navigation-open="mobileNavigationOpen"
@@ -26,7 +31,8 @@
       <div class="app-content-column">
         <PageTabBar v-if="settingsStore.settings.showPageTabBar" />
         <main ref="mainContent" class="app-main-content">
-          <slot></slot>
+          <div class="app-page-content"><slot></slot></div>
+          <DesktopFeedCommentPanel v-if="showDesktopComments && desktopCommentFeed" :feed="desktopCommentFeed" @close="desktopCommentFeed = null" />
         </main>
       </div>
     </div>
@@ -35,7 +41,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, provide, ref, shallowRef, watch } from 'vue';
+import DesktopFeedCommentPanel from '../feed/DesktopFeedCommentPanel.vue';
+import { openDesktopFeedCommentsKey } from '../../utils/desktopFeedComments';
+import { useMobileLayout, useWideSplitLayout } from '../../composables/useOfficialMobileFeedDetail';
+import type { FeedItem } from '../../types/feed';
 import { isTauri } from '@tauri-apps/api/core';
 import { useRoute, useRouter } from 'vue-router';
 import TopBar from './TopBar.vue';
@@ -61,6 +71,17 @@ const settingsStore = useSettingsStore();
 const appStore = useAppStore();
 const mobileNavigationOpen = ref(false);
 const mainContent = ref<HTMLElement | null>(null);
+const desktopCommentFeed = shallowRef<FeedItem | null>(null);
+const mobileLayout = useMobileLayout();
+const wideSplitLayout = useWideSplitLayout();
+const showDesktopComments = computed(() => settingsStore.settings.desktopCommentsOnRight && !mobileLayout.value && wideSplitLayout.value);
+// 列表页共享右侧评论宿主，保留当前路由与列表滚动位置。
+provide(openDesktopFeedCommentsKey, feed => {
+  if (!showDesktopComments.value) return false;
+  desktopCommentFeed.value = feed;
+  return true;
+});
+watch(showDesktopComments, show => { if (!show) desktopCommentFeed.value = null; });
 const isIos = isTouchMobilePlatform() && !/android/i.test(navigator.userAgent);
 useIosBackGesture(mainContent, () => isIos
   && !['/', '/digital', '/discover', '/me'].includes(route.path)
@@ -96,6 +117,7 @@ function handleMobileNavigationKeydown(event: KeyboardEvent) {
 }
 
 watch(() => route.fullPath, () => {
+  desktopCommentFeed.value = null;
   closeMobileNavigation();
   rootBack.reset();
 });
@@ -137,6 +159,12 @@ onUnmounted(() => window.removeEventListener('keydown', handleMobileNavigationKe
   flex-direction: column;
   overflow: hidden;
 }
+
+.app-page-content { display: flex; flex: 1; min-width: 0; min-height: 0; height: 100%; overflow: hidden; position: relative; }
+
+.narrow-titlebar-back { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 36px; align-self: stretch; margin-left: 4px; padding: 0; border: 0; background: transparent; color: var(--text-primary); cursor: pointer; }
+.narrow-titlebar-back:hover { background: var(--surface-hover); }
+.narrow-titlebar-back:focus-visible { outline: 2px solid var(--brand-primary); outline-offset: -3px; }
 
 @media (min-width: 721px) {
   /* 触摸平板使用桌面顶栏时，给系统状态栏留出顶部安全区。 */
@@ -188,6 +216,11 @@ onUnmounted(() => window.removeEventListener('keydown', handleMobileNavigationKe
   .app-shell:not(.prevent-mobile-layout).has-mobile-window-controls :deep(.top-bar.has-window-controls > .window-controls) {
     height: var(--mobile-window-controls-height);
   }
+
+  /* 标题栏已有固定返回入口，隐藏滚动内容和移动顶栏中的重复按钮。 */
+  .app-shell:not(.prevent-mobile-layout).has-mobile-window-controls :deep(.official-back),
+  .app-shell:not(.prevent-mobile-layout).has-mobile-window-controls :deep(.detail-fallback-back),
+  .app-shell:not(.prevent-mobile-layout).has-mobile-window-controls :deep(.mobile-top-bar button[aria-label="返回"]) { display: none; }
 
   .app-shell:not(.prevent-mobile-layout).has-mobile-window-controls :deep(.network-status-banner) {
     top: calc(var(--mobile-window-controls-height) + var(--mobile-topbar-height));

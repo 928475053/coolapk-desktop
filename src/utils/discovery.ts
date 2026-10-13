@@ -359,8 +359,12 @@ export function resolveDiscoveryRoute(entity: DiscoveryEntity): DiscoveryRoute |
   if (/^#?\/live\/[^/?#]+/i.test(target)) {
     return { kind: 'native', target: target.replace(/^#/, ''), title: asString(entity.title) };
   }
-  if (/^\/(user|dyh)\/\d+/i.test(target) || /^\/(feed|product)\/\d+/i.test(target)) {
-    return { kind: 'native', target, title: asString(entity.title) };
+  if (/^#?\/(user|dyh|feed|product)\/\d+(?=[/?#]|$)/i.test(target)) {
+    return { kind: 'native', target: target.replace(/^#/, ''), title: asString(entity.title) };
+  }
+  // 新机列表等接口不是产品详情；外层商品集合卡片的 ID 也不能覆盖其明确的列表地址。
+  if (/^#?\/product\//i.test(target)) {
+    return { kind: 'data-list', target, title: asString(entity.title) };
   }
   if (/^\/page\?url=/i.test(target) || /^#\//.test(target) || /^\/(apk|main|topic)\//i.test(target)) {
     return { kind: 'data-list', target, title: asString(entity.title) };

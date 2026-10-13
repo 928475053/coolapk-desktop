@@ -19,6 +19,7 @@
   </AppDialog>
 </template>
 <script setup lang="ts">
+import { htmlToPlainText } from '../../utils/htmlText';
 import { computed, ref, watch } from 'vue';
 import AppDialog from '../common/AppDialog.vue';
 import AppImage from '../common/AppImage.vue';
@@ -59,7 +60,7 @@ async function loadPage() {
     rows.value.push(...added); hasMore.value = data.length >= 20 && added.length > 0; page.value++;
   } catch (err) {
     if (attempt === generation) {
-      const message = getErrorMessage(err, '看看号加载失败').replace(/<[^>]*>/g, '');
+      const message = htmlToPlainText(getErrorMessage(err, '看看号加载失败'));
       error.value = message.includes('没有可管理的看看号') ? '还没有可管理的看看号' : message;
     }
   }

@@ -52,10 +52,11 @@ export function isUpdateAssetCompatible(
       && Boolean(versionFromAssetName(name));
   }
   if (platform.os !== 'windows') return false;
-  const typePattern = packageType === 'portable'
-    ? /[-_]portable(?:[-_][^.]+)*\.exe$/i
-    : /[-_]setup(?:[-_][^.]+)*\.exe$/i;
-  if (!typePattern.test(name)) return false;
+  // 线性拆分名称，避免可重叠重复分组在长文件名上产生大量回溯。
+  if (!name.toLowerCase().endsWith('.exe')) return false;
+  const parts = name.slice(0, -4).toLowerCase().split(/[-_]/);
+  const index = parts.lastIndexOf(packageType === 'portable' ? 'portable' : 'setup');
+  if (index <= 0 || parts.slice(index + 1).some(part => part.includes('.')) || parts[parts.length - 1] === '') return false;
   const archPattern = platform.arch === 'aarch64'
     ? /(?:^|[-_])(?:arm64|aarch64)(?=[-_.]|$)/i
     : platform.arch === 'x86_64'

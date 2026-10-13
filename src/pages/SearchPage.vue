@@ -116,7 +116,8 @@ const askFeedTypeOptions = [
 const askFeedType = ref(normalizeAskFeedType(readQueryString(route.query.feedType)));
 const feedSearchSort = ref(normalizeFeedSearchSort(readQueryString(route.query.sort)));
 const hotItems = ref<SearchEntity[]>([]);
-const tabStates = reactive<Record<string, SearchTabState>>({});
+// 搜索栏目名称来自外部配置，Map 可避免 __proto__ 等特殊键改变对象原型。
+const tabStates = reactive(new Map<string, SearchTabState>());
 const showSuggestions = ref(false);
 const showHistory = ref(false);
 const searchSuggestions = ref<SearchEntity[]>([]);
@@ -153,8 +154,8 @@ function newTabState(): SearchTabState {
 }
 
 function ensureTabState(key: string): SearchTabState {
-  if (!tabStates[key]) tabStates[key] = newTabState();
-  return tabStates[key];
+  if (!tabStates.has(key)) tabStates.set(key, newTabState());
+  return tabStates.get(key)!;
 }
 
 const activeState = computed(() => ensureTabState(activeTab.value));
@@ -193,7 +194,7 @@ function entityKey(entity: SearchEntity, index: number): string {
 }
 
 function resetTabStates() {
-  Object.keys(tabStates).forEach((key) => delete tabStates[key]);
+  tabStates.clear();
   searchTabs.value.forEach((tab) => ensureTabState(tab.key));
 }
 

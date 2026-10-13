@@ -108,10 +108,10 @@ describe('TopicsHubPage 三栏/双栏/单栏响应式与过渡', () => {
     expect(store.viewMode).toBe('grid');
   });
 
-  it('设置默认关闭右侧评论时隐藏评论栏，并允许在当前页面手动展开', async () => {
+  it('总开关关闭时点击动态也不显示右栏，重新开启后允许临时收起和展开', async () => {
     const previousInnerWidth = window.innerWidth;
     const previousRightWidth = localStorage.getItem('coolapk_topic_hub_right_width');
-    useSettingsStore().settings.topicHubShowCommentsByDefault = false;
+    useSettingsStore().settings.desktopCommentsOnRight = false;
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1600 });
     mocks.getTopicHubData.mockResolvedValue({ tabs: [], data: [{ id: 't1', title: '小米13Pro', follower_num: 3200 }] });
     let mountedWrapper: ReturnType<typeof mount> | null = null;
@@ -124,8 +124,8 @@ describe('TopicsHubPage 三栏/双栏/单栏响应式与过渡', () => {
         global: {
           plugins: [router],
           stubs: {
-            TopicPage: { props: ['tagParam', 'embedded', 'activeFeedId', 'disableInlineComments'], template: '<div class="topic-page-stub">{{ tagParam }}</div>' },
-            TopicFeedCommentAside: { props: ['feed'], template: '<div class="topic-feed-comment-aside-stub"></div>' },
+            TopicPage: { name: 'TopicPage', props: ['tagParam', 'embedded', 'activeFeedId', 'disableInlineComments'], template: '<div class="topic-page-stub">{{ tagParam }}</div>' },
+            TopicFeedCommentAside: { name: 'TopicFeedCommentAside', props: ['feed'], template: '<div class="topic-feed-comment-aside-stub"></div>' },
             LoadingState: true,
             EmptyState: true,
             AppImage: true,
@@ -142,9 +142,24 @@ describe('TopicsHubPage 三栏/双栏/单栏响应式与过渡', () => {
       await flushPromises();
 
       expect(wrapper.find('.split-right-wrapper').exists()).toBe(false);
-      expect(wrapper.find('.floating-expand-aside-btn').exists()).toBe(true);
+      expect(wrapper.find('.floating-expand-aside-btn').exists()).toBe(false);
+      const topicPage = wrapper.findComponent({ name: 'TopicPage' });
+      expect(topicPage.props('disableInlineComments')).toBe(false);
+      topicPage.vm.$emit('select-feed', { id: 'selected', message: '正文' });
+      await nextTick();
+      expect(wrapper.find('.split-right-wrapper').exists()).toBe(false);
+      useSettingsStore().settings.desktopCommentsOnRight = true;
+      await nextTick();
+      expect(wrapper.find('.split-right-wrapper').exists()).toBe(true);
+      wrapper.findComponent({ name: 'TopicFeedCommentAside' }).vm.$emit('close');
+      await nextTick();
+      expect(wrapper.find('.split-right-wrapper').exists()).toBe(false);
       await wrapper.find('.floating-expand-aside-btn').trigger('click');
       expect(wrapper.find('.split-right-wrapper').exists()).toBe(true);
+      useSettingsStore().settings.desktopCommentsOnRight = false;
+      await nextTick();
+      expect(wrapper.find('.split-right-wrapper').exists()).toBe(false);
+      expect(wrapper.find('.floating-expand-aside-btn').exists()).toBe(false);
     } finally {
       mountedWrapper?.unmount();
       if (previousRightWidth === null) localStorage.removeItem('coolapk_topic_hub_right_width');

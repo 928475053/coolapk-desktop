@@ -139,6 +139,8 @@ export interface AppSettings {
   officialMobileFeedDetail: boolean;
   /** 宽窗口下点击动态是否直接进入详情页；关闭时在当前页展开评论。 */
   desktopFeedDetailOnClick: boolean;
+  /** 桌面端评论显示在右侧，与点击动态进入详情页独立控制。 */
+  desktopCommentsOnRight: boolean;
   myRecentPinned: boolean;
   moreExpanded: boolean;
   reduceMotion: boolean;
@@ -162,8 +164,6 @@ export interface AppSettings {
   /** 普通评论与话题讨论分别使用的默认排序。 */
   commentDefaultSortMode: CommentSortPreference;
   topicDiscussionDefaultSortMode: TopicDiscussionSortPreference;
-  /** 打开话题分屏时是否默认显示右侧评论栏。 */
-  topicHubShowCommentsByDefault: boolean;
   downloadPath: string;
   maxConcurrentDownloads: number;
   autoCleanCache: boolean;

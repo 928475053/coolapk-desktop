@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AppContextMenu from '../AppContextMenu.vue';
 
@@ -50,6 +50,33 @@ function appendChatMessage(text: string, id: string): HTMLElement {
 }
 
 describe('AppContextMenu', () => {
+  it('复制图片失败不退回复制链接，复制图片地址仍单独写入文本', async () => {
+    vi.stubGlobal('ClipboardItem', undefined);
+    const wrapper = mount(AppContextMenu, { attachTo: document.body });
+    const image = document.createElement('img');
+    const url = 'https://api.coolapk.com/v6/message/showImage?id=233036637&type=n';
+    image.src = url;
+    document.body.appendChild(image);
+    const openMenu = async () => {
+      image.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 100, clientY: 100 }));
+      await wrapper.vm.$nextTick();
+    };
+    try {
+      await openMenu();
+      const copy = Array.from(document.querySelectorAll<HTMLElement>('.context-menu-item')).find(item => item.textContent?.trim() === '复制图片');
+      expect(copy).toBeDefined();
+      copy!.click();
+      await flushPromises();
+      expect(mocks.writeText).not.toHaveBeenCalled();
+      expect(document.body.textContent).toContain('当前系统不支持复制图片');
+      await openMenu();
+      const copyUrl = Array.from(document.querySelectorAll<HTMLElement>('.context-menu-item')).find(item => item.textContent?.trim() === '复制图片地址');
+      expect(copyUrl).toBeDefined();
+      copyUrl!.click();
+      await flushPromises();
+      expect(mocks.writeText).toHaveBeenCalledWith(url);
+    } finally { image.remove(); wrapper.unmount(); vi.unstubAllGlobals(); }
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     Object.assign(navigator, {

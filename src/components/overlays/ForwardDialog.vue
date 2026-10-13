@@ -63,6 +63,7 @@
 </template>
 
 <script setup lang="ts">
+import { htmlToPlainText } from '../../utils/htmlText';
 import { ref, computed, watch, nextTick } from 'vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { useAuthStore } from '../../stores/auth';
@@ -101,7 +102,7 @@ const sourceUsername = computed(
 );
 const sourceMessage = computed(() => {
   const raw = props.feed?.message || props.feed?.message_raw_output || props.feed?.title || '';
-  const text = String(raw).replace(/<[^>]+>/g, '').trim();
+  const text = htmlToPlainText(String(raw)).trim();
   if (!text) return '（无文字内容）';
   return text.length > 200 ? `${text.slice(0, 200)}...` : text;
 });

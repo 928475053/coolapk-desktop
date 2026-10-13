@@ -18,7 +18,7 @@ export function handleAnchorClick(e: Event, feedId?: string | number) {
   const text = anchor.textContent?.trim() || '';
   e.preventDefault();
 
-  if (text.includes('查看更多') || !href || href === '#' || href.startsWith('javascript:')) {
+  if (text.includes('查看更多') || !href || href === '#' || /^javascript:/i.test(href.trim())) {
     const targetId = feedId || href.match(/\d+/)?.[0];
     if (targetId) {
       openFeedDetail(router, targetId);
@@ -26,6 +26,9 @@ export function handleAnchorClick(e: Event, feedId?: string | number) {
     return;
   }
 
+  // 显式协议仅允许正常网页和系统链接，禁止执行脚本或打开本地文件。
+  const scheme = href.trim().match(/^([a-z][a-z0-9+.-]*):/i)?.[1]?.toLowerCase();
+  if (scheme && !['http', 'https', 'mailto', 'tel', 'coolmarket'].includes(scheme)) return;
   const feedMatch = href.match(/^\/feed\/(\d+)/);
   if (feedMatch?.[1]) {
     openFeedDetail(router, feedMatch[1]);

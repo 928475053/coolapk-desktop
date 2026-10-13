@@ -1,9 +1,11 @@
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { defineComponent, nextTick, onMounted } from 'vue';
+import { computed, defineComponent, inject, nextTick, onMounted, ref } from 'vue';
+import { openDesktopFeedCommentsKey } from '../../../utils/desktopFeedComments';
 
-const routeState = vi.hoisted(() => ({ value: null as any, back: vi.fn(), replace: vi.fn(), history: { back: '/' as string | null } }));
+const routeState = vi.hoisted(() => ({ controls: false, value: null as any, back: vi.fn(), replace: vi.fn(), history: { back: '/' as string | null } }));
+vi.mock('../../../composables/useDesktopWindow', () => ({ useDesktopWindow: () => ({ showWindowControls: computed(() => routeState.value.controls), usesMacOverlay: ref(false) }) }));
 
 vi.mock('vue-router', async (importOriginal) => {
   const actual = await importOriginal<typeof import('vue-router')>();
@@ -25,7 +27,7 @@ import AppShell from '../AppShell.vue';
 import { useSettingsStore } from '../../../stores/settings';
 import { useAppStore } from '../../../stores/app';
 
-const TopBarStub = { template: '<div class="top-bar-stub" />' };
+const TopBarStub = { template: '<div class="top-bar-stub"><slot name="narrow-navigation" /></div>' };
 const MainSidebarStub = { template: '<div class="main-sidebar-stub" />' };
 const PageTabBarStub = { template: '<div class="page-tab-bar-stub" />' };
 const NetworkStatusBannerStub = { template: '<div class="network-status-banner-stub" />' };
@@ -33,11 +35,70 @@ const MobileTopBarStub = { template: '<div class="mobile-top-bar-stub" />' };
 const MobileBottomNavStub = { template: '<div class="mobile-bottom-nav-stub" />' };
 
 describe('AppShell', () => {
+  it('桌面窄窗口在固定标题栏返回，宽窗口和移动平台不增加入口', async () => {
+    const previousWidth = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', { value: 600, configurable: true, writable: true });
+    Object.assign(routeState.value, { path: '/feed/42', fullPath: '/feed/42', controls: true });
+    const wrapper = mount(AppShell, { global: { stubs: { TopBar: TopBarStub, MainSidebar: MainSidebarStub, PageTabBar: PageTabBarStub, NetworkStatusBanner: NetworkStatusBannerStub, MobileTopBar: MobileTopBarStub, MobileBottomNav: MobileBottomNavStub } } });
+    window.dispatchEvent(new Event('resize'));
+    await nextTick();
+    expect(wrapper.find('.top-bar-stub .narrow-titlebar-back').exists()).toBe(true);
+    wrapper.get('main').element.scrollTop = 3000;
+    await wrapper.get('.narrow-titlebar-back').trigger('click');
+    expect(routeState.back).toHaveBeenCalledOnce();
+    routeState.history.back = null;
+    await wrapper.get('.narrow-titlebar-back').trigger('click');
+    expect(routeState.replace).toHaveBeenCalledWith('/');
+    routeState.value.controls = false;
+    await nextTick();
+    expect(wrapper.find('.narrow-titlebar-back').exists()).toBe(false);
+    routeState.value.controls = true;
+    Object.defineProperty(window, 'innerWidth', { value: 1200, configurable: true, writable: true });
+    window.dispatchEvent(new Event('resize'));
+    await nextTick();
+    expect(wrapper.find('.narrow-titlebar-back').exists()).toBe(false);
+    wrapper.unmount();
+    Object.defineProperty(window, 'innerWidth', { value: previousWidth, configurable: true, writable: true });
+  });
+  it('普通列表打开右侧评论保留页面实例，关闭侧栏、设置与导航清除侧栏', async () => {
+    Object.defineProperty(window, 'innerWidth', { value: 1400, configurable: true, writable: true });
+    const Page = defineComponent({ setup() {
+      const openComments = inject(openDesktopFeedCommentsKey)!;
+      return { openComments };
+    }, template: '<button class="open-right-comments" @click="openComments({ id: \'42\', message: \'正文\' })">评论</button>' });
+    const wrapper = mount(AppShell, { slots: { default: Page }, global: { stubs: {
+      TopBar: TopBarStub, MainSidebar: MainSidebarStub, PageTabBar: PageTabBarStub,
+      NetworkStatusBanner: NetworkStatusBannerStub, MobileTopBar: MobileTopBarStub, MobileBottomNav: MobileBottomNavStub,
+      DesktopFeedCommentPanel: { props: ['feed'], template: '<aside class="right-comments-stub">{{ feed.id }}<button @click="$emit(\'close\')">关闭</button></aside>' },
+    } } });
+    const settings = useSettingsStore();
+    settings.settings.desktopFeedDetailOnClick = false;
+    settings.settings.desktopCommentsOnRight = true;
+    window.dispatchEvent(new Event('resize'));
+    await nextTick();
+    const page = wrapper.get('.open-right-comments').element;
+    await wrapper.get('.open-right-comments').trigger('click');
+    expect(wrapper.get('.right-comments-stub').text()).toContain('42');
+    expect(wrapper.get('.open-right-comments').element).toBe(page);
+    await wrapper.get('.right-comments-stub button').trigger('click');
+    expect(wrapper.find('.right-comments-stub').exists()).toBe(false);
+    await wrapper.get('.open-right-comments').trigger('click');
+    settings.settings.desktopCommentsOnRight = false;
+    await nextTick();
+    expect(wrapper.find('.right-comments-stub').exists()).toBe(false);
+    settings.settings.desktopCommentsOnRight = true;
+    await nextTick();
+    await wrapper.get('.open-right-comments').trigger('click');
+    Object.assign(routeState.value, { path: '/discover', fullPath: '/discover' });
+    await nextTick();
+    expect(wrapper.find('.right-comments-stub').exists()).toBe(false);
+    wrapper.unmount();
+  });
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
   beforeEach(() => {
     setActivePinia(createPinia());
     vi.clearAllMocks();
-    Object.assign(routeState.value, { path: '/', fullPath: '/' });
+    Object.assign(routeState.value, { path: '/', fullPath: '/', controls: false });
     routeState.history.back = '/';
   });
 

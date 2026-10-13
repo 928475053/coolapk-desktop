@@ -30,8 +30,9 @@ export function normalizeCoolapkProductRoute(href: string): string | null {
     return productId ? `/product/${encodeURIComponent(productId)}` : null;
   }
 
-  const productMatch = href.match(/^\/product\/([^/?#]+)(?:[?#].*)?$/i);
-  if (!productMatch || /^(detail|list)$/i.test(productMatch[1])) return null;
+  // /product/ 下还包含上市、待上市、分类等列表接口，详情路径必须使用数字 ID。
+  const productMatch = href.match(/^\/product\/(\d+)(?:[?#].*)?$/i);
+  if (!productMatch) return null;
   const queryIndex = href.indexOf('?');
   const hashIndex = href.indexOf('#');
   const queryEnd = hashIndex >= 0 && (queryIndex < 0 || hashIndex < queryIndex) ? hashIndex : href.length;
@@ -256,6 +257,8 @@ function normalizeCoolapkDirectRoute(href: string): string | null {
   const match = href.match(/^\/(?:app|product|user|topic|dyh|album|collection)\/([^/?#]+)(?:\?([^#]*))?$/i);
   if (!match) return null;
   const routeName = href.slice(1, href.indexOf('/', 1));
+  // 通用兜底同样不能把产品列表接口重新识别为产品详情。
+  if (routeName.toLowerCase() === 'product' && !/^\d+$/.test(match[1])) return null;
   return `/${routeName}/${match[1]}${match[2] ? `?${match[2]}` : ''}`;
 }
 

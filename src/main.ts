@@ -4,6 +4,7 @@ import { getCurrent, onOpenUrl } from '@tauri-apps/plugin-deep-link';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import '@fortawesome/fontawesome-free/css/all.min.css';
 import './styles/index.css';
+import 'virtual:android-icons.css';
 import App from './App.vue';
 import { router } from './router';
 import { CoolapkTauriAPI } from './api/coolapk';
@@ -14,6 +15,8 @@ import { installDiagnosticLogging, logDiagnostic, logDiagnosticLimited, summariz
 import { isResizeObserverWarning } from './utils/windowError';
 
 // 启动全局原生 alert 代理拦截，统一呈现顶部高质感 Toast
+// 手机上的图标不依赖系统字体；桌面继续沿用现有字体图标。
+if (/android/i.test(navigator.userAgent)) document.documentElement.dataset.iconRenderer = 'svg';
 setupGlobalAlertProxy();
 installDiagnosticLogging();
 

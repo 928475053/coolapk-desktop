@@ -1191,7 +1191,7 @@ async fn test_staged_cookie_does_not_create_credential_less_account() {
     let accounts = client.load_accounts();
     assert!(
         accounts.is_empty(),
-        "暂存 Cookie 不得写入账户库，实际得到 {accounts:?}"
+        "暂存 Cookie 不得写入账户库"
     );
     let exists = accounts_file.exists();
     if exists {
@@ -1596,7 +1596,8 @@ async fn verify_fans_user_list_fixed() {
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .to_string();
-                println!("  uid={} username={}", uid, name);
+                // 测试日志只报告字段是否存在，避免输出真实用户信息。
+                println!("  has_uid={} has_username={}", !uid.is_empty(), !name.is_empty());
             }
         }
         Err(e) => println!("[fixed fansList] ERROR: {}", e),
@@ -1618,8 +1619,8 @@ async fn test_live_oss_and_reply() {
         *guard = valid_dev.clone();
     }
 
-    println!("Current UID: {:?}", client.current_uid());
-    println!("Testing device code: {}", valid_dev);
+    // 真实接口测试也不能把用户 ID 或设备码写入日志。
+    println!("已设置测试设备信息");
 
     let fake_png: Vec<u8> = vec![
         0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48,
@@ -1633,7 +1634,7 @@ async fn test_live_oss_and_reply() {
     let upload_res = client
         .upload_image(&fake_png, "test_dot.png", "image/png", "feed", None)
         .await;
-    println!("upload_res = {:?}", upload_res);
+    println!("上传请求成功={}", upload_res.is_ok());
 }
 
 #[test]

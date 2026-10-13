@@ -2,7 +2,9 @@
   <Teleport to="body">
     <div
       v-if="menu"
+      v-show="!selectionAdjusting"
       class="app-context-menu"
+      :class="{ 'is-mobile-selection': menu.mobileSelection }"
       :style="menuStyle"
       role="menu"
       @contextmenu.prevent
@@ -43,6 +45,7 @@ import { useShortcutHints } from '../../composables/useShortcutHints';
 import { refreshPageTabGeneration } from '../../utils/pageTabs';
 import { useAndroidBackButton } from '../../utils/androidBackButton';
 import { copyImageToClipboard } from '../../utils/imageClipboard';
+import { isTouchMobilePlatform } from '../../utils/platform';
 
 type ContextKind = 'page' | 'selection' | 'link' | 'image' | 'comment' | 'feed' | 'message' | 'chat-message';
 
@@ -80,7 +83,7 @@ type MenuItem = {
   action?: () => void | Promise<unknown>;
 };
 
-type MenuData = ContextState & { items: MenuItem[] };
+type MenuData = ContextState & { items: MenuItem[]; mobileSelection: boolean; width: number };
 
 const router = useRouter();
 const route = useRoute();
@@ -90,10 +93,14 @@ const settingsStore = useSettingsStore();
 const { formatShortcut } = usePlatformShortcuts();
 const showShortcutHints = useShortcutHints();
 const menu = ref<MenuData | null>(null);
+const selectionAdjusting = ref(false);
+let selectionTouchActive = false;
+let selectionRefreshTimer: ReturnType<typeof setTimeout> | undefined;
 
 const menuStyle = computed(() => ({
   left: `${menu.value?.x || 0}px`,
   top: `${menu.value?.y || 0}px`,
+  width: `${menu.value?.width || 258}px`,
 }));
 
 function selectedText(): string {
@@ -605,6 +612,9 @@ function adjustFontSize(delta: number) {
 }
 
 function closeMenu() {
+  clearTimeout(selectionRefreshTimer);
+  selectionAdjusting.value = false;
+  selectionTouchActive = false;
   menu.value = null;
 }
 
@@ -649,14 +659,48 @@ function resolveMenuState(point: ContextPoint): ContextState | null {
 
 function applyMenu(state: ContextState) {
   const items = createItems(state);
-  const width = 258;
+  const mobileSelection = isTouchMobilePlatform() && Boolean(state.selectedText);
+  const width = mobileSelection ? Math.min(460, window.visualViewport?.width || window.innerWidth) - 16 : 258;
   const estimatedHeight = Math.min(520, items.length * 38 + 16);
   menu.value = {
     ...state,
     items,
+    mobileSelection,
+    width,
     x: Math.max(8, Math.min(state.x, window.innerWidth - width - 8)),
     y: Math.max(8, Math.min(state.y, window.innerHeight - estimatedHeight - 8)),
   };
+  if (mobileSelection) positionSelectionMenu();
+}
+
+/** 选择操作栏避开选区和手柄；选区占满可视区域时压缩在底部，调整期间隐藏。 */
+function positionSelectionMenu() {
+  const current = menu.value;
+  const selection = window.getSelection();
+  if (!current?.mobileSelection || !selection?.rangeCount) return;
+  const rect = selection.getRangeAt(0).getBoundingClientRect();
+  const viewport = window.visualViewport;
+  const left = (viewport?.offsetLeft || 0) + 8;
+  const top = (viewport?.offsetTop || 0) + 8;
+  const bottom = (viewport?.offsetTop || 0) + (viewport?.height || window.innerHeight) - 8;
+  const height = 50;
+  const gap = 24;
+  current.x = Math.max(left, Math.min(rect.left, left + (viewport?.width || window.innerWidth) - current.width - 16));
+  current.y = rect.top - gap - height >= top ? rect.top - gap - height : rect.bottom + gap + height <= bottom ? rect.bottom + gap : Math.max(top, bottom - height);
+}
+
+/** 等系统更新选择范围后再刷新菜单，复制动作始终使用最新选中文字。 */
+function refreshSelectionMenu() {
+  clearTimeout(selectionRefreshTimer);
+  if (!menu.value?.mobileSelection || selectionTouchActive) return;
+  selectionRefreshTimer = setTimeout(() => {
+    const current = menu.value;
+    if (!current?.mobileSelection || selectionTouchActive) return;
+    const text = selectedText();
+    if (!text) { closeMenu(); return; }
+    applyMenu({ ...current, selectedText: text });
+    selectionAdjusting.value = false;
+  }, 150);
 }
 
 function openMenu(event: MouseEvent) {
@@ -685,6 +729,15 @@ function handleWindowClick() {
 function handleTouchStart(event: TouchEvent) {
   cancelLongPress();
   longPressOpened = false;
+  // 触摸正文或选择手柄时让出整个选区，不阻止系统拖动，也不重新触发长按菜单。
+  if (menu.value?.mobileSelection) {
+    if (!(event.target instanceof Element) || !event.target.closest('.app-context-menu')) {
+      clearTimeout(selectionRefreshTimer);
+      selectionTouchActive = true;
+      selectionAdjusting.value = true;
+    }
+    return;
+  }
   if (event.touches.length !== 1) return;
   const touch = event.touches[0];
   longPressOrigin = { x: touch.clientX, y: touch.clientY };
@@ -716,6 +769,12 @@ function handleTouchMove(event: TouchEvent) {
 
 function handleTouchEnd(event: TouchEvent) {
   cancelLongPress();
+  if (selectionAdjusting.value) {
+    selectionTouchActive = false;
+    suppressMenuCloseUntil = Date.now() + LONG_PRESS_CLICK_GUARD_MS;
+    refreshSelectionMenu();
+    return;
+  }
   const opened = longPressOpened;
   longPressOpened = false;
   // 阻止这次抬手派生的 click 与系统选单。
@@ -726,12 +785,19 @@ function handleKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape') closeMenu();
 }
 
+function handleWindowScroll(event: Event) {
+  // 操作栏横向滚动和拖动手柄产生的正文自动滚动都不能提前关闭选区菜单。
+  if (event.target instanceof Element && event.target.closest('.app-context-menu') || selectionTouchActive) return;
+  closeMenu();
+}
+
 onMounted(() => {
   window.addEventListener('contextmenu', openMenu, true);
   window.addEventListener('click', handleWindowClick);
   window.addEventListener('keydown', handleKeydown, true);
   window.addEventListener('resize', closeMenu);
-  window.addEventListener('scroll', closeMenu, true);
+  window.addEventListener('scroll', handleWindowScroll, true);
+  document.addEventListener('selectionchange', refreshSelectionMenu);
   window.addEventListener('touchstart', handleTouchStart, { capture: true, passive: true });
   window.addEventListener('touchmove', handleTouchMove, { capture: true, passive: true });
   window.addEventListener('touchend', handleTouchEnd, { capture: true, passive: false });
@@ -740,11 +806,13 @@ onMounted(() => {
 
 onUnmounted(() => {
   cancelLongPress();
+  clearTimeout(selectionRefreshTimer);
   window.removeEventListener('contextmenu', openMenu, true);
   window.removeEventListener('click', handleWindowClick);
   window.removeEventListener('keydown', handleKeydown, true);
   window.removeEventListener('resize', closeMenu);
-  window.removeEventListener('scroll', closeMenu, true);
+  window.removeEventListener('scroll', handleWindowScroll, true);
+  document.removeEventListener('selectionchange', refreshSelectionMenu);
   window.removeEventListener('touchstart', handleTouchStart, true);
   window.removeEventListener('touchmove', handleTouchMove, true);
   window.removeEventListener('touchend', handleTouchEnd, true);
@@ -795,6 +863,12 @@ async function run(itemToRun: MenuItem) {
   text-align: left;
   cursor: pointer;
 }
+
+/* 手机版选区菜单保持单行，横向滑动查看其余操作，减少对正文的遮挡。 */
+.app-context-menu.is-mobile-selection { display: flex; max-height: 50px; overflow-x: auto; overflow-y: hidden; padding: 7px; scrollbar-width: none; }
+.app-context-menu.is-mobile-selection::-webkit-scrollbar { display: none; }
+.is-mobile-selection .context-menu-item { flex: 0 0 auto; width: auto; min-height: 34px; white-space: nowrap; }
+.is-mobile-selection .context-menu-item kbd, .is-mobile-selection .context-menu-separator { display: none; }
 
 .context-menu-item i {
   width: 16px;

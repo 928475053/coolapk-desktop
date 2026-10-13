@@ -3,6 +3,7 @@ import { ref, watch, onScopeDispose } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { resolveDeviceIdentity } from '../utils/devicePresets';
+import { resolveDesktopCommentsOnRight } from '../utils/desktopCommentsPreference';
 import { isLinuxDesktopRuntime, observeLinuxSystemTheme, type SystemTheme } from '../utils/linuxSystemTheme';
 import type {
   AppSettings,
@@ -125,7 +126,8 @@ const defaultSettings: AppSettings = {
   disableAutoMobileMode: false,
   officialMobileFeedDetail: true,
   desktopFeedDetailOnClick: false,
-  desktopCommentsOnRight: true,
+  desktopCommentsOnRight: false,
+  desktopCommentsDefaultOffMigrated: true,
   myRecentPinned: false,
   moreExpanded: false,
   reduceMotion: false,
@@ -290,8 +292,9 @@ export function normalizeSettings(value: unknown): AppSettings {
   result.disableAutoMobileMode = readBoolean(source.disableAutoMobileMode, result.disableAutoMobileMode);
   result.officialMobileFeedDetail = readBoolean(source.officialMobileFeedDetail, result.officialMobileFeedDetail);
   result.desktopFeedDetailOnClick = readBoolean(source.desktopFeedDetailOnClick, result.desktopFeedDetailOnClick);
-  // 合并旧版话题右侧评论和详情分栏设置，任一原开关开启时保留右侧评论。
-  result.desktopCommentsOnRight = readBoolean(source.desktopCommentsOnRight, result.desktopFeedDetailOnClick || readBoolean(source.topicHubShowCommentsByDefault, result.desktopCommentsOnRight));
+  // 旧版本可能已把默认开启写入磁盘：首次升级统一关闭，之后尊重用户手动调整。
+  result.desktopCommentsOnRight = resolveDesktopCommentsOnRight(source.desktopCommentsOnRight, source.desktopCommentsDefaultOffMigrated);
+  result.desktopCommentsDefaultOffMigrated = true;
   result.myRecentPinned = readBoolean(source.myRecentPinned, readBoolean(source.sidebarMyCardsPinned, result.myRecentPinned));
   result.moreExpanded = readBoolean(source.moreExpanded, result.moreExpanded);
   result.reduceMotion = readBoolean(source.reduceMotion, result.reduceMotion);

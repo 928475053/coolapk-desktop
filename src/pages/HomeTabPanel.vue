@@ -315,6 +315,7 @@
 
     <RightSidebar
       v-if="!props.embedded && (settingsStore.settings.showHomeMonthlyRank || settingsStore.settings.showHomeHotTopics)"
+      v-show="!desktopCommentsOpen"
       :show-monthly-rank="settingsStore.settings.showHomeMonthlyRank"
       :show-hot-topics="settingsStore.settings.showHomeHotTopics"
     />
@@ -349,12 +350,14 @@ import type { FeedLayout, ConfigPageTab } from '../types/settings';
 import type { DiscoveryEntity } from '../types/discovery';
 import { getHomeSubChannels, isFollowingHomeTab, resolvePreferredHomeTab, type HomeSubChannel, type HomeSubChannelSelection } from '../utils/homeTabs';
 import { HOME_TAB_REFRESH_EVENT, HOME_TAB_SCROLL_TOP_EVENT } from '../utils/homeTab';
+import { desktopFeedCommentsOpenKey } from '../utils/desktopFeedComments';
 import { extractHotSearchKeywords, isAnswerSearchEntity } from '../utils/searchEntities';
 import { isQuestionFeedEntity, isQuestionHomeTab } from '../utils/question';
 import { isRatingFeedEntity } from '../utils/rating';
 const props = withDefaults(defineProps<{ embedded?: boolean; tabKey?: string; tabs?: ConfigPageTab[]; selected?: boolean }>(), { embedded: false, selected: true });
 import { feedPageVisibleKey, feedPageRenderKey, homePagerMovingKey } from '../utils/feedPageVisibility';
 const pagerMoving = inject(homePagerMovingKey, ref(false));
+const desktopCommentsOpen = inject(desktopFeedCommentsOpenKey, ref(false));
 provide(feedPageVisibleKey, computed(() => props.selected && !pagerMoving.value));
 provide(feedPageRenderKey, computed(() => props.selected || pagerMoving.value));
 

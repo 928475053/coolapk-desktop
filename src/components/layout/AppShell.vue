@@ -43,7 +43,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, provide, ref, shallowRef, watch } from 'vue';
 import DesktopFeedCommentPanel from '../feed/DesktopFeedCommentPanel.vue';
-import { openDesktopFeedCommentsKey } from '../../utils/desktopFeedComments';
+import { desktopFeedCommentsOpenKey, openDesktopFeedCommentsKey } from '../../utils/desktopFeedComments';
 import { useMobileLayout, useWideSplitLayout } from '../../composables/useOfficialMobileFeedDetail';
 import type { FeedItem } from '../../types/feed';
 import { isTauri } from '@tauri-apps/api/core';
@@ -75,6 +75,7 @@ const desktopCommentFeed = shallowRef<FeedItem | null>(null);
 const mobileLayout = useMobileLayout();
 const wideSplitLayout = useWideSplitLayout();
 const showDesktopComments = computed(() => settingsStore.settings.desktopCommentsOnRight && !mobileLayout.value && wideSplitLayout.value);
+provide(desktopFeedCommentsOpenKey, computed(() => showDesktopComments.value && desktopCommentFeed.value !== null));
 // 列表页共享右侧评论宿主，保留当前路由与列表滚动位置。
 provide(openDesktopFeedCommentsKey, feed => {
   if (!showDesktopComments.value) return false;

@@ -15,11 +15,11 @@
       </div>
     </div>
     </div>
-    <RightSidebar v-if="sidebarMounted && (settings.settings.showHomeMonthlyRank || settings.settings.showHomeHotTopics)" v-show="!mobile" :show-monthly-rank="settings.settings.showHomeMonthlyRank" :show-hot-topics="settings.settings.showHomeHotTopics" />
+    <RightSidebar v-if="sidebarMounted && (settings.settings.showHomeMonthlyRank || settings.settings.showHomeHotTopics)" v-show="!mobile && !desktopCommentsOpen" :show-monthly-rank="settings.settings.showHomeMonthlyRank" :show-hot-topics="settings.settings.showHomeHotTopics" />
   </div>
 </template>
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, onActivated, onDeactivated, provide, reactive, ref, watch } from 'vue';
+import { computed, inject, nextTick, onMounted, onUnmounted, onActivated, onDeactivated, provide, reactive, ref, watch } from 'vue';
 import FeedTabs from './FeedTabs.vue';
 import FeedLayoutToggle from './FeedLayoutToggle.vue';
 import RightSidebar from '../layout/RightSidebar.vue';
@@ -31,8 +31,10 @@ import type { ConfigPageTab } from '../../types/settings';
 import { homePagerMovingKey } from '../../utils/feedPageVisibility';
 import { observeResizeOnFrame } from '../../utils/observeResizeOnFrame';
 import { logDiagnostic, summarizeDiagnosticError } from '../../utils/diagnosticLogger';
+import { desktopFeedCommentsOpenKey } from '../../utils/desktopFeedComments';
 
 const props = withDefaults(defineProps<{ mobile?: boolean }>(), { mobile: true });
+const desktopCommentsOpen = inject(desktopFeedCommentsOpenKey, ref(false));
 const sidebarMounted = ref(!props.mobile);
 const settings = useSettingsStore();
 const serverTabs = ref<ConfigPageTab[]>([]), activeKey = ref(''), error = ref('');

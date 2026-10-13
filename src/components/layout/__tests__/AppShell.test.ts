@@ -2,7 +2,7 @@ import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { computed, defineComponent, inject, nextTick, onMounted, ref } from 'vue';
-import { openDesktopFeedCommentsKey } from '../../../utils/desktopFeedComments';
+import { desktopFeedCommentsOpenKey, openDesktopFeedCommentsKey } from '../../../utils/desktopFeedComments';
 
 const routeState = vi.hoisted(() => ({ controls: false, value: null as any, back: vi.fn(), replace: vi.fn(), history: { back: '/' as string | null } }));
 vi.mock('../../../composables/useDesktopWindow', () => ({ useDesktopWindow: () => ({ showWindowControls: computed(() => routeState.value.controls), usesMacOverlay: ref(false) }) }));
@@ -61,11 +61,13 @@ describe('AppShell', () => {
     Object.defineProperty(window, 'innerWidth', { value: previousWidth, configurable: true, writable: true });
   });
   it('普通列表打开右侧评论保留页面实例，关闭侧栏、设置与导航清除侧栏', async () => {
+    const previousWidth = window.innerWidth;
     Object.defineProperty(window, 'innerWidth', { value: 1400, configurable: true, writable: true });
     const Page = defineComponent({ setup() {
       const openComments = inject(openDesktopFeedCommentsKey)!;
-      return { openComments };
-    }, template: '<button class="open-right-comments" @click="openComments({ id: \'42\', message: \'正文\' })">评论</button>' });
+      const commentsOpen = inject(desktopFeedCommentsOpenKey)!;
+      return { openComments, commentsOpen };
+    }, template: '<div :data-comments-open="commentsOpen"><button class="open-right-comments" @click="openComments({ id: \'42\', message: \'正文\' })">评论</button></div>' });
     const wrapper = mount(AppShell, { slots: { default: Page }, global: { stubs: {
       TopBar: TopBarStub, MainSidebar: MainSidebarStub, PageTabBar: PageTabBarStub,
       NetworkStatusBanner: NetworkStatusBannerStub, MobileTopBar: MobileTopBarStub, MobileBottomNav: MobileBottomNavStub,
@@ -77,22 +79,36 @@ describe('AppShell', () => {
     window.dispatchEvent(new Event('resize'));
     await nextTick();
     const page = wrapper.get('.open-right-comments').element;
+    expect(wrapper.get('[data-comments-open]').attributes('data-comments-open')).toBe('false');
     await wrapper.get('.open-right-comments').trigger('click');
+    expect(wrapper.get('[data-comments-open]').attributes('data-comments-open')).toBe('true');
     expect(wrapper.get('.right-comments-stub').text()).toContain('42');
     expect(wrapper.get('.open-right-comments').element).toBe(page);
     await wrapper.get('.right-comments-stub button').trigger('click');
     expect(wrapper.find('.right-comments-stub').exists()).toBe(false);
+    expect(wrapper.get('[data-comments-open]').attributes('data-comments-open')).toBe('false');
     await wrapper.get('.open-right-comments').trigger('click');
     settings.settings.desktopCommentsOnRight = false;
     await nextTick();
     expect(wrapper.find('.right-comments-stub').exists()).toBe(false);
+    expect(wrapper.get('[data-comments-open]').attributes('data-comments-open')).toBe('false');
     settings.settings.desktopCommentsOnRight = true;
     await nextTick();
     await wrapper.get('.open-right-comments').trigger('click');
     Object.assign(routeState.value, { path: '/discover', fullPath: '/discover' });
     await nextTick();
     expect(wrapper.find('.right-comments-stub').exists()).toBe(false);
+    expect(wrapper.get('[data-comments-open]').attributes('data-comments-open')).toBe('false');
+    Object.assign(routeState.value, { path: '/', fullPath: '/' });
+    await nextTick();
+    await wrapper.get('.open-right-comments').trigger('click');
+    Object.defineProperty(window, 'innerWidth', { value: 900, configurable: true, writable: true });
+    window.dispatchEvent(new Event('resize'));
+    await nextTick();
+    expect(wrapper.find('.right-comments-stub').exists()).toBe(false);
+    expect(wrapper.get('[data-comments-open]').attributes('data-comments-open')).toBe('false');
     wrapper.unmount();
+    Object.defineProperty(window, 'innerWidth', { value: previousWidth, configurable: true, writable: true });
   });
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
   beforeEach(() => {

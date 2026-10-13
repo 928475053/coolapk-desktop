@@ -1,22 +1,24 @@
 <template>
   <div class="settings-page-container">
-    <div class="settings-layout-card">
-      <aside class="settings-sidebar">
+    <div class="settings-layout-card" @keydown.esc.stop="closeCategories">
+      <button v-if="categoriesOpen" type="button" class="settings-category-backdrop" aria-label="关闭设置分类" @click="closeCategories"></button>
+      <!-- 所有平台共用下拉分类，窄窗口也能直接访问全部设置。 -->
+      <header class="settings-navigation">
         <h2 class="settings-title">设置中心</h2>
-        <nav class="settings-menu">
-          <router-link
-            v-for="item in settingsMenu"
-            :key="item.path"
-            :to="item.path"
-            class="settings-menu-item"
-            active-class="is-active"
-          >
-            <i :class="[item.icon, 'menu-icon']"></i>
-            <span>{{ item.label }}</span>
-          </router-link>
-        </nav>
-      </aside>
-
+        <div class="settings-category-picker">
+          <button ref="categoryTrigger" type="button" class="settings-category-trigger" aria-label="设置分类" aria-haspopup="dialog" :aria-expanded="categoriesOpen" aria-controls="settings-category-panel" @click="toggleCategories">
+            <i :class="currentCategory.icon" aria-hidden="true"></i><span>{{ currentCategory.label }}</span><i class="fas fa-chevron-down category-chevron" :class="{ 'is-open': categoriesOpen }" aria-hidden="true"></i>
+          </button>
+          <div v-if="categoriesOpen" id="settings-category-panel" ref="categoryPanel" class="settings-category-panel custom-scrollbar" role="dialog" aria-label="设置分类">
+            <div class="category-panel-heading"><strong>设置分类</strong><span>选择设置栏目</span></div>
+            <nav class="settings-category-grid" aria-label="设置栏目">
+              <button v-for="item in settingsMenu" :key="item.path" type="button" class="settings-category-card" :class="{ 'is-active': currentCategory.path === item.path }" :aria-current="currentCategory.path === item.path ? 'page' : undefined" @click="selectCategory(item.path)">
+                <i :class="item.icon" aria-hidden="true"></i><span>{{ item.label }}</span>
+              </button>
+            </nav>
+          </div>
+        </div>
+      </header>
       <section class="settings-content custom-scrollbar">
         <router-view v-slot="{ Component }">
           <component :is="Component" v-if="Component" />
@@ -27,6 +29,11 @@
 </template>
 
 <script setup lang="ts">
+import { computed, nextTick, onDeactivated, ref, watch } from 'vue';
+import { useAndroidBackButton } from '../../utils/androidBackButton';
+import { useRoute, useRouter } from 'vue-router';
+const route = useRoute();
+const router = useRouter();
 const settingsMenu = [
   { path: '/settings/profile', label: '个人信息', icon: 'fas fa-id-card' },
   { path: '/settings/account', label: '账号与安全', icon: 'fas fa-user-shield' },
@@ -42,146 +49,55 @@ const settingsMenu = [
   { path: '/settings/diagnostics', label: '诊断日志', icon: 'fas fa-file-lines' },
   { path: '/settings/about', label: '关于酷安', icon: 'fas fa-info-circle' },
 ];
+const categoriesOpen = ref(false);
+const categoryTrigger = ref<HTMLButtonElement | null>(null);
+const categoryPanel = ref<HTMLElement | null>(null);
+// 分类卡片和触发按钮始终跟随路由，支持直接打开和前进后退。
+const currentCategory = computed(() => settingsMenu.find(item => item.path === route.path) || settingsMenu[7]!);
+async function toggleCategories() {
+  if (categoriesOpen.value) { closeCategories(); return; }
+  categoriesOpen.value = true;
+  await nextTick();
+  categoryPanel.value?.querySelector<HTMLButtonElement>('.is-active')?.focus({ preventScroll: true });
+}
+function closeCategories() { categoriesOpen.value = false; categoryTrigger.value?.focus({ preventScroll: true }); }
+function selectCategory(path: string) {
+  closeCategories();
+  if (path !== route.path && settingsMenu.some(item => item.path === path)) void router.push(path);
+}
+useAndroidBackButton(() => categoriesOpen.value, closeCategories);
+watch(() => route.fullPath, () => { categoriesOpen.value = false; });
+onDeactivated(() => { categoriesOpen.value = false; });
 </script>
 
 <style scoped>
-.settings-page-container {
-  width: 100%;
-  height: 100%;
-  padding: 0;
-  display: flex;
-  background-color: var(--surface);
-}
-
-.settings-layout-card {
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  background-color: var(--surface);
-  border-radius: 0;
-  border: none;
-  display: flex;
-  overflow: hidden;
-}
-
-.settings-sidebar {
-  width: 170px;
-  background-color: var(--surface);
-  border-right: 1px solid var(--border);
-  padding: var(--space-4) var(--space-3);
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-}
-
-.settings-title {
-  font-size: var(--font-size-title-md);
-  font-weight: var(--font-weight-bold);
-  color: var(--text-primary);
-  margin-bottom: var(--space-5);
-}
-
-.settings-menu {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.settings-menu-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  height: 40px;
-  padding: 0 var(--space-4);
-  border-radius: var(--radius-control);
-  font-size: var(--font-size-sub);
-  color: var(--text-secondary);
-  font-weight: var(--font-weight-medium);
-  text-decoration: none;
-  transition: all var(--duration-fast) var(--ease-default);
-}
-
-.settings-menu-item:hover {
-  background-color: var(--surface-hover);
-  color: var(--text-primary);
-}
-
-.settings-menu-item.is-active {
-  background-color: var(--brand-soft);
-  color: var(--brand-primary);
-  font-weight: var(--font-weight-semibold);
-}
-
-.menu-icon {
-  font-size: 15px;
-  width: 18px;
-  text-align: center;
-}
-
-.settings-content {
-  flex: 1;
-  padding: var(--space-6);
-  overflow-y: auto;
-}
-
+.settings-page-container { width: 100%; height: 100%; min-width: 0; min-height: 0; display: flex; background: var(--surface); }
+.settings-layout-card { flex: 1; min-width: 0; min-height: 0; height: 100%; position: relative; display: flex; flex-direction: column; overflow: hidden; background: var(--surface); }
+.settings-navigation { position: relative; z-index: 12; flex: 0 0 auto; display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 16px 24px; border-bottom: 1px solid var(--border); }
+.settings-title { margin: 0; color: var(--text-primary); font-size: var(--font-size-title-md); font-weight: var(--font-weight-bold); }
+.settings-category-picker { position: relative; width: min(280px, 100%); max-width: 100%; }
+.settings-category-trigger { width: 100%; display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 8px 12px; border: 1px solid var(--border-light); border-radius: 13px; background: var(--surface-hover); color: var(--text-secondary); font: inherit; cursor: pointer; }
+.settings-category-trigger > span { flex: 1; text-align: left; }
+.category-chevron { font-size: 12px; transition: transform var(--duration-fast); }
+.category-chevron.is-open { transform: rotate(180deg); }
+.settings-category-trigger:focus-visible, .settings-category-card:focus-visible { outline: 2px solid var(--brand-primary); outline-offset: -2px; }
+.settings-category-backdrop { position: absolute; inset: 0; z-index: 11; border: 0; background: #0003; cursor: default; }
+.settings-category-panel { position: absolute; top: calc(100% + 8px); left: 0; width: min(460px, calc(100vw - 32px)); max-height: min(480px, calc(var(--app-viewport-height, 100dvh) - 180px)); box-sizing: border-box; padding: 16px 12px 12px; overflow-y: auto; border: 1px solid var(--border-light); border-radius: 13px; background: var(--surface); box-shadow: var(--shadow-lg); }
+.category-panel-heading { display: flex; align-items: center; gap: 10px; margin: 0 4px 16px; color: var(--text-primary); }
+.category-panel-heading strong { font-size: 16px; }
+.category-panel-heading > span { color: var(--text-tertiary); font-size: 12px; }
+.settings-category-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.settings-category-card { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; min-height: 60px; padding: 6px 4px; border: 1px solid var(--border-light); border-radius: 13px; background: var(--surface-hover); color: var(--text-secondary); font: inherit; font-size: 12px; cursor: pointer; }
+.settings-category-card > i { font-size: 18px; }
+.settings-category-card:hover { background: var(--brand-soft); }
+.settings-category-card.is-active { color: var(--brand-primary); background: var(--brand-soft); }
+.settings-content { flex: 1; min-width: 0; min-height: 0; padding: var(--space-6); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; }
+/* 分类名称已由顶部选择按钮展示，内容区不再重复显示同名主标题。 */
+.settings-content :deep(.section-title) { display: none; }
 @media (max-width: 720px) {
-  .settings-page-container,
-  .settings-layout-card {
-    min-width: 0;
-    min-height: 0;
-  }
-
-  .settings-layout-card {
-    flex-direction: column;
-  }
-
-  .settings-sidebar {
-    width: 100%;
-    flex: 0 0 auto;
-    padding: 6px 10px 0;
-    border-right: 0;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .settings-title {
-    display: none;
-  }
-
-  .settings-menu {
-    flex-direction: row;
-    gap: 6px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding-bottom: 8px;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .settings-menu::-webkit-scrollbar {
-    display: none;
-  }
-
-  .settings-menu-item {
-    flex: 0 0 auto;
-    height: 36px;
-    gap: 7px;
-    padding: 0 12px;
-    font-size: 12px;
-    white-space: nowrap;
-  }
-
-  .menu-icon {
-    width: 14px;
-    font-size: 13px;
-  }
-
-  .settings-content {
-    width: 100%;
-    min-width: 0;
-    min-height: 0;
-    padding: 16px;
-    overflow-x: hidden;
-    overscroll-behavior: contain;
-  }
+  .settings-navigation { padding: 10px 16px; }
+  .settings-title { display: none; }
+  .settings-category-picker, .settings-category-panel { width: 100%; }
+  .settings-content { padding: 16px; }
 }
 </style>

@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
+import { createMemoryHistory, createRouter } from 'vue-router';
 import { APP_VERSION } from '../../../constants/version';
 
 const mocks = vi.hoisted(() => ({
@@ -316,14 +317,38 @@ describe('设置页面交互', () => {
     expect(settings.settings.networkProxyUrl).toBe('');
   });
 
-  it('设置布局展示全部设置分类', () => {
-    const { wrapper } = mountPage(SettingsLayout);
-    expect(wrapper.findAll('.settings-menu-item')).toHaveLength(13);
+  it('设置下拉菜单包含全部分类，切换分类与返回时同步当前页面', async () => {
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/settings/:category', component: { template: '<div />' } }] });
+    await router.push('/settings/appearance');
+    await router.isReady();
+    const wrapper = mount(SettingsLayout, { global: { plugins: [createPinia(), router], stubs: { 'router-view': RouterViewStub } } });
+    await wrapper.get('.settings-category-trigger').trigger('click');
+    expect(wrapper.findAll('.settings-category-card')).toHaveLength(13);
     expect(wrapper.text()).toContain('网络代理');
     expect(wrapper.text()).toContain('诊断日志');
     expect(wrapper.text()).toContain('账号与安全');
     expect(wrapper.text()).toContain('个人信息');
     expect(wrapper.text()).toContain('设备信息');
+    const trigger = wrapper.get('.settings-category-trigger');
+    expect(trigger.text()).toContain('外观设置');
+    expect(wrapper.get('.settings-category-card.is-active').text()).toContain('外观设置');
+    await wrapper.findAll('.settings-category-card').find(card => card.text() === '诊断日志')!.trigger('click');
+    await flushPromises();
+    expect(router.currentRoute.value.path).toBe('/settings/diagnostics');
+    await router.push('/settings/about');
+    await flushPromises();
+    expect(trigger.text()).toContain('关于酷安');
+    router.back();
+    await flushPromises();
+    expect(trigger.text()).toContain('诊断日志');
+    expect(wrapper.find('.settings-category-panel').exists()).toBe(false);
+    await trigger.trigger('click');
+    await wrapper.get('.settings-category-backdrop').trigger('click');
+    expect(wrapper.find('.settings-category-panel').exists()).toBe(false);
+    await trigger.trigger('click');
+    await wrapper.get('.settings-category-panel').trigger('keydown', { key: 'Escape' });
+    expect(trigger.attributes('aria-expanded')).toBe('false');
+    wrapper.unmount();
   });
 
   it('快捷键页展示全部快捷键并可设置私信回车行为', async () => {

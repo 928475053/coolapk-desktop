@@ -37,3 +37,12 @@ export function useMobileLayout() {
   const width = useViewportWidth();
   return computed(() => isMobileLayout(width.value, isTouchMobilePlatform(), settings.settings.disableAutoMobileMode));
 }
+
+/** 分栏详情页需要的最小宽度。窄于它时详情页回退单栏。 */
+export const SPLIT_MIN_WIDTH = 1000;
+
+/** 当前窗口是否宽到足以并排两栏。 */
+export function useWideSplitLayout() {
+  const width = useViewportWidth();
+  return computed(() => width.value >= SPLIT_MIN_WIDTH);
+}

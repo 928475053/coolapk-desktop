@@ -567,6 +567,22 @@ async fn set_android_system_bar_theme(app: tauri::AppHandle, dark: bool, profile
     Ok(())
 }
 
+#[tauri::command]
+async fn log_android_runtime_info(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        let raw = coolapk::commands::call_android_update_method(&app, "getRuntimeInfo", String::new()).await?;
+        let info: serde_json::Value = serde_json::from_str(&raw).map_err(|_| "Android 环境信息格式错误")?;
+        let field = |key: &str| info.get(key).and_then(serde_json::Value::as_str).unwrap_or("unavailable");
+        tracing::info!("runtime.android android_release={} android_sdk={} manufacturer={} model={} webview_package={} webview_version={}",
+            field("android_release"), info.get("android_sdk").and_then(serde_json::Value::as_u64).unwrap_or(0),
+            field("manufacturer"), field("model"), field("webview_package"), field("webview_version"));
+    }
+    #[cfg(not(target_os = "android"))]
+    let _ = app;
+    Ok(())
+}
+
 #[cfg(windows)]
 fn choose_windows_font_family(
     owner: windows::Win32::Foundation::HWND,
@@ -1429,6 +1445,7 @@ pub fn run() {
             set_window_theme,
             system_theme::get_linux_system_theme,
             set_android_system_bar_theme,
+            log_android_runtime_info,
             pick_font_family,
             set_live_tile_enabled,
             update_desktop_tile,

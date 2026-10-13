@@ -174,7 +174,7 @@ import { showToast } from '../../utils/toast';
 import { showLivePhotoCodecPrompt } from '../../utils/livePhotoCodecPrompt';
 import { useAndroidBackButton } from '../../utils/androidBackButton';
 import { normalizeFeedImageItems, resolveLivePhotoVideo, type FeedImageItem } from '../../utils/livePhoto';
-import { detectLiveVideoCodec, getLiveVideoCodecSupport, waitForDecodedVideoFrame, type LiveVideoCodec } from '../../utils/liveVideoCodec';
+import { detectLiveVideoCodec, getLiveVideoCodecSupport, waitForDecodedVideoFrame, logLiveVideoState, type LiveVideoCodec } from '../../utils/liveVideoCodec';
 
 const appStore = useAppStore();
 const showShortcutHints = useShortcutHints();
@@ -465,8 +465,11 @@ async function playLiveVideo(forceUnsupportedNotice = false): Promise<boolean> {
     const hasFrame = await waitForDecodedVideoFrame(video);
     if (playbackSequence !== livePlaybackSequence || video !== liveVideoRef.value) return false;
     liveVideoPlaying.value = hasFrame;
+    logLiveVideoState(hasFrame ? 'viewer_playing' : 'viewer_frame_failed', video);
     return hasFrame;
-  } catch {
+  } catch (error) {
+    if (playbackSequence !== livePlaybackSequence || video !== liveVideoRef.value) return false;
+    logLiveVideoState('viewer_play_failed', video, error);
     liveVideoPlaying.value = false;
     // 自动播放策略拒绝时保留静态封面，用户点击播放按钮仍可重试。
     return false;
@@ -537,7 +540,9 @@ async function retryLiveVideoThroughResolver() {
 
 async function handleLiveVideoError(event: Event) {
   // 切换地址时旧 video 节点可能晚到一步派发 error，不能覆盖新解析结果。
-  if (event.target !== liveVideoRef.value) return;
+  const video = liveVideoRef.value;
+  if (!video || event.target !== video) return;
+  logLiveVideoState('viewer_media_failed', video);
   const codecCheck = await checkLiveVideoCodec(liveVideoUrl.value);
   if (event.target !== liveVideoRef.value) return;
   if (codecCheck.unsupported && codecCheck.codec) {

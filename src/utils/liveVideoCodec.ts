@@ -1,3 +1,5 @@
+import { logDiagnostic } from './diagnosticLogger';
+
 export interface LiveVideoCodec {
   id: string;
   name: string;
@@ -193,11 +195,24 @@ export async function getLiveVideoCodecSupport(codec: LiveVideoCodec): Promise<L
       video: { contentType, width: 1920, height: 1080, bitrate: 2_000_000, framerate: 30 },
     });
     const canPlay = document.createElement('video').canPlayType(contentType);
+    // 官方 Android 使用原生播放器实际准备媒体；WebView 的能力查询只能作为线索。
+    const android = /android/i.test(navigator.userAgent || '');
+    logDiagnostic('info', 'live-photo', 'codec_check',
+      `codec=${codec.id} mime_codec=${codec.mimeCodec} supported=${mediaCapabilities.supported} can_play=${canPlay || 'empty'} android=${android} probe_width=1920 probe_height=1080 probe_fps=30`);
     if (mediaCapabilities.supported) return 'supported';
+    if (android) return 'unknown';
     return canPlay ? 'unknown' : 'unsupported';
   } catch {
     return 'unknown';
   }
+}
+
+/** 仅记录播放器状态，不记录地址、照片、动态 ID 或原始异常文本。 */
+export function logLiveVideoState(event: string, video: HTMLVideoElement, error?: unknown): void {
+  const reason = error instanceof Error && ['NotAllowedError', 'NotSupportedError', 'AbortError'].includes(error.name)
+    ? error.name : error ? 'other' : 'none';
+  logDiagnostic(event.includes('failed') ? 'warn' : 'info', 'live-photo', event,
+    `media_error=${video.error?.code || 0} ready_state=${video.readyState} network_state=${video.networkState} width=${video.videoWidth} height=${video.videoHeight} paused=${video.paused} reason=${reason}`);
 }
 
 export function hasDecodedVideoFrame(video: HTMLVideoElement): boolean {

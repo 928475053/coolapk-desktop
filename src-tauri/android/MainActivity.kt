@@ -32,6 +32,20 @@ import androidx.core.view.WindowInsetsCompat
 import java.io.File
 
 class MainActivity : TauriActivity() {
+    @Keep
+    fun getRuntimeInfo(unused: String): String {
+        val webview = androidx.webkit.WebViewCompat.getCurrentWebViewPackage(this)
+        fun safe(value: String?): String = (value ?: "unavailable").replace(Regex("[^A-Za-z0-9._ -]"), "_").take(96)
+        return org.json.JSONObject().apply {
+            put("android_release", safe(Build.VERSION.RELEASE))
+            put("android_sdk", Build.VERSION.SDK_INT)
+            put("manufacturer", safe(Build.MANUFACTURER))
+            put("model", safe(Build.MODEL))
+            put("webview_package", safe(webview?.packageName))
+            put("webview_version", safe(webview?.versionName))
+        }.toString()
+    }
+
     private fun applySystemBarTheme(dark: Boolean, profile: Boolean = false, dimmed: Boolean = false) {
         // 个人页背景与网页一致；吸顶或离开个人页后恢复普通顶栏颜色。
         val surface = if (profile) { if (dark) Color.rgb(0x0e, 0x10, 0x12) else Color.rgb(0xf2, 0xf2, 0xf6) } else { if (dark) Color.rgb(0x18, 0x1b, 0x1e) else Color.WHITE }

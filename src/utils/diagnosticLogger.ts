@@ -204,6 +204,11 @@ export function installDiagnosticLogging(): void {
   // 只记录浏览器内核版本和图标显示方式，不采集完整 UA 中的设备型号。
   const webviewVersion = navigator.userAgent.match(/(?:Chrome|Version)\/([\d.]+)/)?.[1] || 'unknown';
   logDiagnostic('info', 'app', 'renderer', `webview_version=${webviewVersion} icons=${document.documentElement.dataset.iconRenderer || 'font'} svg_mask_supported=${typeof CSS !== 'undefined' && (CSS.supports('mask-image', 'url("data:image/svg+xml,<svg/>")') || CSS.supports('-webkit-mask-image', 'url("data:image/svg+xml,<svg/>")'))}`);
+  if (/android/i.test(navigator.userAgent)) {
+    void invoke('log_android_runtime_info').catch(() => {
+      logDiagnostic('warn', 'app', 'android_environment_unavailable');
+    });
+  }
   installPerformanceDiagnostics((event, detail) => logDiagnostic('info', 'performance', event, detail));
   let viewportTimer: ReturnType<typeof setTimeout> | undefined;
   const logViewport = () => {

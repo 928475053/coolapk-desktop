@@ -61,6 +61,7 @@ import { getHdImageUrl } from '../../utils/image';
 import { normalizeResourceUrl } from '../../utils/resourceCache';
 import { isCoarsePointer } from '../../utils/platform';
 import { observeResourceVisibility } from '../../utils/resourceVisibility';
+import { logLiveVideoState } from '../../utils/liveVideoCodec';
 import {
   resolveLivePhotoVideo,
   type FeedImageItem,
@@ -117,11 +118,14 @@ function forwardLoad(event: Event) {
 
 async function playPreview() {
   if (!isHovered.value || !videoRef.value || videoError.value) return;
+  const video = videoRef.value;
   videoRef.value.muted = true;
   videoRef.value.loop = true;
   try {
     await videoRef.value.play();
-  } catch {
+  } catch (error) {
+    if (!isHovered.value || video !== videoRef.value) return;
+    logLiveVideoState('preview_play_failed', video, error);
     // 浏览器自动播放策略拒绝时保留高清静态封面，不打断图片浏览。
     isPlaying.value = false;
   }
@@ -239,7 +243,9 @@ function handleMouseLeave() {
 
 function handleVideoError(event: Event) {
   // 切换地址时旧 video 节点可能晚到一步派发 error，不能覆盖新解析结果。
-  if (event.target !== videoRef.value) return;
+  const video = videoRef.value;
+  if (!video || event.target !== video) return;
+  logLiveVideoState('preview_media_failed', video);
   videoError.value = true;
   isPlaying.value = false;
   // imageUriList 里的直链失效时，重新走一次 APK 的 showVideo 解析。

@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { detectLiveVideoCodec, getLiveVideoCodecSupport, hasDecodedVideoFrame, type LiveVideoCodec } from '../liveVideoCodec';
+import { detectLiveVideoCodec, getLiveVideoCodecSupport, hasDecodedVideoFrame, logLiveVideoState, type LiveVideoCodec } from '../liveVideoCodec';
+import { logDiagnostic } from '../diagnosticLogger';
+vi.mock('../diagnosticLogger', () => ({ logDiagnostic: vi.fn() }));
 
 function box(type: string, payload: Uint8Array = new Uint8Array()): Uint8Array {
   const result = new Uint8Array(8 + payload.length);
@@ -82,6 +84,22 @@ describe('WebView2 视频编码能力判断', () => {
   it('能力 API 不可用时保持未知，不提示缺少解码器', async () => {
     vi.stubGlobal('navigator', {});
     await expect(getLiveVideoCodecSupport(hevc)).resolves.toBe('unknown');
+  });
+
+  it('Android 能力查询拒绝时仍允许实际播放，不把 WebView 结果当作手机不支持', async () => {
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 (Linux; Android 12)', mediaCapabilities: { decodingInfo: vi.fn().mockResolvedValue({ supported: false }) } });
+    vi.stubGlobal('document', { createElement: vi.fn().mockReturnValue({ canPlayType: vi.fn().mockReturnValue('') }) });
+    await expect(getLiveVideoCodecSupport(hevc)).resolves.toBe('unknown');
+  });
+
+  it('播放失败日志只保留状态和错误类型，不包含媒体地址或错误正文', () => {
+    const video = { error: { code: 4 }, readyState: 0, networkState: 3, videoWidth: 0, videoHeight: 0, paused: true,
+      src: 'https://private.example/photo?token=secret' } as unknown as HTMLVideoElement;
+    const error = new Error('private video url and token=secret');
+    error.name = 'NotSupportedError';
+    logLiveVideoState('viewer_play_failed', video, error);
+    expect(logDiagnostic).toHaveBeenCalledWith('warn', 'live-photo', 'viewer_play_failed',
+      'media_error=4 ready_state=0 network_state=3 width=0 height=0 paused=true reason=NotSupportedError');
   });
 
   it('只有尺寸和已解码帧都有效时才确认播放', () => {

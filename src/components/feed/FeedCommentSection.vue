@@ -37,12 +37,14 @@
       </button>
     </div>
 
+    <!-- 回复时保留顶部输入区的占位，浮层打开不会挤动当前楼层。 -->
+    <div v-if="floatingReplyComposer" :style="{ height: `${inlineComposerHeight}px` }" aria-hidden="true"></div>
     <!-- 评论发表输入框组件 -->
-    <Teleport to="body" :disabled="!officialDetail">
-    <div v-if="!officialDetail || composerOpen" :class="officialDetail ? 'official-composer-layer' : 'inline-composer-layer'">
-    <div v-if="officialDetail" class="official-composer-backdrop" @click="composerOpen = false"></div>
+    <Teleport to="body" :disabled="!floatingComposer">
+    <div v-if="!floatingComposer || composerOpen" :class="floatingComposer ? ['official-composer-layer', { 'desktop-reply-composer': !officialDetail }] : 'inline-composer-layer'">
+    <div v-if="floatingComposer" class="official-composer-backdrop" @click="closeComposer"></div>
     <div class="comment-composer-box">
-      <button v-if="officialDetail" type="button" class="official-composer-close" aria-label="关闭评论输入" @click="composerOpen = false"><i class="fas fa-xmark"></i></button>
+      <button v-if="floatingComposer" type="button" class="official-composer-close" aria-label="关闭评论输入" @click="closeComposer"><i class="fas fa-xmark"></i></button>
       <!-- 针对楼层的回复目标提示栏 -->
       <div v-if="replyTargetUser" class="comment-reply-target-bar">
         <span class="reply-target-text">
@@ -105,7 +107,7 @@
       />
 
       <!-- 工具栏与表情面板 -->
-      <div v-if="officialDetail && showEmojiPicker" ref="officialEmojiPanelRef" class="official-composer-emoji" @click.stop>
+      <div v-if="floatingComposer && showEmojiPicker" ref="officialEmojiPanelRef" class="official-composer-emoji" @click.stop>
         <EmojiPanel :key="String(feedId)" :disabled="sending" :selected-urls="images.flatMap(image => image.url ? [image.url] : [])" @select="insertEmoji" @picture="selectFavoritePicture" />
       </div>
       <div class="comment-composer-toolbar">
@@ -126,7 +128,7 @@
 
             <!-- 官方分类表情浮层 -->
             <div
-              v-if="showEmojiPicker && !officialDetail"
+              v-if="showEmojiPicker && !floatingComposer"
               class="emoji-picker-popover custom-scrollbar"
               @click.stop
             >
@@ -556,6 +558,7 @@ import {
   getCommentLocation,
   getCommentUserLevel,
   getCommentVerifyTitle,
+  getReplyData,
   getReplyPageCursor,
   hasMoreReplyPages,
   mergeReplies,
@@ -642,14 +645,17 @@ const inputMsg = ref('');
 const sending = ref(false);
 const inputRef = ref<HTMLDivElement | null>(null);
 const composerOpen = ref(false);
+const floatingReplyComposer = ref(false);
+const inlineComposerHeight = ref(0);
+const floatingComposer = computed(() => props.officialDetail || floatingReplyComposer.value);
 const systemBarDimOwner = Symbol('comment-composer');
 watch([composerOpen, () => props.officialDetail], ([open, official]) => {
   settingsStore.setAndroidSystemBarDimmed(systemBarDimOwner, Boolean(open && official));
 }, { flush: 'sync' });
 onUnmounted(() => { settingsStore.setAndroidSystemBarDimmed(systemBarDimOwner, false); });
-async function openComposer() { if (!authStore.isLoggedIn) { authStore.openLoginModal(); return; } composerOpen.value = true; await nextTick(); syncMsgToEditor(inputMsg.value); inputRef.value?.focus(); }
+async function openComposer() { if (!authStore.isLoggedIn) { authStore.openLoginModal(); return; } composerOpen.value = true; await nextTick(); syncMsgToEditor(inputMsg.value); inputRef.value?.focus({ preventScroll: true }); }
 watch(composerOpen, async visible => { if (visible) { await nextTick(); syncMsgToEditor(inputMsg.value); } });
-onDeactivated(() => { composerOpen.value = false; });
+onDeactivated(closeComposer);
 defineExpose({ openComposer });
 const replyTargetUser = ref('');
 const replyTargetId = ref('');
@@ -1342,7 +1348,7 @@ function insertEmoji(name: string) {
     return;
   }
 
-  el.focus();
+  el.focus({ preventScroll: true });
   const sel = window.getSelection();
   const img = isSystemEmoji(name) ? document.createTextNode(name) : createEmojiImg(name, filename);
 
@@ -1504,17 +1510,45 @@ function buildFinalMessage(text: string): string {
 
 function setReplyTarget(username?: string, replyId?: string | number) {
   if (!username) return;
+  // 桌面回复使用浮层输入，避免浏览器把顶部编辑框滚入视口。
+  if (!props.officialDetail && !floatingReplyComposer.value) {
+    inlineComposerHeight.value = sectionRef.value?.querySelector<HTMLElement>('.inline-composer-layer')?.getBoundingClientRect().height || 0;
+    floatingReplyComposer.value = true;
+  }
   composerOpen.value = true;
   replyTargetUser.value = username;
   replyTargetId.value = replyId ? String(replyId) : '';
   nextTick(() => {
-    inputRef.value?.focus();
+    inputRef.value?.focus({ preventScroll: true });
   });
 }
 
+function closeComposer() { composerOpen.value = false; clearReplyTarget(); }
+
 function clearReplyTarget() {
+  if (floatingReplyComposer.value) { floatingReplyComposer.value = false; composerOpen.value = false; }
   replyTargetUser.value = '';
   replyTargetId.value = '';
+}
+
+/** 只合并回复所属楼层，不清空主评论和已加载的楼中楼分页。 */
+async function updateRepliedFloor(feedId: string, replyId: string, returnedReply: any) {
+  if (String(props.feedId) !== feedId) return;
+  const floor = nestedComments.value.find(item => String(item.id) === replyId || getSubReplyRows(item).some(sub => String(sub.id) === replyId));
+  if (!floor) return;
+  const floorId = subReplyFloorId(floor);
+  try {
+    const hasReplyData = returnedReply && !Array.isArray(returnedReply) && returnedReply.id;
+    const rows = hasReplyData ? [returnedReply] : getReplyData(await CoolapkTauriAPI.getSubReplies(feedId, floorId, 1, { lastItem: '' }));
+    if (String(props.feedId) !== feedId) return;
+    const state = ensureSubReplyState(floor);
+    if (!state) return;
+    // 成功返回的回复直接追加；接口未返回回复内容时，仅补取当前楼层第一页。
+    updateSubReplyState(floorId, { items: mergeSubReplyRows(state.items, rows) });
+    expandedFloorIds.value = new Set([...expandedFloorIds.value, floorId]);
+  } catch (error) {
+    logDiagnostic('warn', 'comment', 'reply_floor_refresh_failed', summarizeDiagnosticError(error));
+  }
 }
 
 function handleClickOutside(event: MouseEvent) {
@@ -1940,7 +1974,9 @@ async function handleSend() {
       showEmojiPicker.value = false;
       showToast('评论发表成功');
       emit('send-comment', rawMsg);
-      emit('retry-comments');
+      // 楼中楼回复只补齐当前楼层，保留主评论分页和已展开的楼层。
+      if (targetRid) await updateRepliedFloor(String(currentFeedId), targetRid, res.data);
+      else emit('retry-comments');
     } else {
       showToast(res?.message || '评论发表失败', 'error');
     }
@@ -2008,6 +2044,7 @@ async function handleSend() {
 .official-composer-layer .comment-media-preview { flex-shrink: 0; max-height: 76px; overflow-y: auto; }
 .official-composer-emoji { height: min(320px, calc(var(--app-viewport-height, 100dvh) * .4)); min-height: 0; flex-shrink: 1; margin-top: 8px; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
 .official-composer-emoji :deep(.categorized-emoji-panel) { height: 100%; }
+.desktop-reply-composer .comment-composer-box { width: min(640px, 100%); align-self: center; }
 .official-composer-backdrop { position: absolute; inset: 0; background: #0006; pointer-events: auto; }
 .official-composer-close { position: absolute; right: 10px; top: 4px; width: 30px; height: 30px; border: 0; background: transparent; color: var(--text-secondary); font-size: 18px; }
 .feed-comment-section {
@@ -2125,7 +2162,8 @@ async function handleSend() {
   transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
 }
 
-.comment-composer-box:focus-within {
+/* 绿色聚焦边框只用于内联输入框，浮层保留自身的普通边框和阴影。 */
+.inline-composer-layer .comment-composer-box:focus-within {
   border-color: var(--brand-primary);
   box-shadow: 0 0 0 2px var(--brand-soft);
 }

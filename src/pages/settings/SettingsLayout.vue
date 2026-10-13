@@ -1,9 +1,16 @@
 <template>
   <div class="settings-page-container">
-    <div class="settings-layout-card" @keydown.esc.stop="closeCategories">
-      <button v-if="categoriesOpen" type="button" class="settings-category-backdrop" aria-label="关闭设置分类" @click="closeCategories"></button>
-      <!-- 所有平台共用下拉分类，窄窗口也能直接访问全部设置。 -->
-      <header class="settings-navigation">
+    <div class="settings-layout-card" :class="{ 'is-mobile': mobileLayout }" @keydown.esc.stop="closeCategories">
+      <aside v-if="!mobileLayout" class="settings-sidebar">
+        <h2 class="settings-title">设置中心</h2>
+        <nav class="settings-menu" aria-label="设置栏目">
+          <router-link v-for="item in settingsMenu" :key="item.path" :to="item.path" class="settings-menu-item" active-class="is-active">
+            <i :class="[item.icon, 'menu-icon']" aria-hidden="true"></i><span>{{ item.label }}</span>
+          </router-link>
+        </nav>
+      </aside>
+      <button v-if="mobileLayout && categoriesOpen" type="button" class="settings-category-backdrop" aria-label="关闭设置分类" @click="closeCategories"></button>
+      <header v-if="mobileLayout" class="settings-navigation">
         <h2 class="settings-title">设置中心</h2>
         <div class="settings-category-picker">
           <button ref="categoryTrigger" type="button" class="settings-category-trigger" aria-label="设置分类" aria-haspopup="dialog" :aria-expanded="categoriesOpen" aria-controls="settings-category-panel" @click="toggleCategories">
@@ -32,8 +39,10 @@
 import { computed, nextTick, onDeactivated, ref, watch } from 'vue';
 import { useAndroidBackButton } from '../../utils/androidBackButton';
 import { useRoute, useRouter } from 'vue-router';
+import { useMobileLayout } from '../../composables/useOfficialMobileFeedDetail';
 const route = useRoute();
 const router = useRouter();
+const mobileLayout = useMobileLayout();
 const settingsMenu = [
   { path: '/settings/profile', label: '个人信息', icon: 'fas fa-id-card' },
   { path: '/settings/account', label: '账号与安全', icon: 'fas fa-user-shield' },
@@ -67,12 +76,21 @@ function selectCategory(path: string) {
 }
 useAndroidBackButton(() => categoriesOpen.value, closeCategories);
 watch(() => route.fullPath, () => { categoriesOpen.value = false; });
+watch(mobileLayout, () => { categoriesOpen.value = false; });
 onDeactivated(() => { categoriesOpen.value = false; });
 </script>
 
 <style scoped>
 .settings-page-container { width: 100%; height: 100%; min-width: 0; min-height: 0; display: flex; background: var(--surface); }
-.settings-layout-card { flex: 1; min-width: 0; min-height: 0; height: 100%; position: relative; display: flex; flex-direction: column; overflow: hidden; background: var(--surface); }
+.settings-layout-card { flex: 1; min-width: 0; min-height: 0; height: 100%; position: relative; display: flex; overflow: hidden; background: var(--surface); }
+.settings-layout-card.is-mobile { flex-direction: column; }
+.settings-sidebar { width: 170px; background: var(--surface); border-right: 1px solid var(--border); padding: var(--space-4) var(--space-3); display: flex; flex-direction: column; flex-shrink: 0; }
+.settings-sidebar .settings-title { margin-bottom: var(--space-5); }
+.settings-menu { display: flex; flex-direction: column; gap: var(--space-1); }
+.settings-menu-item { display: flex; align-items: center; gap: var(--space-3); height: 40px; padding: 0 var(--space-4); border-radius: var(--radius-control); font-size: var(--font-size-sub); color: var(--text-secondary); font-weight: var(--font-weight-medium); text-decoration: none; transition: all var(--duration-fast) var(--ease-default); }
+.settings-menu-item:hover { background: var(--surface-hover); color: var(--text-primary); }
+.settings-menu-item.is-active { background: var(--brand-soft); color: var(--brand-primary); font-weight: var(--font-weight-semibold); }
+.menu-icon { font-size: 15px; width: 18px; text-align: center; }
 .settings-navigation { position: relative; z-index: 12; flex: 0 0 auto; display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 16px 24px; border-bottom: 1px solid var(--border); }
 .settings-title { margin: 0; color: var(--text-primary); font-size: var(--font-size-title-md); font-weight: var(--font-weight-bold); }
 .settings-category-picker { position: relative; width: min(280px, 100%); max-width: 100%; }
@@ -92,12 +110,10 @@ onDeactivated(() => { categoriesOpen.value = false; });
 .settings-category-card:hover { background: var(--brand-soft); }
 .settings-category-card.is-active { color: var(--brand-primary); background: var(--brand-soft); }
 .settings-content { flex: 1; min-width: 0; min-height: 0; padding: var(--space-6); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; }
-/* 分类名称已由顶部选择按钮展示，内容区不再重复显示同名主标题。 */
-.settings-content :deep(.section-title) { display: none; }
-@media (max-width: 720px) {
-  .settings-navigation { padding: 10px 16px; }
-  .settings-title { display: none; }
-  .settings-category-picker, .settings-category-panel { width: 100%; }
-  .settings-content { padding: 16px; }
-}
+/* 移动模式由分类按钮展示名称；PC 模式保留页面标题。 */
+.is-mobile .settings-content :deep(.section-title) { display: none; }
+.is-mobile .settings-navigation { padding: 10px 16px; }
+.is-mobile .settings-title { display: none; }
+.is-mobile .settings-category-picker, .is-mobile .settings-category-panel { width: 100%; }
+.is-mobile .settings-content { padding: 16px; }
 </style>

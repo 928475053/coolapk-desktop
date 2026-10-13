@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import { APP_VERSION } from '../../../constants/version';
@@ -80,6 +80,8 @@ function mountPage(component: Parameters<typeof mount>[0]) {
 }
 
 describe('设置页面交互', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
   beforeEach(() => {
     localStorage.clear();
     sessionStorage.clear();
@@ -317,7 +319,41 @@ describe('设置页面交互', () => {
     expect(settings.settings.networkProxyUrl).toBe('');
   });
 
-  it('设置下拉菜单包含全部分类，切换分类与返回时同步当前页面', async () => {
+  it('PC 设置保留左侧分类栏，窄窗口禁用手机模式后仍使用 PC 布局', async () => {
+    vi.stubGlobal('innerWidth', 1024);
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/settings/:category', component: { template: '<div />' } }] });
+    await router.push('/settings/appearance');
+    await router.isReady();
+    const pinia = createPinia();
+    const settings = useSettingsStore(pinia);
+    const wrapper = mount(SettingsLayout, { global: { plugins: [pinia, router], stubs: { 'router-view': RouterViewStub } } });
+    expect(wrapper.findAll('.settings-menu-item')).toHaveLength(13);
+    expect(wrapper.get('.settings-sidebar .settings-title').text()).toBe('设置中心');
+    expect(wrapper.get('.settings-menu-item.is-active').text()).toBe('外观设置');
+    expect(wrapper.find('.settings-category-trigger').exists()).toBe(false);
+    await wrapper.get('a[href="/settings/diagnostics"]').trigger('click');
+    await flushPromises();
+    expect(router.currentRoute.value.path).toBe('/settings/diagnostics');
+    expect(wrapper.get('.settings-menu-item.is-active').text()).toBe('诊断日志');
+
+    vi.stubGlobal('innerWidth', 390);
+    window.dispatchEvent(new Event('resize'));
+    await flushPromises();
+    await wrapper.get('.settings-category-trigger').trigger('click');
+    settings.settings.disableAutoMobileMode = true;
+    await flushPromises();
+    expect(wrapper.find('.settings-sidebar').exists()).toBe(true);
+    expect(wrapper.find('.settings-category-trigger').exists()).toBe(false);
+    expect(wrapper.find('.settings-category-backdrop').exists()).toBe(false);
+    expect(wrapper.get('.settings-layout-card').classes()).not.toContain('is-mobile');
+    settings.settings.disableAutoMobileMode = false;
+    await flushPromises();
+    expect(wrapper.find('.settings-category-panel').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('移动设置下拉菜单包含全部分类，切换分类与返回时同步当前页面', async () => {
+    vi.stubGlobal('innerWidth', 390);
     const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/settings/:category', component: { template: '<div />' } }] });
     await router.push('/settings/appearance');
     await router.isReady();

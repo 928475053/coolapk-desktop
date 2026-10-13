@@ -123,6 +123,16 @@ describe('discovery dynamic configuration', () => {
     expect(decodeDiscoveryRouteSegment('%E0%A4%A')).toBe('%E0%A4%A');
   });
 
+  it('新机集合的明确列表地址优先于外层卡片 ID，数字产品仍进入详情', () => {
+    for (const prefix of ['', '#']) {
+      for (const endpoint of ['releasedProductList', 'unreleasedProductList']) {
+        const target = `${prefix}/product/${endpoint}?category=phone`;
+        expect(resolveDiscoveryRoute({ id: 100, title: '新机', entityType: 'card', entityTemplate: 'productTimelineListCard', url: target })).toEqual({ kind: 'data-list', target, title: '新机' });
+      }
+      expect(resolveDiscoveryRoute({ entityType: 'product', id: 5457, url: `${prefix}/product/5457` })).toMatchObject({ kind: 'native', target: '/product/5457' });
+    }
+  });
+
   it('identifies feeds and produces stable entity keys', () => {
     expect(isFeedEntity({ entityTemplate: 'feedCard' })).toBe(true);
     expect(getEntityKey({ entityId: 42 }, 0)).toBe('42');

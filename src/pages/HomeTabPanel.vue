@@ -1516,7 +1516,8 @@ function navigatePageEntity(target: string, title: string) {
   const user = clean.match(/^\/user\/([^/?#]+)/i);
   const feed = clean.match(/^\/feed\/([^/?#]+)/i);
   const app = clean.match(/^\/(?:app|apk)\/([^/?#]+)/i);
-  const product = clean.match(/^\/product\/([^/?#]+)/i);
+  // 产品列表接口也使用 /product/ 前缀，只有数字 ID 才能跳转产品详情。
+  const product = clean.match(/^\/product\/(\d+)(?=[/?#]|$)/i);
   const topic = clean.match(/^\/topic\/([^/?#]+)/i);
   const dyh = clean.match(/^\/dyh\/([^/?#]+)/i);
   const live = clean.match(/^\/live\/([^/?#]+)/i);

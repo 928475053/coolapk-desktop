@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { defineComponent, h } from 'vue';
+import { defineComponent, h, ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import { usePersistedColumnResize } from '../usePersistedColumnResize';
 
@@ -52,6 +52,31 @@ describe('共用分栏宽度调节与记忆', () => {
     expect(localStorage.getItem('test-column-width')).toBe('460');
     controls.resetWidth();
     expect(localStorage.getItem('test-column-width')).toBe('450');
+    wrapper.unmount();
+  });
+  it('自适应默认宽度随容器更新，手动调节后保持记忆，复位后恢复比例', () => {
+    const available = ref(1200);
+    let controls!: ReturnType<typeof usePersistedColumnResize>;
+    const wrapper = mount(defineComponent({ setup() {
+      controls = usePersistedColumnResize({ storageKey: 'responsive-width', defaultWidth: () => available.value * .4,
+        limits: () => ({ min: 280, max: Math.min(640, available.value - 420) }), direction: -1, responsiveDefault: true });
+      return () => h('div');
+    } }));
+    expect(controls.visibleWidth.value).toBe(480);
+    available.value = 1500;
+    expect(controls.visibleWidth.value).toBe(600);
+    controls.resizeWithKeyboard(new KeyboardEvent('keydown', { key: 'ArrowLeft' }));
+    expect(localStorage.getItem('responsive-width')).toBe('610');
+    available.value = 800;
+    expect(controls.visibleWidth.value).toBe(380);
+    expect(localStorage.getItem('responsive-width')).toBe('610');
+    available.value = 1500;
+    expect(controls.visibleWidth.value).toBe(610);
+    controls.resetWidth();
+    expect(localStorage.getItem('responsive-width')).toBeNull();
+    expect(controls.visibleWidth.value).toBe(600);
+    available.value = 1200;
+    expect(controls.visibleWidth.value).toBe(480);
     wrapper.unmount();
   });
 });

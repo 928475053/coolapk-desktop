@@ -1,5 +1,5 @@
 import { mount, flushPromises } from '@vue/test-utils';
-import { defineComponent } from 'vue';
+import { defineComponent, ref } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 const api = vi.hoisted(() => ({ config: vi.fn() }));
@@ -7,6 +7,7 @@ vi.mock('../../../api/coolapk', () => ({ CoolapkTauriAPI: { getTabConfig: api.co
 import MobileHomePager from '../MobileHomePager.vue';
 import HomePage from '../../../pages/HomePage.vue';
 import { useSettingsStore } from '../../../stores/settings';
+import { desktopFeedCommentsOpenKey } from '../../../utils/desktopFeedComments';
 const Panel = defineComponent({ name: 'HomeTabPanel', props: ['tabKey', 'selected'], template: '<div class="panel-stub"><div class="nested" style="overflow-x:auto">内容</div></div>' });
 let now = 0, sequence = 0;
 let notifyResize: () => void;
@@ -41,6 +42,37 @@ describe('移动首页一体滑动', () => {
     HTMLElement.prototype.releasePointerCapture = vi.fn();
   });
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+  it('右侧评论展开时隐藏推荐栏，关闭后恢复同一实例并保留栏目和滚动', async () => {
+    const commentsOpen = ref(false);
+    const sidebarMounted = vi.fn();
+    const Sidebar = defineComponent({ setup() { sidebarMounted(); }, template: '<aside class="recommendations-stub" />' });
+    const w = mount(MobileHomePager, { props: { mobile: false }, global: {
+      provide: { [desktopFeedCommentsOpenKey as symbol]: commentsOpen },
+      stubs: { HomeTabPanel: Panel, FeedTabs: true, FeedLayoutToggle: true, RightSidebar: Sidebar },
+    } });
+    await flushPromises();
+    const tabs = w.findComponent({ name: 'FeedTabs' });
+    tabs.vm.$emit('update:activeKey', 'hot'); finish(); await flushPromises();
+    const original = w.get('.pager-page[data-tab-key="hot"] .panel-stub').element;
+    original.scrollTop = 460;
+    const sidebar = w.get('.recommendations-stub').element;
+    const configCalls = api.config.mock.calls.length;
+    for (const open of [true, false, true, false]) {
+      commentsOpen.value = open; await flushPromises();
+      expect(w.get('.recommendations-stub').element).toBe(sidebar);
+      expect((sidebar as HTMLElement).style.display).toBe(open ? 'none' : '');
+      expect(w.get('.pager-page[data-tab-key="hot"] .panel-stub').element).toBe(original);
+      expect(original.scrollTop).toBe(460);
+      expect(tabs.props('activeKey')).toBe('hot');
+      expect(api.config.mock.calls.length).toBe(configCalls);
+    }
+    expect(sidebarMounted).toHaveBeenCalledTimes(1);
+    expect(useSettingsStore().settings.showHomeMonthlyRank).toBe(true);
+    expect(useSettingsStore().settings.showHomeHotTopics).toBe(true);
+    await w.setProps({ mobile: true });
+    expect((sidebar as HTMLElement).style.display).toBe('none');
+    w.unmount();
+  });
   it('尺寸通知不立即改动布局，下一帧更新宽度并在卸载时取消待处理通知', async () => {
     const w = await render();
     const before = w.get('.pager-track').attributes('style');

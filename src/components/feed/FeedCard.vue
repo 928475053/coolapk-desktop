@@ -334,6 +334,7 @@
 </template>
 
 <script setup lang="ts">
+import { htmlToPlainText } from '../../utils/htmlText';
 import { isFeedEdited } from '../../utils/feedEditStatus';
 import { computed, ref, watch, onMounted, nextTick, onUnmounted, onActivated, onDeactivated, inject } from 'vue';
 import { useViewportContent } from '../../composables/useViewportContent';
@@ -736,7 +737,7 @@ const privateShareContacts = ref<any[]>([]);
 const privateShareLoading = ref(false);
 const privateShareError = ref('');
 async function copyFeed(link: boolean) {
-  const text = link ? `https://www.coolapk.com/feed/${props.feed.id}` : String(props.feed.message || '').replace(/<[^>]+>/g, '');
+  const text = link ? `https://www.coolapk.com/feed/${props.feed.id}` : htmlToPlainText(String(props.feed.message || ''));
   try { await navigator.clipboard.writeText(text); moreMenuOpen.value = false; showToast('已复制'); }
   catch { showToast('复制失败，请检查剪贴板权限', 'error'); }
 }

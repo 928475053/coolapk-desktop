@@ -519,6 +519,7 @@
 </template>
 
 <script setup lang="ts">
+import { createEditorTextNodes } from "../../utils/editorTextNodes";
 import { ref, computed, watch, onMounted, onUnmounted, onActivated, onDeactivated, nextTick } from 'vue';
 import { useDeviceModelNames } from '../../utils/deviceModelNames';
 
@@ -757,15 +758,7 @@ function createEmojiImg(name: string, _filename?: string): HTMLImageElement {
 }
 
 function parseTextToEditorNodes(text: string): Node[] {
-  if (!text) return [];
-  const container = document.createElement('div');
-  const rendered = text.replace(/\[([^\]\r\n]{1,20})\]/g, (match, name: string) => {
-    const url = getEmojiUrl(name);
-    if (!url) return match;
-    return `<img class="coolapk-emoji" src="${url}" alt="${match}" title="${name}" data-emoji="${match}" contenteditable="false" />`;
-  });
-  container.innerHTML = rendered.replace(/\n/g, '<br>');
-  return Array.from(container.childNodes);
+  return createEditorTextNodes(text);
 }
 
 function getEditorText(el: HTMLElement | null): string {

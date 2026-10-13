@@ -4,7 +4,10 @@ export interface PublishVideo { file: File; cover: File; coverPreview: string; p
 export async function preparePublishVideo(file: File): Promise<PublishVideo> {
   if (!/\.(mp4|mov)$/i.test(file.name)) throw new Error('请选择 MP4 或 MOV 视频');
   if (file.size > 256 * 1024 * 1024) throw new Error('请选择不超过 256 MB 的视频');
-  const preview = URL.createObjectURL(file), video = document.createElement('video');
+  // 视频只读取本次文件生成的本地 Blob URL，不能使用正文或 DOM 中的任意地址。
+  const localUrl = new URL(URL.createObjectURL(file));
+  if (localUrl.protocol !== 'blob:') throw new Error('视频预览地址无效');
+  const preview = localUrl.href, video = document.createElement('video');
   try {
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => finish(new Error('读取视频超时')), 15000);

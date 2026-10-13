@@ -1,19 +1,35 @@
-const LINK_MORE_SUFFIX = /(?:(?:\.{2,}|…+)\s*)*<a\b[^>]*>\s*查看更多\s*<\/a>\s*$/i;
-const PLAIN_MORE_SUFFIX = /(?:\.{2,}|…+)\s*查看更多\s*$/i;
-
-/** 判断正文末尾是否包含酷安列表接口附加的“查看更多”占位。 */
-export function hasFeedMoreSuffix(message: string): boolean {
-  const trimmed = message.trim();
-  return LINK_MORE_SUFFIX.test(trimmed) || PLAIN_MORE_SUFFIX.test(trimmed);
+/** 从尾部按字符扫描省略号，避免重复正则分组在长正文上回溯。 */
+function precedingEllipsisStart(value: string, end: number): number {
+  let cursor = end, start = end;
+  while (cursor > 0) {
+    while (cursor > 0 && /\s/.test(value[cursor - 1])) cursor--;
+    const tokenEnd = cursor;
+    if (value[cursor - 1] === '…') { while (cursor > 0 && value[cursor - 1] === '…') cursor--; }
+    else if (value[cursor - 1] === '.') { while (cursor > 0 && value[cursor - 1] === '.') cursor--; if (tokenEnd - cursor < 2) break; }
+    else break;
+    start = cursor;
+  }
+  return start;
 }
 
-/** 删除接口附加的“查看更多”，由桌面端统一显示“展开全文”按钮。 */
+function moreSuffixStart(message: string): number {
+  const value = message.trimEnd();
+  const anchor = value.toLowerCase().lastIndexOf('<a');
+  if (anchor >= 0 && /^<a\b[^>]*>\s*查看更多\s*<\/a>\s*$/i.test(value.slice(anchor))) return precedingEllipsisStart(value, anchor);
+  if (!value.endsWith('查看更多')) return -1;
+  const end = value.length - '查看更多'.length;
+  const start = precedingEllipsisStart(value, end);
+  return start < end ? start : -1;
+}
+
+/** 判断正文末尾是否包含酷安列表接口附加的“查看更多”占位。 */
+export function hasFeedMoreSuffix(message: string): boolean { return moreSuffixStart(message) >= 0; }
+
+/** 删除接口占位，正文里的正常“查看更多”文字保持不变。 */
 export function stripFeedMoreSuffix(message: string): string {
-  let result = message.trimEnd();
-  while (hasFeedMoreSuffix(result)) {
-    result = result.replace(LINK_MORE_SUFFIX, '').replace(PLAIN_MORE_SUFFIX, '').trimEnd();
-  }
-  return result;
+  let value = message.trimEnd(), start = moreSuffixStart(value);
+  while (start >= 0) { value = value.slice(0, start).trimEnd(); start = moreSuffixStart(value); }
+  return value;
 }
 
 /** 从动态详情对象中提取完整正文。 */

@@ -680,11 +680,12 @@ function createTabState(): UserTabState {
   return { items: [], page: 1, firstItem: '', lastItem: '', hasMore: true, loading: false, loadingMore: false, error: '', loaded: false };
 }
 
-const tabStates = reactive<Record<string, UserTabState>>({});
+// 服务端栏目名称只作为 Map 键使用，不能写入普通对象的原型属性。
+const tabStates = reactive(new Map<string, UserTabState>());
 
 function getTabState(key: string): UserTabState {
-  if (!tabStates[key]) tabStates[key] = createTabState();
-  return tabStates[key];
+  if (!tabStates.has(key)) tabStates.set(key, createTabState());
+  return tabStates.get(key)!;
 }
 
 const activeTabState = computed(() => getTabState(activeTab.value));
@@ -695,7 +696,7 @@ const userFeedsLoadingMore = computed(() => activeTabState.value.loadingMore);
 const userFeedsNoMore = computed(() => !activeTabState.value.hasMore);
 
 function resetTabStates() {
-  for (const key of Object.keys(tabStates)) tabStates[key] = createTabState();
+  for (const key of tabStates.keys()) tabStates.set(key, createTabState());
   const homeState = getTabState('home');
   homeState.page = 2;
   homeState.hasMore = true;
@@ -1084,7 +1085,7 @@ async function fetchTabFeeds(isRefresh = true, tabKey = activeTab.value) {
     state.loaded = true;
   } catch (err: any) {
     state.error = err?.message || '内容加载失败，请重试';
-    console.warn(`获取用户 ${tabKey} 列表异常:`, err);
+    console.warn('获取用户栏目列表异常:', tabKey, err);
   } finally {
     state.loading = false;
     state.loadingMore = false;

@@ -1,3 +1,4 @@
+import { htmlToPlainText } from './htmlText';
 import type { FeedItem } from '../types/feed';
 import { extractFeedImageInputs, type FeedImageInput } from './livePhoto';
 import { getUserUid } from './userRoute';
@@ -174,10 +175,7 @@ export function getQuestionTitle(question: unknown): string {
 }
 
 function comparableQuestionText(value: string): string {
-  return value
-    .replace(/<br\s*\/?>/gi, '')
-    .replace(/<[^>]*>/g, '')
-    .replace(/&nbsp;|&#160;/gi, ' ')
+  return htmlToPlainText(value)
     .replace(/[\s.,!?;:'"(){}<>，。！？；：、（）【】《》“”‘’…—_-]+/gu, '')
     .toLowerCase();
 }

@@ -72,14 +72,9 @@ function normalizeOfficialForwardPictureLinks(value: string): string {
 }
 
 function normalizeOfficialArticleText(value: string): string {
-  // Keep this replacement order identical to f88.m46422.
-  const normalized = value
-    .replace(/<!--break-->/g, '')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#039;/g, "'")
+  // 官方文章会对这几种实体额外编码一层，按完整实体一次匹配；后续输出仍经过 escapeHtml。
+  const officialEntities: Record<string, string> = { lt: '<', gt: '>', quot: '"', '#039': "'" };
+  const normalized = value.replace(/<!--break-->/g, '').replace(/&(?:amp;)?(lt|gt|quot|#039);|&amp;/g, (_entity, name: string) => name ? officialEntities[name] : '&')
     .replace(/<br \/>/g, '\n')
     .replace(/<\/?p>/g, '')
     .replace(/\n{3,}/g, '\n\n')

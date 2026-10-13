@@ -1,3 +1,4 @@
+import { htmlToPlainText } from './htmlText';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { getCommentImages, getReplyData, getReplyPageCursor } from './commentList';
 import { getFeedDetailMessage, stripFeedMoreSuffix } from './feedContent';
@@ -366,16 +367,7 @@ async function loadCollectionFeeds(collectionId: string, signal?: AbortSignal): 
 }
 
 function plainText(value: string): string {
-  return String(value || '')
-    .replace(/<\/(?:p|div|li|h[1-6])\s*>/gi, '\n')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
+  return htmlToPlainText(String(value || ''), true).replace(/\n{3,}/g, '\n\n').trim();
 }
 
 export function favoriteExportToText(bundle: FavoriteExportBundle): string {

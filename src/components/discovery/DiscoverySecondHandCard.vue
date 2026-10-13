@@ -11,6 +11,7 @@
 </template>
 
 <script setup lang="ts">
+import { htmlToPlainText } from '../../utils/htmlText';
 import { isFeedEdited } from '../../utils/feedEditStatus';
 import { computed } from 'vue';
 import AppImage from '../common/AppImage.vue';
@@ -27,7 +28,7 @@ const info = computed<Record<string, any>>(() => {
   try { const parsed = JSON.parse(typeof raw === 'string' ? raw : '{}'); return parsed && typeof parsed === 'object' ? parsed : {}; } catch { return {}; }
 });
 const cover = computed(() => normalizeFeedImageItems(extractFeedImageInputs(props.entity))[0]?.sourceUrl || info.value.product_logo || '');
-const title = computed(() => String(props.entity.message || props.entity.title || info.value.product_title || '闲置商品').replace(/<[^>]*>/g, '').trim());
+const title = computed(() => htmlToPlainText(String(props.entity.message || props.entity.title || info.value.product_title || '闲置商品')).trim());
 const price = computed(() => Number(info.value.is_face_deal) === 1 ? '价格面议' : info.value.product_price != null ? `¥${info.value.product_price}` : '');
 const metadata = computed(() => [props.entity.dateline_text || formatCommentTime(props.entity), [info.value.province, info.value.city].filter(Boolean).join(' ') || props.entity.location, isFeedEdited(props.entity) ? '已编辑' : ''].filter(Boolean).join(' · '));
 </script>

@@ -1442,6 +1442,9 @@ export class CoolapkTauriAPI {
   }
 
   static async openUrl(url: string, mode: 'internal' | 'system' = 'internal'): Promise<boolean> {
+    // 浏览器备用入口与原生打开入口统一限定合法协议。
+    const scheme = url.trim().match(/^([a-z][a-z0-9+.-]*):/i)?.[1]?.toLowerCase();
+    if (scheme && !['http', 'https', 'mailto', 'tel', 'coolmarket'].includes(scheme)) return false;
     url = url.trim();
     if (url.startsWith('//')) url = `https:${url}`;
     // 站外域名直接调起系统浏览器，不入路由、不抓取外部网页，也不受打开方式设置影响。
@@ -1484,7 +1487,9 @@ export class CoolapkTauriAPI {
     } catch (error) {
       // 原生应用中 window.open 仍是 WebView，无法作为系统浏览器的备用入口。
       if (!('__TAURI_INTERNALS__' in window)) {
-        window.open(url, '_blank', 'noopener,noreferrer');
+        const target = new URL(url, 'https://www.coolapk.com');
+        if (!['http:', 'https:', 'mailto:', 'tel:', 'coolmarket:'].includes(target.protocol)) return false;
+        window.open(target.href, '_blank', 'noopener,noreferrer');
         return true;
       }
       logDiagnostic('warn', 'external-link', 'open_failed', summarizeDiagnosticError(error));

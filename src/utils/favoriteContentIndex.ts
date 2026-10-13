@@ -1,3 +1,4 @@
+import { htmlToPlainText } from './htmlText';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { getFeedDetailMessage, stripFeedMoreSuffix } from './feedContent';
 import { favoriteFeedId, loadAllFavoriteFeeds } from './favoriteFeeds';
@@ -71,27 +72,8 @@ function updateMarkerOf(feed: any): string {
   return firstText(feed, ['lastupdate', 'lastUpdate', 'last_change_time', 'lastChangeTime', 'updateTime', 'update_time', 'editTime', 'edit_time']);
 }
 
-function decodeHtml(value: string): string {
-  if (typeof document !== 'undefined') {
-    const element = document.createElement('textarea');
-    element.innerHTML = value;
-    return element.value;
-  }
-  return value
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&quot;/gi, '"');
-}
-
 export function normalizeFavoriteSearchText(value: string): string {
-  return decodeHtml(String(value || '')
-    .replace(/<\/(?:p|div|br|li|tr|h[1-6])\s*>/gi, '\n')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' '))
-    .trim()
-    .toLocaleLowerCase('zh-CN');
+  return htmlToPlainText(String(value || ''), true, ' ').replace(/\s+/g, ' ').trim().toLocaleLowerCase('zh-CN');
 }
 
 function hashText(value: string): string {

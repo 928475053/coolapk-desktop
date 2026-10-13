@@ -99,6 +99,7 @@
 </template>
 
 <script setup lang="ts">
+import { htmlToPlainText } from '../utils/htmlText';
 import { nextTick, onActivated, onDeactivated, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
@@ -270,8 +271,7 @@ function getUsername(item: any): string {
 
 function getNote(item: any): string {
   if (currentTab.value === 'feedLikeList') {
-    const target = String(item.feedTypeName || item.infoHtml || '动态')
-      .replace(/<[^>]+>/g, '')
+    const target = htmlToPlainText(String(item.feedTypeName || item.infoHtml || '动态'))
       .trim();
     return `赞了你的${target}`;
   }
@@ -314,7 +314,7 @@ function getOriginalFeedSummary(item: any): string {
     || item?.message_title
     || item?.message
     || '点击查看这条通知对应的完整动态';
-  return String(text).replace(/<[^>]+>/g, '').trim();
+  return htmlToPlainText(String(text)).trim();
 }
 
 function openOriginalFeed(item: any) {
@@ -457,12 +457,14 @@ function renderSafeHtml(text: string): string {
 async function handleNotifyClick(e: Event, item: any) {
   const anchor = (e.target as HTMLElement).closest('a');
   const href = anchor?.getAttribute('href') || '';
+  // 正文链接始终由应用处理，危险协议不得继续触发浏览器默认导航。
+  if (anchor) e.preventDefault();
   // 用户和其他正文链接保持独立；评论正文中的动态/评论链接携带定位信息。
   if (href && /(?:\/feed\/\d+|\/feed\/reply\/\d+|\/reply\/\d+)/i.test(href)) {
     e.preventDefault();
     if (await openNotificationComment(item, href)) return;
   }
-  if (!anchor?.href || !href || href === '#' || href.startsWith('javascript:')) {
+  if (!anchor?.href || !href || href === '#' || /^javascript:/i.test(href.trim())) {
     await openNotificationTarget(item);
     return;
   }

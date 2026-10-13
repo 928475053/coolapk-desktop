@@ -17,7 +17,7 @@ export function isAnimatedImageUrl(url: string): boolean {
  * 无法可靠生成静态封面，调用方可选择不在列表中加载它。
  */
 export function getStaticAnimatedImageUrl(url: string): string {
-  if (!isAnimatedImageUrl(url) || !/^https?:\/\//i.test(url) || !url.includes('coolapk.com')) return '';
+  if (!isAnimatedImageUrl(url) || !isCoolapkImageHost(url)) return '';
   const baseUrl = url.replace(/(\.xs|\.s|\.m|\.b|\.t)\.jpg$/i, '').split(/[?#]/, 1)[0];
   return `${baseUrl}.m.jpg`;
 }
@@ -40,7 +40,7 @@ export function getImageUrlByQuality(url: string, targetQuality?: ImageQualityMo
   if (!url.startsWith('http')) return url;
 
   // 不给非 酷安 CDN 图片追加后缀
-  if (!url.includes('coolapk.com')) return url;
+  if (!isCoolapkImageHost(url)) return url;
 
   // 如果没有显式指定质量，则读取用户在设置中心的全局配置
   let quality = targetQuality;
@@ -70,6 +70,14 @@ export function getImageUrlByQuality(url: string, targetQuality?: ImageQualityMo
  */
 export function getHdImageUrl(url: string): string {
   return getImageUrlByQuality(url);
+}
+
+/** 检查真实主机边界，路径或查询参数里出现酷安域名不能命中 CDN。 */
+function isCoolapkImageHost(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return ['http:', 'https:'].includes(url.protocol) && (url.hostname === 'coolapk.com' || url.hostname.endsWith('.coolapk.com'));
+  } catch { return false; }
 }
 
 /**

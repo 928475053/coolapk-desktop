@@ -1,3 +1,4 @@
+import { htmlToPlainText } from './htmlText';
 export interface UserPlugin {
   id: number;
   title: string;
@@ -50,7 +51,7 @@ export function pluginTime(plugin: UserPlugin, use = false): string {
 
 // 获取方式字段来自服务器；作为纯文本展示，不能直接注入网页 HTML。
 export function pluginCondition(value = ''): string {
-  return value.replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+  return htmlToPlainText(value);
 }
 
 export function mergePlugins(existing: UserPlugin[], incoming: UserPlugin[]): UserPlugin[] {

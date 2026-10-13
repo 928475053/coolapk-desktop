@@ -309,7 +309,9 @@ function itemCoverUrl(item: FeedImageItem): string {
 
 /** 私信图片等走 API 接口的图片（showImage）本身即原图，不做缩略图后缀处理。 */
 function isPassThroughImageUrl(url: string): boolean {
-  return url.includes('/v6/message/showImage') || url.includes('api.coolapk.com');
+  // 使用主机与路径字段判断私信接口，避免误判第三方 URL 中的相同字样。
+  try { const parsed = new URL(url); return ['http:', 'https:'].includes(parsed.protocol) && ['api.coolapk.com', 'api2.coolapk.com'].includes(parsed.hostname); }
+  catch { return false; }
 }
 
 /**

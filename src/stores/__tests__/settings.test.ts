@@ -107,7 +107,7 @@ describe('settings store', () => {
     favoriteCollectionViewMode: 'large',
     favoriteCollectionSortMode: 'default',
     favoriteCollectionSortDirection: 'asc',
-    desktopCommentsOnRight: true,
+    desktopCommentsOnRight: false,
     desktopFeedDetailOnClick: false,
   };
 
@@ -194,13 +194,41 @@ describe('settings store', () => {
     expect(Object.prototype.hasOwnProperty.call(normalizeSettings({ commentSort: 'latest' }), 'commentSort')).toBe(false);
   });
 
-  it('合并右侧评论旧设置，并优先保留新总开关的明确值', () => {
-    expect(normalizeSettings({ topicHubShowCommentsByDefault: false, desktopFeedDetailOnClick: false }).desktopCommentsOnRight).toBe(false);
-    expect(normalizeSettings({ topicHubShowCommentsByDefault: false, desktopFeedDetailOnClick: true }).desktopCommentsOnRight).toBe(true);
-    expect(normalizeSettings({ topicHubShowCommentsByDefault: true, desktopFeedDetailOnClick: false }).desktopCommentsOnRight).toBe(true);
-    expect(normalizeSettings({ desktopCommentsOnRight: false, topicHubShowCommentsByDefault: true, desktopFeedDetailOnClick: true }).desktopCommentsOnRight).toBe(false);
-    expect(normalizeSettings({ desktopCommentsOnRight: true, desktopFeedDetailOnClick: false }).desktopFeedDetailOnClick).toBe(false);
-    expect(Object.prototype.hasOwnProperty.call(normalizeSettings({}), 'topicHubShowCommentsByDefault')).toBe(false);
+  it('新安装与旧版升级均默认关闭右侧评论，首次迁移后保留用户的新选择', () => {
+    expect(normalizeSettings({}).desktopCommentsOnRight).toBe(false);
+    // 旧版已持久化的 true 也必须在第一次升级时重置。
+    expect(normalizeSettings({ desktopCommentsOnRight: true }).desktopCommentsOnRight).toBe(false);
+    expect(normalizeSettings({ topicHubShowCommentsByDefault: true, desktopFeedDetailOnClick: true }).desktopCommentsOnRight).toBe(false);
+    const migrated = normalizeSettings({
+      desktopCommentsOnRight: true, topicHubShowCommentsByDefault: true, desktopFeedDetailOnClick: true, theme: 'dark',
+    });
+    expect(migrated.desktopCommentsOnRight).toBe(false);
+    expect(migrated.desktopCommentsDefaultOffMigrated).toBe(true);
+    expect(migrated.theme).toBe('dark');
+    // 标记完成后，用户再次打开或关闭时都应该保留其选择。
+    expect(normalizeSettings({ ...migrated, desktopCommentsOnRight: true }).desktopCommentsOnRight).toBe(true);
+    expect(normalizeSettings({ ...migrated, desktopCommentsOnRight: false }).desktopCommentsOnRight).toBe(false);
+    expect(normalizeSettings({ ...migrated, desktopCommentsOnRight: 'true' }).desktopCommentsOnRight).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(migrated, 'topicHubShowCommentsByDefault')).toBe(false);
+  });
+
+  it('升级时将关闭状态持久化到 settings.json，手动重新打开不会被再次重置', async () => {
+    (window as any).__TAURI_INTERNALS__ = {};
+    fileStoreState.values.set('desktopCommentsOnRight', true);
+    fileStoreState.values.set('theme', 'dark');
+    const store = useSettingsStore();
+    await store.initializeSettings();
+    expect(store.settings.desktopCommentsOnRight).toBe(false);
+    expect(store.settings.theme).toBe('dark');
+    expect(fileStoreState.values.get('desktopCommentsOnRight')).toBe(false);
+    expect(fileStoreState.values.get('desktopCommentsDefaultOffMigrated')).toBe(true);
+
+    store.settings.desktopCommentsOnRight = true;
+    await nextTick();
+    await store.flushSettings();
+    expect(fileStoreState.values.get('desktopCommentsOnRight')).toBe(true);
+    const persisted = normalizeSettings(Object.fromEntries(fileStoreState.values));
+    expect(persisted.desktopCommentsOnRight).toBe(true);
   });
 
   it('保留服务端动态首页频道的排序和隐藏状态', () => {

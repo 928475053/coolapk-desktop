@@ -141,6 +141,8 @@ export interface AppSettings {
   desktopFeedDetailOnClick: boolean;
   /** 桌面端评论显示在右侧，与点击动态进入详情页独立控制。 */
   desktopCommentsOnRight: boolean;
+  /** 已应用右侧评论默认关闭的一次性迁移；重启后保留用户的新选择。 */
+  desktopCommentsDefaultOffMigrated: boolean;
   myRecentPinned: boolean;
   moreExpanded: boolean;
   reduceMotion: boolean;

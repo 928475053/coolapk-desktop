@@ -42,6 +42,7 @@ import { usePlatformShortcuts } from '../../utils/shortcuts';
 import { useShortcutHints } from '../../composables/useShortcutHints';
 import { refreshPageTabGeneration } from '../../utils/pageTabs';
 import { useAndroidBackButton } from '../../utils/androidBackButton';
+import { copyImageToClipboard } from '../../utils/imageClipboard';
 
 type ContextKind = 'page' | 'selection' | 'link' | 'image' | 'comment' | 'feed' | 'message' | 'chat-message';
 
@@ -363,7 +364,7 @@ function createItems(state: ContextState): MenuItem[] {
       item('view-original', '查看原图', 'fas fa-file-image', () => appStore.openImageViewer([state.imageUrl])),
       separator('image-separator'),
       item('save-image', '保存图片', 'fas fa-download', () => saveImage(state.imageUrl, state.imageDataUrl)),
-      item('copy-image', '复制图片', 'far fa-copy', () => copyImage(state.imageUrl)),
+      item('copy-image', '复制图片', 'far fa-copy', () => copyImage(state.imageUrl, state.imageDataUrl)),
       item('copy-image-url', '复制图片地址', 'fas fa-link', () => copyText(state.imageUrl)),
       item('open-image-system', '使用系统程序打开', 'fas fa-external-link-alt', () => CoolapkTauriAPI.openImageInSystemViewer(state.imageUrl)),
     ];
@@ -439,19 +440,14 @@ async function copyText(text: string) {
   }
 }
 
-async function copyImage(url: string) {
+async function copyImage(url: string, loadedDataUrl?: string) {
   try {
-    const response = await fetch(url);
-    const blob = await response.blob();
-    if ('ClipboardItem' in window && navigator.clipboard?.write) {
-      await navigator.clipboard.write([new ClipboardItem({ [blob.type || 'image/png']: blob })]);
-      showToast('图片已复制');
-      return;
-    }
-  } catch {
-    // 图片跨域或系统剪贴板不可用时回退为复制地址。
+    await copyImageToClipboard(url, loadedDataUrl);
+    showToast('图片已复制');
+  } catch (error) {
+    // 复制图片失败不能偷偷改写为文本链接，避免用户得到与菜单含义不符的剪贴板内容。
+    showToast(`复制图片失败：${error instanceof Error ? error.message : String(error)}`, 'error', 3000);
   }
-  await copyText(url);
 }
 
 /** 仅在已加载地址与原图地址一致时复用，静态动图封面必须重新获取原文件。 */

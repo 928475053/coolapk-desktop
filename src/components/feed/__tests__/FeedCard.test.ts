@@ -1,3 +1,4 @@
+import { openDesktopFeedCommentsKey } from '../../../utils/desktopFeedComments';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
@@ -980,11 +981,11 @@ describe('桌面端点击动态的行为', () => {
     Object.defineProperty(window, 'innerWidth', { value: originalInnerWidth, configurable: true, writable: true });
   });
 
-  const mountCard = async (desktopFeedDetailOnClick: boolean) => {
+  const mountCard = async (desktopFeedDetailOnClick: boolean, openRightComments?: (feed: any) => boolean) => {
     useSettingsStore().settings.desktopFeedDetailOnClick = desktopFeedDetailOnClick;
     const wrapper = mount(FeedCard, {
       props: { feed: { id: '42', uid: '456', username: '作者', message: '正文' } },
-      global: { stubs: { FeedHeader: true, FeedContent: true, FeedActionBar: true, FeedCommentSection: true, FeedDyhShareDialog: true, FeedShareImageDialog: true, FeedInteractionListDialog: true, FeedCollectionPickerDialog: true, AppDialog: true, ForwardDialog: true } },
+      global: { provide: openRightComments ? { [openDesktopFeedCommentsKey as symbol]: openRightComments } : {}, stubs: { FeedHeader: true, FeedContent: true, FeedActionBar: true, FeedCommentSection: true, FeedDyhShareDialog: true, FeedShareImageDialog: true, FeedInteractionListDialog: true, FeedCollectionPickerDialog: true, AppDialog: true, ForwardDialog: true } },
     });
     await flushPromises();
     return wrapper;
@@ -1005,6 +1006,32 @@ describe('桌面端点击动态的行为', () => {
     await wrapper.find('article').trigger('click');
     await flushPromises();
     expect(mocks.routerPush).toHaveBeenCalledWith('/feed/42');
+    wrapper.unmount();
+  });
+
+  it('关闭详情入口、开启右侧评论时，点击正文和评论按钮均交给侧栏', async () => {
+    const openRight = vi.fn(() => true);
+    useSettingsStore().settings.desktopCommentsOnRight = true;
+    const wrapper = await mountCard(false, openRight);
+    await wrapper.find('article').trigger('click');
+    await wrapper.findComponent({ name: 'FeedActionBar' }).vm.$emit('open-comment');
+    await flushPromises();
+    expect(openRight).toHaveBeenCalledTimes(2);
+    expect(openRight).toHaveBeenCalledWith(expect.objectContaining({ id: '42' }));
+    expect(mocks.routerPush).not.toHaveBeenCalled();
+    expect(mocks.getFeedReplies).not.toHaveBeenCalled();
+    expect(wrapper.find('.inline-comment-wrapper').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('右侧评论关闭时继续在当前卡片展开评论', async () => {
+    const openRight = vi.fn(() => true);
+    useSettingsStore().settings.desktopCommentsOnRight = false;
+    const wrapper = await mountCard(false, openRight);
+    await wrapper.find('article').trigger('click');
+    await flushPromises();
+    expect(openRight).not.toHaveBeenCalled();
+    expect(wrapper.find('.inline-comment-wrapper').exists()).toBe(true);
     wrapper.unmount();
   });
 

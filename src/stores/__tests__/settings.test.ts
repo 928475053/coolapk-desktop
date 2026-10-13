@@ -107,7 +107,7 @@ describe('settings store', () => {
     favoriteCollectionViewMode: 'large',
     favoriteCollectionSortMode: 'default',
     favoriteCollectionSortDirection: 'asc',
-    topicHubShowCommentsByDefault: true,
+    desktopCommentsOnRight: true,
     desktopFeedDetailOnClick: false,
   };
 
@@ -125,7 +125,7 @@ describe('settings store', () => {
     expect(store.settings.favoriteCollectionViewMode).toBe(defaults.favoriteCollectionViewMode);
     expect(store.settings.favoriteCollectionSortMode).toBe(defaults.favoriteCollectionSortMode);
     expect(store.settings.favoriteCollectionSortDirection).toBe(defaults.favoriteCollectionSortDirection);
-    expect(store.settings.topicHubShowCommentsByDefault).toBe(defaults.topicHubShowCommentsByDefault);
+    expect(store.settings.desktopCommentsOnRight).toBe(defaults.desktopCommentsOnRight);
     expect(store.settings.desktopFeedDetailOnClick).toBe(defaults.desktopFeedDetailOnClick);
     expect(store.settings.navVisibility?.albums).toBe(true);
     expect(store.settings.navVisibility?.pictures).toBe(true);
@@ -181,7 +181,7 @@ describe('settings store', () => {
     expect(normalized.myRecentPinned).toBe(true);
     expect(normalized.showPageTabBar).toBe(false);
     expect(normalized.disableAutoMobileMode).toBe(true);
-    expect(normalized.topicHubShowCommentsByDefault).toBe(false);
+    expect(normalized.desktopCommentsOnRight).toBe(false);
     expect(normalized.messageEnterBehavior).toBe('newline');
     expect(normalizeSettings({}).desktopFeedDetailOnClick).toBe(false);
     expect(normalizeSettings({ desktopFeedDetailOnClick: 'yes' }).desktopFeedDetailOnClick).toBe(false);
@@ -192,6 +192,15 @@ describe('settings store', () => {
   it('忽略旧版评论排序设置', () => {
     expect(Object.prototype.hasOwnProperty.call(normalizeSettings({ commentSort: 'hot' }), 'commentSort')).toBe(false);
     expect(Object.prototype.hasOwnProperty.call(normalizeSettings({ commentSort: 'latest' }), 'commentSort')).toBe(false);
+  });
+
+  it('合并右侧评论旧设置，并优先保留新总开关的明确值', () => {
+    expect(normalizeSettings({ topicHubShowCommentsByDefault: false, desktopFeedDetailOnClick: false }).desktopCommentsOnRight).toBe(false);
+    expect(normalizeSettings({ topicHubShowCommentsByDefault: false, desktopFeedDetailOnClick: true }).desktopCommentsOnRight).toBe(true);
+    expect(normalizeSettings({ topicHubShowCommentsByDefault: true, desktopFeedDetailOnClick: false }).desktopCommentsOnRight).toBe(true);
+    expect(normalizeSettings({ desktopCommentsOnRight: false, topicHubShowCommentsByDefault: true, desktopFeedDetailOnClick: true }).desktopCommentsOnRight).toBe(false);
+    expect(normalizeSettings({ desktopCommentsOnRight: true, desktopFeedDetailOnClick: false }).desktopFeedDetailOnClick).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(normalizeSettings({}), 'topicHubShowCommentsByDefault')).toBe(false);
   });
 
   it('保留服务端动态首页频道的排序和隐藏状态', () => {

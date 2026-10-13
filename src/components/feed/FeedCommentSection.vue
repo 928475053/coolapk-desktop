@@ -1,9 +1,9 @@
 <template>
-  <div ref="sectionRef" class="feed-comment-section" :class="{ 'official-detail-comments': officialDetail }">
+  <div ref="sectionRef" class="feed-comment-section" :class="{ 'official-detail-comments': officialDetail, 'aside-comments': asideLayout }">
     <div class="comment-toolbar">
       <div class="comment-toolbar-left">
         <strong class="comment-title"><template v-if="officialDetail">共 {{ commentCount }} 回复</template><template v-else>评论 <span>{{ commentCount }}</span></template></strong>
-        <div v-if="!preserveApiOrder" class="comment-sort" aria-label="评论排序和筛选">
+        <div v-if="!preserveApiOrder || showSortControls" class="comment-sort" aria-label="评论排序和筛选">
           <button
             v-for="option in commentSortOptions"
             :key="option.value"
@@ -570,7 +570,12 @@ const props = withDefaults(
     targetReplyId?: string;
     officialDetail?: boolean;
     defaultSortMode?: CommentSortMode;
+    /** 宿主保存楼主筛选，切换互动栏目后重新挂载时恢复按钮状态。 */
+    defaultAuthorOnly?: boolean;
     preserveApiOrder?: boolean;
+    /** 侧栏共用话题评论的无卡片布局；服务端排序时仍可显示共用筛选按钮。 */
+    asideLayout?: boolean;
+    showSortControls?: boolean;
     /** 抑制工具栏「收起评论」按钮与 Esc 的 collapse 事件：
      *  给分栏详情页右栏这种没有「收起」语义的宿主用；默认 false，既有调用点行为不变。 */
     hideCollapseButton?: boolean;
@@ -589,7 +594,10 @@ const props = withDefaults(
   {
     feedId: '',
     targetReplyId: '',
+    defaultAuthorOnly: false,
     preserveApiOrder: false,
+    asideLayout: false,
+    showSortControls: false,
     hideCollapseButton: false,
     feedUid: '',
     feedUsername: '',
@@ -646,16 +654,15 @@ defineExpose({ openComposer });
 const replyTargetUser = ref('');
 const replyTargetId = ref('');
 const commentSortMode = ref<CommentSortMode>(props.defaultSortMode ?? settingsStore.settings.commentDefaultSortMode);
-const authorOnly = ref(false);
+const authorOnly = ref(props.defaultAuthorOnly);
 const commentSortOptions = COMMENT_SORT_OPTIONS;
 const absoluteTimeIds = ref<Set<string>>(new Set());
 const loadMoreSentinel = ref<HTMLElement | null>(null);
 let loadMoreObserver: IntersectionObserver | null = null;
 
-watch(() => props.defaultSortMode, (sortMode) => {
-  if (!sortMode) return;
-  commentSortMode.value = sortMode;
-  authorOnly.value = false;
+watch([() => props.defaultSortMode, () => props.defaultAuthorOnly], ([sortMode, authorFilter]) => {
+  if (sortMode) commentSortMode.value = sortMode;
+  authorOnly.value = authorFilter;
 });
 
 watch(() => settingsStore.settings.commentDefaultSortMode, (sortMode) => {
@@ -2010,6 +2017,9 @@ async function handleSend() {
   border-radius: var(--radius-card);
   border: 1px solid var(--border-light);
 }
+
+/* 话题与分栏详情复用同一套侧栏评论间距和背景。 */
+.feed-comment-section.aside-comments { margin-top: 0; padding: 0; background: transparent; border: none; box-shadow: none; }
 
 .comment-toolbar {
   display: flex;

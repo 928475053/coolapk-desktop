@@ -1,7 +1,8 @@
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { defineComponent, nextTick, onMounted } from 'vue';
+import { defineComponent, inject, nextTick, onMounted } from 'vue';
+import { openDesktopFeedCommentsKey } from '../../../utils/desktopFeedComments';
 
 const routeState = vi.hoisted(() => ({ value: null as any, back: vi.fn(), replace: vi.fn(), history: { back: '/' as string | null } }));
 
@@ -33,6 +34,40 @@ const MobileTopBarStub = { template: '<div class="mobile-top-bar-stub" />' };
 const MobileBottomNavStub = { template: '<div class="mobile-bottom-nav-stub" />' };
 
 describe('AppShell', () => {
+  it('普通列表打开右侧评论保留页面实例，关闭侧栏、设置与导航清除侧栏', async () => {
+    Object.defineProperty(window, 'innerWidth', { value: 1400, configurable: true, writable: true });
+    const Page = defineComponent({ setup() {
+      const openComments = inject(openDesktopFeedCommentsKey)!;
+      return { openComments };
+    }, template: '<button class="open-right-comments" @click="openComments({ id: \'42\', message: \'正文\' })">评论</button>' });
+    const wrapper = mount(AppShell, { slots: { default: Page }, global: { stubs: {
+      TopBar: TopBarStub, MainSidebar: MainSidebarStub, PageTabBar: PageTabBarStub,
+      NetworkStatusBanner: NetworkStatusBannerStub, MobileTopBar: MobileTopBarStub, MobileBottomNav: MobileBottomNavStub,
+      DesktopFeedCommentPanel: { props: ['feed'], template: '<aside class="right-comments-stub">{{ feed.id }}<button @click="$emit(\'close\')">关闭</button></aside>' },
+    } } });
+    const settings = useSettingsStore();
+    settings.settings.desktopFeedDetailOnClick = false;
+    settings.settings.desktopCommentsOnRight = true;
+    window.dispatchEvent(new Event('resize'));
+    await nextTick();
+    const page = wrapper.get('.open-right-comments').element;
+    await wrapper.get('.open-right-comments').trigger('click');
+    expect(wrapper.get('.right-comments-stub').text()).toContain('42');
+    expect(wrapper.get('.open-right-comments').element).toBe(page);
+    await wrapper.get('.right-comments-stub button').trigger('click');
+    expect(wrapper.find('.right-comments-stub').exists()).toBe(false);
+    await wrapper.get('.open-right-comments').trigger('click');
+    settings.settings.desktopCommentsOnRight = false;
+    await nextTick();
+    expect(wrapper.find('.right-comments-stub').exists()).toBe(false);
+    settings.settings.desktopCommentsOnRight = true;
+    await nextTick();
+    await wrapper.get('.open-right-comments').trigger('click');
+    Object.assign(routeState.value, { path: '/discover', fullPath: '/discover' });
+    await nextTick();
+    expect(wrapper.find('.right-comments-stub').exists()).toBe(false);
+    wrapper.unmount();
+  });
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
   beforeEach(() => {
     setActivePinia(createPinia());

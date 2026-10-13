@@ -36,7 +36,7 @@ describe('分栏详情页右栏', () => {
       props: { feed, activeTab },
       global: {
         stubs: {
-          FeedCommentSection: { name: 'FeedCommentSection', props: ['comments', 'hideCollapseButton'], template: '<div class="comment-section-stub" />' },
+          FeedCommentSection: { name: 'FeedCommentSection', props: { comments: Array, hideCollapseButton: Boolean, showSortControls: Boolean, defaultAuthorOnly: Boolean }, template: '<div class="comment-section-stub" />' },
           FeedInteractionListDialog: { name: 'FeedInteractionListDialog', props: ['feedType'], template: '<div class="interaction-stub" />' },
         },
       },
@@ -74,17 +74,15 @@ describe('分栏详情页右栏', () => {
   it('只看楼主走服务端过滤：打开后以 fromFeedAuthor=1 重取第一页', async () => {
     const wrapper = mountAside();
     await flushPromises();
-    const toggle = wrapper.find('.only-author-toggle input');
-    expect((toggle.element as HTMLInputElement).checked).toBe(false);
+    const section = wrapper.findComponent({ name: 'FeedCommentSection' });
 
     // 初始是「全部」：fromFeedAuthor 为 0
     expect(mocks.getFeedReplies).toHaveBeenLastCalledWith(
       '42', 1, expect.objectContaining({ fromFeedAuthor: 0 }),
     );
 
-    await toggle.setValue(true);
+    section.vm.$emit('comment-sort-change', { mode: 'default', authorOnly: true });
     await flushPromises();
-    expect((toggle.element as HTMLInputElement).checked).toBe(true);
 
     // 打开后交给服务端过滤：fromFeedAuthor 为 1、listType 清空，且重新从第一页取。
     // 若有人把它改成客户端 filter，这条必须失败。
@@ -98,7 +96,7 @@ describe('分栏详情页右栏', () => {
     const wrapper = mountAside();
     await flushPromises();
 
-    await wrapper.find('.aside-sort-select').setValue('likes');
+    wrapper.findComponent({ name: 'FeedCommentSection' }).vm.$emit('comment-sort-change', { mode: 'likes', authorOnly: false });
     await flushPromises();
     expect(mocks.getFeedReplies).toHaveBeenLastCalledWith(
       '42', 1, expect.objectContaining({ listType: 'popular', fromFeedAuthor: 0 }),
@@ -137,17 +135,15 @@ describe('分栏详情页右栏', () => {
     wrapper.unmount();
   });
 
-  it('切到点赞/转发 tab 时隐藏只看楼主与排序（它们只作用于评论）', async () => {
+  it('切到点赞/转发 tab 时隐藏评论组件及其筛选按钮', async () => {
     const likes = mountAside('likes');
     await flushPromises();
-    expect(likes.find('.only-author-toggle').exists()).toBe(false);
-    expect(likes.find('.aside-sort-select').exists()).toBe(false);
+    expect(likes.findComponent({ name: 'FeedCommentSection' }).exists()).toBe(false);
     likes.unmount();
 
     const replies = mountAside('replies');
     await flushPromises();
-    expect(replies.find('.only-author-toggle').exists()).toBe(true);
-    expect(replies.find('.aside-sort-select').exists()).toBe(true);
+    expect(replies.findComponent({ name: 'FeedCommentSection' }).props('showSortControls')).toBe(true);
     replies.unmount();
   });
 

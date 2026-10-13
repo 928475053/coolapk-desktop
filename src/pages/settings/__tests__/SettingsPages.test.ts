@@ -97,7 +97,7 @@ describe('设置页面交互', () => {
     await wrapper.findAll('.density-card')[2].trigger('click');
     await wrapper.findAll('.setting-row').find((row) => row.text().includes('显示顶部页面标签栏'))!.find('.switch-input').setValue(false);
     await wrapper.findAll('.setting-row').find((row) => row.text().includes('禁止窄窗口自动切换手机模式'))!.find('.switch-input').setValue(true);
-    await wrapper.findAll('.setting-row').find((row) => row.text().includes('默认显示右侧评论'))!.find('.switch-input').setValue(false);
+    await wrapper.findAll('.setting-row').find((row) => row.text().includes('评论显示在右侧'))!.find('.switch-input').setValue(false);
     await wrapper.findAll('.zoom-btn')[3].trigger('click');
     await wrapper.find('.nav-toggle-card input').setValue(false);
     expect(wrapper.find('.nav-main-grid').text()).not.toContain('应用');
@@ -112,12 +112,17 @@ describe('设置页面交互', () => {
     expect(settings.settings.density).toBe('compact');
     expect(settings.settings.showPageTabBar).toBe(false);
     expect(settings.settings.disableAutoMobileMode).toBe(true);
-    expect(settings.settings.topicHubShowCommentsByDefault).toBe(false);
+    expect(settings.settings.desktopCommentsOnRight).toBe(false);
     expect(settings.settings.fontSize).toBe(16);
     const appearanceRows = wrapper.findAll('.setting-row');
-    const desktopDetailRow = appearanceRows.find((row) => row.text().includes('桌面端使用分栏详情页'))!;
+    const desktopDetailRow = appearanceRows.find((row) => row.text().includes('点击动态进入详情页'))!;
     await desktopDetailRow.find('.switch-input').setValue(true);
     expect(settings.settings.desktopFeedDetailOnClick).toBe(true);
+    expect(settings.settings.desktopCommentsOnRight).toBe(false);
+    const rightCommentsRow = appearanceRows.find((row) => row.text().includes('评论显示在右侧'))!;
+    await rightCommentsRow.find('.switch-input').setValue(true);
+    expect(settings.settings.desktopCommentsOnRight).toBe(true);
+    expect(appearanceRows.some(row => row.text().includes('默认显示右侧评论'))).toBe(false);
     expect(settings.settings.navVisibility?.home).toBe(false);
   });
 

@@ -19,6 +19,10 @@ import FeedDetailPage from '../FeedDetailPage.vue';
 import { useSettingsStore } from '../../stores/settings';
 
 describe('官方详情评论加载', () => {
+  beforeEach(() => {
+    mocks.mobile.value = true;
+    useSettingsStore().settings.desktopCommentsOnRight = false;
+  });
   it('加载中和失败时仍可返回，直接打开时退回首页', async () => {
     let fail!: (error: Error) => void;
     mocks.context.mockReturnValue(null);
@@ -68,8 +72,10 @@ describe('官方详情评论加载', () => {
 describe('详情页在桌面布局下按开关切换分栏', () => {
   const stubs = { FeedCard: { template: '<div class="card-stub" />' }, FeedDetailSplitLayout: { template: '<div class="split-stub" />' }, QuestionAnswerCard: true, LoadingState: true, ErrorState: true, EmptyState: true };
 
-  const mountPage = async (desktopFeedDetailOnClick: boolean) => {
-    useSettingsStore().settings.desktopFeedDetailOnClick = desktopFeedDetailOnClick;
+  const mountPage = async (desktopCommentsOnRight: boolean) => {
+    // 点击入口关闭也不影响直接进入详情页后的评论位置。
+    useSettingsStore().settings.desktopFeedDetailOnClick = false;
+    useSettingsStore().settings.desktopCommentsOnRight = desktopCommentsOnRight;
     const wrapper = mount(FeedDetailPage, { props: { feedId: '42' }, global: { stubs } });
     await flushPromises();
     return wrapper;
@@ -86,6 +92,14 @@ describe('详情页在桌面布局下按开关切换分栏', () => {
 
   it('开关关时渲染单栏（现状）', async () => {
     const wrapper = await mountPage(false);
+    expect(wrapper.find('.split-stub').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('点击进入详情开启、右侧评论关闭时仍使用单栏', async () => {
+    const wrapper = await mountPage(false);
+    useSettingsStore().settings.desktopFeedDetailOnClick = true;
+    await flushPromises();
     expect(wrapper.find('.split-stub').exists()).toBe(false);
     wrapper.unmount();
   });

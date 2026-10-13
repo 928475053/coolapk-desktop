@@ -154,6 +154,23 @@ describe('评论完整信息展示', () => {
     wrapper.unmount();
   });
 
+  it('分栏共用排序按钮发出服务端筛选事件，不重排或过滤接口评论', async () => {
+    const wrapper = mountSection({}, {
+      preserveApiOrder: true,
+      showSortControls: true,
+      asideLayout: true,
+      defaultSortMode: 'default',
+      comments: [{ id: 'first', uid: 'other', message: '第一条', likenum: 1 }, { id: 'second', uid: 'author', message: '第二条', likenum: 99 }],
+      feedUid: 'author',
+    });
+    await wrapper.findAll('.comment-sort-button')[2].trigger('click');
+    expect(wrapper.emitted('comment-sort-change')?.[0]).toEqual([{ mode: 'likes', authorOnly: false }]);
+    await wrapper.findAll('.comment-sort-button')[3].trigger('click');
+    expect(wrapper.emitted('comment-sort-change')?.[1]).toEqual([{ mode: 'likes', authorOnly: true }]);
+    expect(wrapper.findAll('.comment-text').map(item => item.text())).toEqual(['第一条', '第二条']);
+    wrapper.unmount();
+  });
+
   it('评论与楼中楼转换型号，悬停仍显示原始型号、系统和 Build', async () => {
     const wrapper = mountSection({
       device_title: 'Redmi 23090RA98C', deviceRom: 'Android 16 · HyperOS 3.0.305.0', deviceBuild: 'BP2A.250605.031.A3',

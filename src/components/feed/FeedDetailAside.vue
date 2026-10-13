@@ -1,6 +1,6 @@
 <template>
   <aside class="feed-detail-aside">
-    <!-- 工具栏：tab 切换 / 只看楼主 / 排序 / 刷新 -->
+    <!-- 互动切换与刷新独立成栏，评论排序和楼主筛选复用话题评论组件。 -->
     <div class="aside-toolbar">
       <div class="aside-tabs" role="tablist" aria-label="右栏列表切换">
         <button
@@ -15,25 +15,6 @@
           {{ tab.label }}
         </button>
       </div>
-
-      <!-- 只看楼主与排序都只作用于评论列表：切到点赞/转发 tab 时隐藏，
-           否则操作它们只会触发一次用户看不见的评论重取（服务端此时也会忽略排序）。 -->
-      <label v-if="activeTab === 'replies'" class="only-author-toggle" title="只看楼主的评论">
-        <input v-model="onlyAuthor" type="checkbox" />
-        <span>只看楼主</span>
-      </label>
-
-      <select
-        v-if="activeTab === 'replies'"
-        v-model="sortMode"
-        class="aside-sort-select"
-        aria-label="评论排序"
-        title="评论排序"
-      >
-        <option v-for="option in commentSortOptions" :key="option.value" :value="option.value">
-          {{ option.label }}
-        </option>
-      </select>
 
       <button type="button" class="aside-refresh-btn" title="刷新" aria-label="刷新" @click="refreshCurrentTab">
         <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>
@@ -54,12 +35,16 @@
       :loading-more-comments="commentsLoadingMore"
       :load-more-error="commentsLoadMoreError"
       :default-sort-mode="sortMode"
+      :default-author-only="onlyAuthor"
       preserve-api-order
+      show-sort-controls
+      aside-layout
       :hide-collapse-button="true"
       @delete-comment="removeComment"
       @load-more-comments="loadMoreComments"
       @retry-comments="reloadComments"
       @retry-more-comments="loadMoreComments"
+      @comment-sort-change="handleCommentSortChange"
     />
 
     <!-- 点赞 / 转发 tab：内嵌互动列表自己取数分页；刷新通过换 key 重新挂载 -->
@@ -83,7 +68,6 @@ import FeedCommentSection from './FeedCommentSection.vue';
 import FeedInteractionListDialog from './FeedInteractionListDialog.vue';
 import { getFeedInteractionType } from '../../utils/feedInteractions';
 import {
-  COMMENT_SORT_OPTIONS,
   DEFAULT_COMMENT_SORT_MODE,
   getCommentReplyRequestOptions,
   getExpectedCommentCount,
@@ -92,6 +76,7 @@ import {
   hasMoreReplyPages,
   mergeReplies,
   type CommentSortMode,
+  type CommentSortSelection,
 } from '../../utils/commentList';
 
 const props = withDefaults(
@@ -120,7 +105,6 @@ const onlyAuthor = ref(false);
 const sortMode = ref<CommentSortMode>(
   settingsStore.settings.commentDefaultSortMode || DEFAULT_COMMENT_SORT_MODE,
 );
-const commentSortOptions = COMMENT_SORT_OPTIONS;
 
 const authorUid = computed(() => String(props.feed?.uid || props.feed?.userInfo?.uid || ''));
 
@@ -250,9 +234,15 @@ function refreshCurrentTab() {
   if (props.activeTab === 'replies') void reloadComments();
 }
 
-// 只看楼主与排序都走服务端：切换时重新取第一页（同一段重取逻辑），不做本地过滤。
-watch([onlyAuthor, sortMode], () => {
+// 共用按钮只更新请求条件，评论仍按服务端返回的顺序展示。
+function handleCommentSortChange(selection: CommentSortSelection) {
+  onlyAuthor.value = selection.authorOnly;
+  sortMode.value = selection.mode;
   void reloadComments();
+}
+
+watch(() => settingsStore.settings.commentDefaultSortMode, (mode) => {
+  handleCommentSortChange({ mode, authorOnly: false });
 });
 
 onMounted(() => {
@@ -268,7 +258,10 @@ onMounted(() => {
   height: 100%;
   min-height: 0;
   overflow-y: auto;
-  padding: 12px;
+  box-sizing: border-box;
+  padding: 0 16px 24px;
+  background: var(--surface);
+  border-left: 1px solid var(--border-light);
 }
 
 .aside-toolbar {
@@ -277,6 +270,8 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   margin-bottom: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-light);
 }
 
 .aside-tabs {
@@ -304,30 +299,6 @@ onMounted(() => {
   background: var(--brand-soft);
   color: var(--brand-primary);
   font-weight: 600;
-}
-
-.only-author-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--text-secondary);
-  font-size: 13px;
-  cursor: pointer;
-  user-select: none;
-}
-
-.only-author-toggle input {
-  accent-color: var(--brand-primary);
-  cursor: pointer;
-}
-
-.aside-sort-select {
-  padding: 4px 6px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control, 10px);
-  background: var(--surface);
-  color: var(--text-primary);
-  font-size: 13px;
 }
 
 .aside-refresh-btn {

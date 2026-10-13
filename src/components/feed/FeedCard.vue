@@ -342,6 +342,7 @@ import { useRouter } from 'vue-router';
 import type { FeedItem } from '../../types/feed';
 import { navigateBack } from '../../utils/navigation';
 import { useOfficialMobileFeedDetail, useMobileLayout } from '../../composables/useOfficialMobileFeedDetail';
+import { openDesktopFeedCommentsKey } from '../../utils/desktopFeedComments';
 import OfficialFeedProductCard from './OfficialFeedProductCard.vue';
 import FeedHeader from './FeedHeader.vue';
 import FeedContent from './FeedContent.vue';
@@ -404,6 +405,7 @@ const appStore = useAppStore();
 const router = useRouter();
 const mobileOfficialEnabled = useOfficialMobileFeedDetail();
 const mobileLayout = useMobileLayout();
+const openDesktopFeedComments = inject(openDesktopFeedCommentsKey, null);
 /**
  * 点击卡片是否应跳详情页，而不是就地展开评论。
  *
@@ -1365,6 +1367,8 @@ async function toggleComments() {
     emit('open-comment', props.feed);
     return;
   }
+  // 详情入口关闭时，普通动态列表也能独立使用右侧评论，不再落到内联展开。
+  if (!props.detailMode && !mobileLayout.value && settingsStore.settings.desktopCommentsOnRight && openDesktopFeedComments?.(props.feed)) return;
   if (showComments.value) {
     showComments.value = false;
     return;

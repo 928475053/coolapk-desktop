@@ -77,9 +77,9 @@ const officialMobileDetail = useOfficialMobileFeedDetail();
 // opensDetailOnClick 同样用 mobileLayout）保持同一判据。
 const mobileLayout = useMobileLayout();
 const isWideEnoughForSplit = useWideSplitLayout();
-// 分栏详情页：开关开 + 非移动端布局 + 窗口 >= 1000px，三者缺一不可。
+// 右侧评论由总开关决定，与点击动态是否进入详情页无关；仍只在桌面宽窗口分栏。
 const useSplitLayout = computed(() =>
-  settingsStore.settings.desktopFeedDetailOnClick
+  settingsStore.settings.desktopCommentsOnRight
   && !mobileLayout.value
   && isWideEnoughForSplit.value
 );

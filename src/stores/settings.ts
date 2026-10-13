@@ -124,6 +124,7 @@ const defaultSettings: AppSettings = {
   disableAutoMobileMode: false,
   officialMobileFeedDetail: true,
   desktopFeedDetailOnClick: false,
+  desktopCommentsOnRight: true,
   myRecentPinned: false,
   moreExpanded: false,
   reduceMotion: false,
@@ -146,7 +147,6 @@ const defaultSettings: AppSettings = {
   favoriteCollectionSortDirection: 'asc',
   commentDefaultSortMode: 'default',
   topicDiscussionDefaultSortMode: 'latest',
-  topicHubShowCommentsByDefault: true,
   downloadPath: '',
   maxConcurrentDownloads: 3,
   autoCleanCache: true,
@@ -289,6 +289,8 @@ export function normalizeSettings(value: unknown): AppSettings {
   result.disableAutoMobileMode = readBoolean(source.disableAutoMobileMode, result.disableAutoMobileMode);
   result.officialMobileFeedDetail = readBoolean(source.officialMobileFeedDetail, result.officialMobileFeedDetail);
   result.desktopFeedDetailOnClick = readBoolean(source.desktopFeedDetailOnClick, result.desktopFeedDetailOnClick);
+  // 合并旧版话题右侧评论和详情分栏设置，任一原开关开启时保留右侧评论。
+  result.desktopCommentsOnRight = readBoolean(source.desktopCommentsOnRight, result.desktopFeedDetailOnClick || readBoolean(source.topicHubShowCommentsByDefault, result.desktopCommentsOnRight));
   result.myRecentPinned = readBoolean(source.myRecentPinned, readBoolean(source.sidebarMyCardsPinned, result.myRecentPinned));
   result.moreExpanded = readBoolean(source.moreExpanded, result.moreExpanded);
   result.reduceMotion = readBoolean(source.reduceMotion, result.reduceMotion);
@@ -301,7 +303,6 @@ export function normalizeSettings(value: unknown): AppSettings {
   result.showDeviceInfo = readBoolean(source.showDeviceInfo, result.showDeviceInfo);
   result.showHomeMonthlyRank = readBoolean(source.showHomeMonthlyRank, result.showHomeMonthlyRank);
   result.showHomeHotTopics = readBoolean(source.showHomeHotTopics, result.showHomeHotTopics);
-  result.topicHubShowCommentsByDefault = readBoolean(source.topicHubShowCommentsByDefault, result.topicHubShowCommentsByDefault);
   result.downloadPath = readString(source.downloadPath, result.downloadPath);
   result.maxConcurrentDownloads = [1, 2, 3, 4, 5, 6, 8].includes(Number(source.maxConcurrentDownloads)) ? Number(source.maxConcurrentDownloads) : result.maxConcurrentDownloads;
   result.autoCleanCache = readBoolean(source.autoCleanCache, result.autoCleanCache);

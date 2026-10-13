@@ -26,7 +26,8 @@
       <div class="app-content-column">
         <PageTabBar v-if="settingsStore.settings.showPageTabBar" />
         <main ref="mainContent" class="app-main-content">
-          <slot></slot>
+          <div class="app-page-content"><slot></slot></div>
+          <DesktopFeedCommentPanel v-if="showDesktopComments && desktopCommentFeed" :feed="desktopCommentFeed" @close="desktopCommentFeed = null" />
         </main>
       </div>
     </div>
@@ -35,7 +36,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, provide, ref, shallowRef, watch } from 'vue';
+import DesktopFeedCommentPanel from '../feed/DesktopFeedCommentPanel.vue';
+import { openDesktopFeedCommentsKey } from '../../utils/desktopFeedComments';
+import { useMobileLayout, useWideSplitLayout } from '../../composables/useOfficialMobileFeedDetail';
+import type { FeedItem } from '../../types/feed';
 import { isTauri } from '@tauri-apps/api/core';
 import { useRoute, useRouter } from 'vue-router';
 import TopBar from './TopBar.vue';
@@ -61,6 +66,17 @@ const settingsStore = useSettingsStore();
 const appStore = useAppStore();
 const mobileNavigationOpen = ref(false);
 const mainContent = ref<HTMLElement | null>(null);
+const desktopCommentFeed = shallowRef<FeedItem | null>(null);
+const mobileLayout = useMobileLayout();
+const wideSplitLayout = useWideSplitLayout();
+const showDesktopComments = computed(() => settingsStore.settings.desktopCommentsOnRight && !mobileLayout.value && wideSplitLayout.value);
+// 列表页共享右侧评论宿主，保留当前路由与列表滚动位置。
+provide(openDesktopFeedCommentsKey, feed => {
+  if (!showDesktopComments.value) return false;
+  desktopCommentFeed.value = feed;
+  return true;
+});
+watch(showDesktopComments, show => { if (!show) desktopCommentFeed.value = null; });
 const isIos = isTouchMobilePlatform() && !/android/i.test(navigator.userAgent);
 useIosBackGesture(mainContent, () => isIos
   && !['/', '/digital', '/discover', '/me'].includes(route.path)
@@ -96,6 +112,7 @@ function handleMobileNavigationKeydown(event: KeyboardEvent) {
 }
 
 watch(() => route.fullPath, () => {
+  desktopCommentFeed.value = null;
   closeMobileNavigation();
   rootBack.reset();
 });
@@ -137,6 +154,8 @@ onUnmounted(() => window.removeEventListener('keydown', handleMobileNavigationKe
   flex-direction: column;
   overflow: hidden;
 }
+
+.app-page-content { display: flex; flex: 1; min-width: 0; min-height: 0; height: 100%; overflow: hidden; position: relative; }
 
 @media (min-width: 721px) {
   /* 触摸平板使用桌面顶栏时，给系统状态栏留出顶部安全区。 */

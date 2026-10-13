@@ -163,7 +163,8 @@
       <h4 class="group-title">动态详情</h4>
       <div class="setting-row"><div class="row-info"><span class="row-label">官方样式动态详情</span><span class="row-sub">手机和平板默认启用官方作者栏、评论列表和底部操作栏；关闭后恢复原有动态详情与内联评论。</span></div><AppSwitch v-model="settingsStore.settings.officialMobileFeedDetail" /></div>
       <!-- 触摸设备上 isMobileLayout 直接短路为移动布局，该开关永远不会生效，直接不展示。 -->
-      <div v-if="showDesktopLayoutSwitch" class="setting-row"><div class="row-info"><span class="row-label">桌面端使用分栏详情页</span><span class="row-sub">点击动态进入详情页，左侧为帖子内容、右侧为评论区。</span></div><AppSwitch v-model="settingsStore.settings.desktopFeedDetailOnClick" /></div>
+      <div v-if="showDesktopLayoutSwitch" class="setting-row"><div class="row-info"><span class="row-label">点击动态进入详情页</span><span class="row-sub">桌面端点击动态进入详情页；关闭后在当前页面查看评论。</span></div><AppSwitch v-model="settingsStore.settings.desktopFeedDetailOnClick" /></div>
+      <div v-if="showDesktopLayoutSwitch" class="setting-row"><div class="row-info"><span class="row-label">评论显示在右侧</span><span class="row-sub">统一控制动态列表、话题页和动态详情页的右侧评论；宽窗口下生效，可拖动调节宽度，与点击进入详情页独立。</span></div><AppSwitch v-model="settingsStore.settings.desktopCommentsOnRight" /></div>
     </div>
     <div v-if="showDesktopLayoutSwitch" class="setting-group">
       <h4 class="group-title">窗口响应式布局</h4>
@@ -194,19 +195,6 @@
           <span class="row-sub">显示首页右侧的热门话题列表</span>
         </div>
         <AppSwitch v-model="settingsStore.settings.showHomeHotTopics" />
-      </div>
-    </div>
-
-    <div class="setting-group">
-      <h4 class="group-title">话题分屏</h4>
-      <p class="group-sub">设置宽屏打开话题时，右侧评论栏的默认状态；空间不足时仍会按窗口宽度自动隐藏</p>
-
-      <div class="setting-row">
-        <div class="row-info">
-          <span class="row-label">默认显示右侧评论</span>
-          <span class="row-sub">开启后进入话题分屏时默认展开评论栏，也可在话题页临时收起或展开</span>
-        </div>
-        <AppSwitch v-model="settingsStore.settings.topicHubShowCommentsByDefault" />
       </div>
     </div>
 

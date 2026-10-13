@@ -4,6 +4,7 @@
     :class="{ 'is-macos': usesMacOverlay, 'has-window-controls': showWindowControls }"
     data-tauri-drag-region="deep"
   >
+    <slot name="narrow-navigation"></slot>
     <div
       class="titlebar-sidebar-offset"
       :class="{ 'is-collapsed': settingsStore.settings.sidebarCollapsed }"

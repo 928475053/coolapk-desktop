@@ -24,8 +24,8 @@ export function createAndroidIconCss(names: Iterable<string>, root = fontAwesome
     }
   }
   if (!rules.length) return '';
-  // 通用布局只输出一次；保持图标的颜色、尺寸和宿主元素上的旋转动画。
-  rules.push(`${maskedSelectors.join(',')}{content:""!important;display:inline-block;width:100%;height:1em;vertical-align:-.125em;background-color:currentColor;-webkit-mask:var(--app-icon-svg) center/contain no-repeat;mask:var(--app-icon-svg) center/contain no-repeat;}`);
+  // 通用布局只输出一次；宽度由字号决定，避免自动宽度容器内的百分比宽度塌缩，保留颜色和宿主元素上的旋转动画。
+  rules.push(`${maskedSelectors.join(',')}{content:""!important;display:inline-block;width:var(--fa-width,1.25em);height:1em;vertical-align:-.125em;background-color:currentColor;-webkit-mask:var(--app-icon-svg) center/contain no-repeat;mask:var(--app-icon-svg) center/contain no-repeat;}`);
   return rules.join('\n');
 }
 

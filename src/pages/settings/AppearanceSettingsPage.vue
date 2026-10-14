@@ -205,55 +205,63 @@
         {{ isAndroidTauri ? '控制手机快捷入口网格中显示的频道和功能。' : '根据个人使用习惯自由开启或关闭左侧侧边栏对应的功能栏目' }}
       </p>
 
-      <div class="setting-row">
-        <div class="row-info">
-          <span class="row-label">在“我的”中置顶“我的常去”</span>
-          <span class="row-sub">
-            {{ isAndroidTauri ? '将“我的常去”移动到手机“我的”页面的最前面' : '将“我的常去”移动到“我的”栏目子页面的最前面' }}
-          </span>
-        </div>
-        <AppSwitch v-model="settingsStore.settings.myRecentPinned" />
-      </div>
-
-      <div class="nav-grid nav-main-grid">
-        <div v-for="nav in navItems" :key="nav.key" class="nav-toggle-card">
-          <div class="nav-item-meta">
-            <i :class="[nav.icon, 'nav-item-icon']"></i>
-            <span class="nav-item-name">{{ nav.label }}</span>
+      <details class="nav-disclosure nav-main-disclosure">
+        <summary><span><i class="fas fa-bars" aria-hidden="true"></i>{{ isAndroidTauri ? '快捷入口栏目' : '主导航栏目' }}</span><i class="fas fa-chevron-down" aria-hidden="true"></i></summary>
+        <div class="nav-disclosure-content">
+          <div class="setting-row">
+            <div class="row-info">
+              <span class="row-label">在“我的”中置顶“我的常去”</span>
+              <span class="row-sub">
+                {{ isAndroidTauri ? '将“我的常去”移动到手机“我的”页面的最前面' : '将“我的常去”移动到“我的”栏目子页面的最前面' }}
+              </span>
+            </div>
+            <AppSwitch v-model="settingsStore.settings.myRecentPinned" />
           </div>
-          <AppSwitch
-            :model-value="getNavVisible(nav.key)"
-            @update:model-value="toggleNav(nav.key)"
-          />
-        </div>
-      </div>
 
-      <div class="nav-more-settings">
-        <div class="setting-row nav-more-master-row">
-          <div class="row-info">
-            <span class="row-label"><i class="fas fa-user nav-item-icon"></i> 个人中心「我的」</span>
-            <span class="row-sub">
-              {{ isAndroidTauri ? '控制快捷入口中的「我的」入口及其工作台数据子项' : '控制侧栏「我的」入口及其工作台数据子项' }}
-            </span>
+          <div class="nav-grid nav-main-grid">
+            <div v-for="nav in navItems" :key="nav.key" class="nav-toggle-card">
+              <div class="nav-item-meta">
+                <i :class="[nav.icon, 'nav-item-icon']"></i>
+                <span class="nav-item-name">{{ nav.label }}</span>
+              </div>
+              <AppSwitch
+                :model-value="getNavVisible(nav.key)"
+                @update:model-value="toggleNav(nav.key)"
+              />
+            </div>
           </div>
-          <AppSwitch
-            :model-value="getNavVisible('my')"
-            @update:model-value="toggleNav('my')"
-          />
         </div>
-        <div v-if="getNavVisible('my')" class="nav-grid nav-more-grid">
-          <div v-for="nav in moreNavItems" :key="nav.key" class="nav-toggle-card">
-            <div class="nav-item-meta">
-              <i :class="[nav.icon, 'nav-item-icon']"></i>
-              <span class="nav-item-name">{{ nav.label }}</span>
+      </details>
+
+      <details class="nav-disclosure nav-more-settings">
+        <summary><span><i class="fas fa-user" aria-hidden="true"></i>个人中心「我的」</span><i class="fas fa-chevron-down" aria-hidden="true"></i></summary>
+        <div class="nav-disclosure-content">
+          <div class="setting-row nav-more-master-row">
+            <div class="row-info">
+              <span class="row-label"><i class="fas fa-user nav-item-icon"></i> 个人中心「我的」</span>
+              <span class="row-sub">
+                {{ isAndroidTauri ? '控制快捷入口中的「我的」入口及其工作台数据子项' : '控制侧栏「我的」入口及其工作台数据子项' }}
+              </span>
             </div>
             <AppSwitch
-              :model-value="getNavVisible(nav.key)"
-              @update:model-value="toggleNav(nav.key)"
+              :model-value="getNavVisible('my')"
+              @update:model-value="toggleNav('my')"
             />
           </div>
+          <div v-if="getNavVisible('my')" class="nav-grid nav-more-grid">
+            <div v-for="nav in moreNavItems" :key="nav.key" class="nav-toggle-card">
+              <div class="nav-item-meta">
+                <i :class="[nav.icon, 'nav-item-icon']"></i>
+                <span class="nav-item-name">{{ nav.label }}</span>
+              </div>
+              <AppSwitch
+                :model-value="getNavVisible(nav.key)"
+                @update:model-value="toggleNav(nav.key)"
+              />
+            </div>
+          </div>
         </div>
-      </div>
+      </details>
     </div>
 
   </div>
@@ -347,6 +355,16 @@ function toggleNav(key: string) {
 
 
 <style scoped>
+.nav-disclosure { min-width: 0; }
+.nav-disclosure > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 10px 12px; border: 1px dashed var(--border); border-radius: var(--radius-control); background: var(--background); color: var(--text-primary); font-size: var(--font-size-sub); font-weight: var(--font-weight-semibold); list-style: none; cursor: pointer; }
+.nav-disclosure > summary::-webkit-details-marker { display: none; }
+.nav-disclosure > summary > span { display: flex; align-items: center; gap: 10px; min-width: 0; overflow-wrap: anywhere; }
+.nav-disclosure > summary > span > i { flex-shrink: 0; color: var(--brand-primary); }
+.nav-disclosure > summary > .fa-chevron-down { flex-shrink: 0; font-size: 12px; transition: transform var(--duration-fast); }
+.nav-disclosure[open] > summary > .fa-chevron-down { transform: rotate(180deg); }
+.nav-disclosure > summary:focus-visible { outline: 2px solid var(--brand-primary); outline-offset: 2px; }
+.nav-disclosure-content { display: flex; flex-direction: column; gap: var(--space-3); padding-top: 12px; }
+
 .settings-section {
   display: flex;
   flex-direction: column;

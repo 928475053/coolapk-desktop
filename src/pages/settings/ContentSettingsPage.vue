@@ -121,6 +121,21 @@
       </div>
     </div>
 
+    <details class="search-order-group" @toggle="toggleSearchOrder">
+      <summary class="search-order-trigger">
+        <span><i class="fas fa-arrow-down-short-wide" aria-hidden="true"></i>搜索分类排序</span>
+        <i class="fas fa-chevron-down search-order-chevron" aria-hidden="true"></i>
+      </summary>
+      <div class="search-order-content">
+        <div class="search-order-heading">
+          <p class="row-sub">综合固定在第一位。拖动右侧手柄调整其他分类，松手后自动保存，手机和桌面搜索均立即生效。</p>
+          <AppButton variant="ghost" size="sm" :disabled="!settingsStore.settings.searchTabOrder.length" @click="resetSearchOrder">恢复默认</AppButton>
+        </div>
+        <SearchTabOrderList v-if="searchOrderOpen" :tabs="orderedSearchTabs" @reorder="saveSearchOrder" />
+        <p class="row-sub" role="status">{{ searchOrderMessage }}</p>
+      </div>
+    </details>
+
     <div class="setting-group">
       <h4 class="group-title">关键词屏蔽</h4>
       <div class="setting-row">
@@ -170,16 +185,48 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useSettingsStore } from '../../stores/settings';
 import AppSwitch from '../../components/common/AppSwitch.vue';
 import AppButton from '../../components/common/AppButton.vue';
+import SearchTabOrderList from '../../components/search/SearchTabOrderList.vue';
 import { isTouchMobilePlatform } from '../../utils/platform';
+import { CoolapkTauriAPI } from '../../api/coolapk';
+import { DEFAULT_SEARCH_TABS } from '../../types/search';
+import { extractSearchTabs } from '../../utils/searchEntities';
+import { orderSearchTabs } from '../../utils/searchTabOrder';
 
 const settingsStore = useSettingsStore();
 // 系统默认查看器依赖桌面端的 opener，iOS/Android 上没有实现。
 const supportsSystemViewer = !isTouchMobilePlatform();
 const keywordInput = ref('');
+const searchOrderOpen = ref(false);
+const configuredSearchTabs = ref(DEFAULT_SEARCH_TABS);
+const orderedSearchTabs = computed(() => orderSearchTabs(configuredSearchTabs.value, settingsStore.settings.searchTabOrder).filter(tab => tab.searchType !== 'all'));
+const searchOrderMessage = ref('调整后自动保存；恢复默认将沿用酷安提供的分类顺序。');
+
+function toggleSearchOrder(event: Event) {
+  // 收起时卸载排序列表，取消未完成的拖动并释放指针监听。
+  searchOrderOpen.value = (event.currentTarget as HTMLDetailsElement).open;
+}
+
+function saveSearchOrder(order: string[]) {
+  settingsStore.settings.searchTabOrder = order;
+  searchOrderMessage.value = '搜索分类顺序已保存。';
+}
+
+function resetSearchOrder() {
+  settingsStore.settings.searchTabOrder = [];
+  searchOrderMessage.value = '已恢复默认分类顺序。';
+}
+
+onMounted(async () => {
+  try {
+    configuredSearchTabs.value = extractSearchTabs(await CoolapkTauriAPI.getTabConfig());
+  } catch {
+    // 离线时仍可调整协议默认分类，下次搜索按已保存的顺序应用。
+  }
+});
 
 const blockedKeywords = computed(() => settingsStore.settings.blockedKeywords);
 
@@ -200,6 +247,17 @@ function removeKeyword(kw: string) {
 </script>
 
 <style scoped>
+.search-order-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.search-order-heading > p { flex: 1 1 220px; }
+.search-order-group { min-width: 0; }
+.search-order-trigger { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 10px 12px; border: 1px dashed var(--border); border-radius: var(--radius-control); background: var(--background); color: var(--text-primary); font-size: var(--font-size-sub); font-weight: var(--font-weight-semibold); list-style: none; cursor: pointer; }
+.search-order-trigger::-webkit-details-marker { display: none; }
+.search-order-trigger > span { display: flex; align-items: center; gap: 10px; min-width: 0; overflow-wrap: anywhere; }
+.search-order-trigger > span > i { flex-shrink: 0; color: var(--brand-primary); }
+.search-order-chevron { flex-shrink: 0; font-size: 12px; transition: transform var(--duration-fast); }
+.search-order-group[open] .search-order-chevron { transform: rotate(180deg); }
+.search-order-trigger:focus-visible { outline: 2px solid var(--brand-primary); outline-offset: 2px; }
+.search-order-content { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; }
 .settings-section {
   display: flex;
   flex-direction: column;

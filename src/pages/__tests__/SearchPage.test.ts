@@ -14,6 +14,36 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../api/coolapk', () => ({ CoolapkTauriAPI: mocks }));
 
 import SearchPage from '../SearchPage.vue';
+import { useSettingsStore } from '../../stores/settings';
+
+describe('搜索分类自定义排序', () => {
+  it('应用可排在综合后，远端顺序不能覆盖偏好，切换仍查询应用类型', async () => {
+    localStorage.clear();
+    mocks.getTabConfig.mockResolvedValueOnce({ data: { 'search.tab': 'product,all,feed,apk' } });
+    mocks.searchByType.mockResolvedValue({ data: [{ entityType: 'feed', id: 'order-result', message: '搜狗输入法' }] });
+    const pinia = createPinia();
+    const settings = useSettingsStore(pinia);
+    settings.settings.searchTabOrder = ['apk', 'feed', 'product'];
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/search', component: SearchPage }] });
+    await router.push({ path: '/search', query: { q: '搜狗输入法', tab: 'all' } });
+    await router.isReady();
+    const wrapper = mount(SearchPage, { global: { plugins: [pinia, router], stubs: { SearchResultItem: true, SearchHotListCard: true, LoadingState: true, EmptyState: true } } });
+    try {
+      await flushPromises();
+      expect(wrapper.findAll('.search-tab-item').map(item => item.text())).toEqual(['综合', '应用', '动态', '数码']);
+      await wrapper.findAll('.search-tab-item')[1].trigger('click');
+      await flushPromises();
+      expect(router.currentRoute.value.query.tab).toBe('apk');
+      expect(mocks.searchByType.mock.calls.at(-1)?.[0]).toMatchObject({ searchType: 'apk', query: '搜狗输入法' });
+      const requests = mocks.searchByType.mock.calls.length;
+      settings.settings.searchTabOrder = ['product', 'apk', 'feed'];
+      await flushPromises();
+      expect(wrapper.findAll('.search-tab-item').map(item => item.text())).toEqual(['综合', '数码', '应用', '动态']);
+      expect(wrapper.get('.search-tab-item.active').text()).toBe('应用');
+      expect(mocks.searchByType).toHaveBeenCalledTimes(requests);
+    } finally { wrapper.unmount(); localStorage.clear(); }
+  });
+});
 
 describe('综合搜索空首页', () => {
   async function mountSearch() {

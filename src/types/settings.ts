@@ -160,6 +160,8 @@ export interface AppSettings {
   liveTileEnabled: boolean;
   liveTileSource: LiveTileSource;
   homeTabOrder: HomeTabKey[];
+  /** 搜索分类的自定义顺序，综合固定第一；空数组沿用服务端顺序。 */
+  searchTabOrder: string[];
   favoriteCollectionViewMode: FavoriteCollectionViewMode;
   favoriteCollectionSortMode: FavoriteCollectionSortMode;
   favoriteCollectionSortDirection: FavoriteCollectionSortDirection;

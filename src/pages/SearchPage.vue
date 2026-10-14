@@ -87,6 +87,8 @@ import LoadingState from '../components/common/LoadingState.vue';
 import SearchHotListCard from '../components/search/SearchHotListCard.vue';
 import SearchResultItem from '../components/search/SearchResultItem.vue';
 import { useAuthStore } from '../stores/auth';
+import { useSettingsStore } from '../stores/settings';
+import { orderSearchTabs } from '../utils/searchTabOrder';
 import type { SearchEntity, SearchTabDefinition, SearchTabState } from '../types/search';
 import { DEFAULT_SEARCH_TABS } from '../types/search';
 import { addSearchHistory, clearSearchHistory, loadSearchHistory, removeSearchHistory, searchHistory } from '../utils/searchHistory';
@@ -96,6 +98,7 @@ import { FEED_SEARCH_SORT_OPTIONS, resolveFeedSearchSort } from '../utils/coolap
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
+const settingsStore = useSettingsStore();
 
 function readQueryString(value: unknown): string {
   return Array.isArray(value) ? String(value[0] ?? '').trim() : String(value ?? '').trim();
@@ -106,7 +109,9 @@ const initialPageParam = readQueryString(route.query.pageParam);
 const initialScopedSearch = ['tag', 'user'].includes(initialPageType) && initialPageParam;
 const queryStr = ref(readQueryString(route.query.q));
 const searchQuery = ref(queryStr.value);
-const searchTabs = ref<SearchTabDefinition[]>(DEFAULT_SEARCH_TABS);
+const configuredSearchTabs = ref<SearchTabDefinition[]>(DEFAULT_SEARCH_TABS);
+// 配置只改变展示顺序；当前分类、结果缓存和范围搜索继续使用原来的键。
+const searchTabs = computed(() => isScopedSearch.value ? configuredSearchTabs.value : orderSearchTabs(configuredSearchTabs.value, settingsStore.settings.searchTabOrder));
 const activeTab = ref(initialScopedSearch ? 'feed' : readQueryString(route.query.tab) || 'all');
 const askFeedTypeOptions = [
   { key: 'all', label: '全部', icon: 'fas fa-layer-group' },
@@ -208,7 +213,7 @@ function syncActiveTab(requested: string) {
 
 async function loadSearchConfig() {
   if (isScopedSearch.value) {
-    searchTabs.value = DEFAULT_SEARCH_TABS.filter((tab) => tab.searchType === 'feed');
+    configuredSearchTabs.value = DEFAULT_SEARCH_TABS.filter((tab) => tab.searchType === 'feed');
     configLoaded = true;
     activeTab.value = 'feed';
     resetTabStates();
@@ -217,10 +222,10 @@ async function loadSearchConfig() {
   }
   try {
     const response = await CoolapkTauriAPI.getTabConfig();
-    searchTabs.value = extractSearchTabs(response);
+    configuredSearchTabs.value = extractSearchTabs(response);
   } catch (error) {
     console.warn('加载搜索页签配置失败，使用协议默认页签', error);
-    searchTabs.value = DEFAULT_SEARCH_TABS;
+    configuredSearchTabs.value = DEFAULT_SEARCH_TABS;
   } finally {
     configLoaded = true;
     syncActiveTab(String(route.query.tab || activeTab.value || 'all'));

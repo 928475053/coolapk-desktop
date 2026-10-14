@@ -137,6 +137,19 @@ describe('settings store', () => {
     expect(store.settings.messageEnterBehavior).toBe(defaults.messageEnterBehavior);
   });
 
+  it('保存并重新载入搜索分类顺序，旧设置沿用默认，损坏顺序会被规范化', async () => {
+    expect(normalizeSettings({}).searchTabOrder).toEqual([]);
+    expect(normalizeSettings({ searchTabOrder: ['all', 'apk', 'apk', '', 5, 'future'] }).searchTabOrder).toEqual(['apk', 'future']);
+    const store = useSettingsStore();
+    store.settings.searchTabOrder = ['apk', 'product', 'feed'];
+    await nextTick();
+    const reloaded = useSettingsStore(createPinia());
+    expect(reloaded.settings.searchTabOrder).toEqual(['apk', 'product', 'feed']);
+    reloaded.settings.searchTabOrder = [];
+    await nextTick();
+    expect(useSettingsStore(createPinia()).settings.searchTabOrder).toEqual([]);
+  });
+
   it('normalizes malformed values and preserves valid nested settings', () => {
     const normalized = normalizeSettings({
       theme: 'invalid',

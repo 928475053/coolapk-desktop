@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { resolveDeviceIdentity } from '../utils/devicePresets';
 import { resolveDesktopCommentsOnRight } from '../utils/desktopCommentsPreference';
+import { normalizeSearchTabOrder } from '../utils/searchTabOrder';
 import { isLinuxDesktopRuntime, observeLinuxSystemTheme, type SystemTheme } from '../utils/linuxSystemTheme';
 import type {
   AppSettings,
@@ -145,6 +146,7 @@ const defaultSettings: AppSettings = {
   liveTileEnabled: false,
   liveTileSource: 'index_v8',
   homeTabOrder: [...DEFAULT_HOME_TAB_ORDER],
+  searchTabOrder: [],
   favoriteCollectionViewMode: 'large',
   favoriteCollectionSortMode: 'default',
   favoriteCollectionSortDirection: 'asc',
@@ -202,6 +204,7 @@ function cloneDefaultSettings(): AppSettings {
     ...defaultSettings,
     navVisibility: { ...defaultNavVisibility },
     homeTabOrder: [...DEFAULT_HOME_TAB_ORDER],
+    searchTabOrder: [],
     blockedKeywords: [],
     deviceFingerprint: { ...defaultDeviceFingerprint },
   };
@@ -278,6 +281,7 @@ export function normalizeSettings(value: unknown): AppSettings {
     );
     result.homeTabOrder = [...new Set(valid)];
   }
+  result.searchTabOrder = normalizeSearchTabOrder(source.searchTabOrder);
   if (isOneOf(source.imageQuality, ['standard', 'hd', 'raw'])) result.imageQuality = source.imageQuality;
   if (isOneOf(source.externalLinkMode, ['internal', 'system'])) result.externalLinkMode = source.externalLinkMode;
   if (isOneOf(source.timeDisplay, ['relative', 'absolute'])) result.timeDisplay = source.timeDisplay;

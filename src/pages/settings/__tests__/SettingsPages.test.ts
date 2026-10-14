@@ -7,6 +7,7 @@ import { APP_VERSION } from '../../../constants/version';
 
 const mocks = vi.hoisted(() => ({
   getCacheInfo: vi.fn().mockResolvedValue({ bytes: 52.8 * 1024 * 1024, imageBytes: 48.4 * 1024 * 1024, webviewBytes: 0, updateBytes: 4.4 * 1024 * 1024, path: 'C:\\Cache' }),
+  getTabConfig: vi.fn().mockResolvedValue({ data: { 'search.tab': 'all,product,feed,apk' } }),
   clearAppCache: vi.fn().mockResolvedValue({ bytes: 0 }),
   cleanExpiredCache: vi.fn().mockResolvedValue(undefined),
   openCacheDirectory: vi.fn().mockResolvedValue('C:\\Cache'),
@@ -129,6 +130,30 @@ describe('设置页面交互', () => {
     expect(settings.settings.navVisibility?.home).toBe(false);
   });
 
+  it('导航与个人中心栏目默认折叠，展开和收起不改变已保存的开关', async () => {
+    const { wrapper, settings } = mountPage(AppearanceSettingsPage);
+    const main = wrapper.get<HTMLDetailsElement>('.nav-main-disclosure');
+    const personal = wrapper.get<HTMLDetailsElement>('.nav-more-settings');
+    expect(main.element.open).toBe(false);
+    expect(personal.element.open).toBe(false);
+    await main.get('summary').trigger('click');
+    expect(main.element.open).toBe(true);
+    await main.get('.nav-toggle-card input').setValue(false);
+    expect(settings.settings.navVisibility?.home).toBe(false);
+    await main.get('summary').trigger('click');
+    expect(main.element.open).toBe(false);
+    expect(settings.settings.navVisibility?.home).toBe(false);
+    await personal.get('summary').trigger('click');
+    expect(personal.element.open).toBe(true);
+    await personal.get('.nav-more-master-row input').setValue(false);
+    expect(settings.settings.navVisibility?.my).toBe(false);
+    expect(personal.find('.nav-more-grid').exists()).toBe(false);
+    await personal.get('summary').trigger('click');
+    expect(personal.element.open).toBe(false);
+    expect(settings.settings.navVisibility?.my).toBe(false);
+    wrapper.unmount();
+  });
+
   it('内容页覆盖正文、链接和关键词设置', async () => {
     const { wrapper, settings } = mountPage(ContentSettingsPage);
     const selects = wrapper.findAll('select');
@@ -152,6 +177,33 @@ describe('设置页面交互', () => {
     expect(settings.settings.blockedKeywords).toEqual(['广告']);
     await wrapper.get('.chip-remove').trigger('click');
     expect(settings.settings.blockedKeywords).toEqual([]);
+  });
+
+  it('内容偏好可调整搜索分类顺序，综合固定，支持恢复默认', async () => {
+    const { wrapper, settings } = mountPage(ContentSettingsPage);
+    await flushPromises();
+    const disclosure = wrapper.get<HTMLDetailsElement>('.search-order-group');
+    expect(disclosure.element.open).toBe(false);
+    expect(wrapper.find('.search-order-list').exists()).toBe(false);
+    disclosure.element.open = true;
+    await disclosure.trigger('toggle');
+    const labels = () => wrapper.findAll('.search-order-label').map(item => item.text());
+    expect(labels()).toEqual(['综合', '数码', '动态', '应用']);
+    expect(wrapper.find('.search-order-actions').exists()).toBe(false);
+    expect(wrapper.get('.search-order-fixed').find('button').exists()).toBe(false);
+    await wrapper.get('[aria-label="拖动调整应用顺序"]').trigger('keydown', { key: 'ArrowUp', altKey: true });
+    await wrapper.get('[aria-label="拖动调整应用顺序"]').trigger('keydown', { key: 'ArrowUp', altKey: true });
+    expect(labels()).toEqual(['综合', '应用', '数码', '动态']);
+    expect(settings.settings.searchTabOrder).toEqual(['apk', 'product', 'feed']);
+    await wrapper.get('[aria-label="拖动调整应用顺序"]').trigger('keydown', { key: 'ArrowDown', altKey: true });
+    expect(settings.settings.searchTabOrder).toEqual(['product', 'apk', 'feed']);
+    await wrapper.get('.search-order-heading button').trigger('click');
+    expect(settings.settings.searchTabOrder).toEqual([]);
+    expect(labels()).toEqual(['综合', '数码', '动态', '应用']);
+    disclosure.element.open = false;
+    await disclosure.trigger('toggle');
+    expect(wrapper.find('.search-order-list').exists()).toBe(false);
+    wrapper.unmount();
   });
 
   it('通知页覆盖通知开关和轮询间隔', async () => {

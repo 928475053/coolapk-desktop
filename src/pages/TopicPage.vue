@@ -820,7 +820,8 @@ onMounted(() => {
   .topic-official-hero.has-rating { background: var(--topic-color); border-radius: 12px; overflow: hidden; padding: 0 16px 4px; }
   .topic-official-hero.has-rating :deep(.topic-cover) { width: calc(100% + 32px); margin: 0 -16px -24px; border-radius: 0; }
   .topic-official-hero.has-rating .topic-header-card { position: relative; margin-bottom: 12px; background: color-mix(in srgb, var(--topic-color) 88%, black); border: 0; color: white; }
-  .topic-official-hero.has-rating .topic-title,.topic-official-hero.has-rating .topic-description,.topic-official-hero.has-rating .topic-stats-text { color: #fffc; }
+  /* 简介有独立的主题底色，不跟随头部标题使用白字。 */
+  .topic-official-hero.has-rating .topic-title,.topic-official-hero.has-rating .topic-stats-text { color: #fffc; }
   .topic-official-hero.has-rating :deep(.topic-official-summary) { background: #0002; color: white; }
   .topic-official-hero.has-rating :deep(.topic-official-summary header button),.topic-official-hero.has-rating :deep(.topic-official-summary .score small),.topic-official-hero.has-rating :deep(.topic-official-summary .dimensions > div),.topic-official-hero.has-rating :deep(.topic-official-summary footer) { color: #fffc; }
   .topic-official-hero.has-rating :deep(.topic-official-summary .dimensions b) { background: #ffffff15; }
@@ -832,7 +833,7 @@ onMounted(() => {
   .topic-official-hero { margin: -14px -16px 0; padding: 0 12px 12px; background: var(--topic-color); }
   .topic-official-hero :deep(.topic-cover) { margin: 0 -12px -40px; width: calc(100% + 24px); border-radius: 0; }
   .topic-official-hero .topic-header-card { position: relative; background: color-mix(in srgb, var(--topic-color) 88%, black); color: white; border: 0; margin-bottom: 12px; }
-  .topic-official-hero .topic-title,.topic-official-hero .topic-description,.topic-official-hero .topic-stats-text { color: #fffc; }
+  .topic-official-hero .topic-title,.topic-official-hero .topic-stats-text { color: #fffc; }
   .topic-official-hero .topic-icon-wrapper { width: 64px; height: 64px; }
   .topic-sticky-controls { border-radius: 12px 12px 0 0; margin: 0 -16px; }
   .topic-sub-tabs { border-radius: 12px 12px 0 0; box-shadow: none; justify-content: space-around; gap: 0; border: 0; }

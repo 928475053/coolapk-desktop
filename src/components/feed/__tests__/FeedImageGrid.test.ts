@@ -3,6 +3,8 @@ import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAppStore } from '../../../stores/app';
 import { useSettingsStore } from '../../../stores/settings';
+import { ref } from 'vue';
+import { detailImageScopeKey } from '../../../composables/useNoImageMode';
 
 const mocks = vi.hoisted(() => ({
   openImageInSystemViewer: vi.fn().mockResolvedValue(undefined),
@@ -36,6 +38,19 @@ function mountGrid() {
 }
 
 describe('FeedImageGrid 点击打开方式', () => {
+  it('无图模式下详情配图可进入大图查看器，列表继续隐藏配图', async () => {
+    const settings = useSettingsStore();
+    settings.settings.noImageMode = settings.settings.showImagesInDetail = true;
+    settings.settings.imageOpenMode = 'internal';
+    const list = mountGrid();
+    const detail = mount(FeedImageGrid, { props: { images: ['https://img.example/detail.jpg'] }, global: { provide: { [detailImageScopeKey as symbol]: ref(true) }, stubs: { LivePhotoPreview: true } } });
+    try {
+      expect(list.find('.feed-image-grid').exists()).toBe(false);
+      await detail.get('.grid-item').trigger('click');
+      expect(useAppStore().activeImageViewer?.fromDetail).toBe(true);
+      expect(settings.settings.noImageMode).toBe(true);
+    } finally { list.unmount(); detail.unmount(); }
+  });
   it('retains measured image ratios across recycling so long-image layout does not jump', async () => {
     const images = ['https://img.example/tall.jpg'];
     const first = mount(FeedImageGrid, { props: { images }, global: { stubs: { LivePhotoPreview: true } } });

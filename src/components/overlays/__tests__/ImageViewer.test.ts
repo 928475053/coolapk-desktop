@@ -24,6 +24,20 @@ const loadResourceMock = vi.mocked(loadImageResource);
 const memoryCacheMock = vi.mocked(getMemoryCachedResourceSync);
 
 describe('原图加载成功后隐藏入口', () => {
+  it('无图模式允许详情来源的大图，关闭详情开关后隐藏查看器', async () => {
+    const settings = useSettingsStore();
+    settings.settings.noImageMode = settings.settings.showImagesInDetail = true;
+    const store = useAppStore();
+    const wrapper = mount(ImageViewer, { global: { stubs: { Teleport: true } } });
+    try {
+      store.openImageViewer(['https://img.example/detail.jpg'], 0, { fromDetail: true });
+      await flushPromises();
+      expect(wrapper.find('.no-image-detail-enabled .viewer-img').exists()).toBe(true);
+      settings.settings.showImagesInDetail = false;
+      await flushPromises();
+      expect(wrapper.find('.image-viewer-backdrop').exists()).toBe(false);
+    } finally { wrapper.unmount(); }
+  });
   beforeEach(() => {
     loadResourceMock.mockImplementation(async url => dataOf(url));
     memoryCacheMock.mockReturnValue(null);

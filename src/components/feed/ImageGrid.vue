@@ -1,5 +1,5 @@
 <template>
-  <div v-if="!settingsStore.settings.noImageMode && pics && pics.length > 0" class="image-grid" :class="gridClass">
+  <div v-if="!noImageMode && pics && pics.length > 0" class="image-grid" :class="gridClass">
     <div
       v-for="(imgUrl, idx) in pics"
       :key="idx"
@@ -19,7 +19,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { sanitizeImageUrl } from '../../utils/image';
-import { useSettingsStore } from '../../stores/settings';
+import { useNoImageMode } from '../../composables/useNoImageMode';
 import AppImage from '../common/AppImage.vue';
 
 const props = defineProps<{
@@ -27,7 +27,7 @@ const props = defineProps<{
   normalizeImg: (url: string, type: 'avatar' | 'feed') => string;
 }>();
 
-const settingsStore = useSettingsStore();
+const noImageMode = useNoImageMode();
 
 defineEmits<{
   (e: 'open-image', url: string): void;

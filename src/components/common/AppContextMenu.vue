@@ -58,6 +58,7 @@ type ContextState = {
   linkText: string;
   imageUrl: string;
   imageDataUrl?: string;
+  fromDetail?: boolean;
   imageUrls: string[];
   feedId: string;
   feedText: string;
@@ -195,6 +196,7 @@ function buildContext(event: ContextPoint): ContextState | null {
       imageUrl,
       // 大图可能超过内存缓存上限；直接复用当前元素持有的完整原图数据。
       imageDataUrl: getLoadedOriginalImage(element, imageUrl),
+      fromDetail: Boolean(element.closest('.no-image-detail-enabled')),
       imageUrls: [],
       feedId: '',
       feedText: '',
@@ -367,8 +369,8 @@ function createItems(state: ContextState): MenuItem[] {
 
   if (state.kind === 'image') {
     return [
-      item('view-image', '查看大图', 'fas fa-expand', () => appStore.openImageViewer([state.imageUrl])),
-      item('view-original', '查看原图', 'fas fa-file-image', () => appStore.openImageViewer([state.imageUrl])),
+      item('view-image', '查看大图', 'fas fa-expand', () => appStore.openImageViewer([state.imageUrl], 0, { fromDetail: state.fromDetail })),
+      item('view-original', '查看原图', 'fas fa-file-image', () => appStore.openImageViewer([state.imageUrl], 0, { fromDetail: state.fromDetail })),
       separator('image-separator'),
       item('save-image', '保存图片', 'fas fa-download', () => saveImage(state.imageUrl, state.imageDataUrl)),
       item('copy-image', '复制图片', 'far fa-copy', () => copyImage(state.imageUrl, state.imageDataUrl)),

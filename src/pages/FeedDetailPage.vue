@@ -1,5 +1,5 @@
 <template>
-  <div class="feed-detail-page custom-scrollbar" :class="{ 'is-official-mobile': officialMobileDetail, 'is-split': showSplit }">
+  <div class="feed-detail-page custom-scrollbar" :class="{ 'is-official-mobile': officialMobileDetail, 'is-split': showSplit, 'no-image-detail-enabled': detailImagesEnabled }">
     <button v-if="officialMobileDetail && (!feedDetail || isAnswerDetail)" type="button" aria-label="返回" class="detail-fallback-back" @click="navigateBack(router)"><i class="fas fa-arrow-left"></i> 返回</button>
     <div class="feed-detail-shell">
       <LoadingState v-if="loading && !feedDetail" text="正在加载原动态..." />
@@ -54,8 +54,10 @@ import { isAnswerSearchEntity } from '../utils/searchEntities';
 import { useMobileLayout, useOfficialMobileFeedDetail, useWideSplitLayout } from '../composables/useOfficialMobileFeedDetail';
 import { usePageTabTitle } from '../composables/usePageTabTitle';
 import { useSettingsStore } from '../stores/settings';
+import { provideDetailImageScope } from '../composables/useNoImageMode';
 
 defineOptions({ name: 'FeedDetailPage' });
+const detailImagesEnabled = provideDetailImageScope();
 
 const props = defineProps<{
   feedId: string;

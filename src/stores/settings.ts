@@ -139,6 +139,7 @@ const defaultSettings: AppSettings = {
   suppressUnsupportedLivePhotoCodecPrompt: false,
   autoLoadOriginalImage: true,
   noImageMode: false,
+  showImagesInDetail: false,
   showDeviceInfo: true,
   showHomeMonthlyRank: true,
   showHomeHotTopics: true,
@@ -309,6 +310,7 @@ export function normalizeSettings(value: unknown): AppSettings {
   result.suppressUnsupportedLivePhotoCodecPrompt = readBoolean(source.suppressUnsupportedLivePhotoCodecPrompt, result.suppressUnsupportedLivePhotoCodecPrompt);
   result.autoLoadOriginalImage = readBoolean(source.autoLoadOriginalImage, result.autoLoadOriginalImage);
   result.noImageMode = readBoolean(source.noImageMode, result.noImageMode);
+  result.showImagesInDetail = readBoolean(source.showImagesInDetail, result.showImagesInDetail);
   result.showDeviceInfo = readBoolean(source.showDeviceInfo, result.showDeviceInfo);
   result.showHomeMonthlyRank = readBoolean(source.showHomeMonthlyRank, result.showHomeMonthlyRank);
   result.showHomeHotTopics = readBoolean(source.showHomeHotTopics, result.showHomeHotTopics);

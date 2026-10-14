@@ -153,6 +153,8 @@ export interface AppSettings {
   suppressUnsupportedLivePhotoCodecPrompt: boolean;
   autoLoadOriginalImage: boolean;
   noImageMode: boolean;
+  /** 无图模式下仅在动态详情中显示图片。 */
+  showImagesInDetail: boolean;
   showDeviceInfo: boolean;
   showHomeMonthlyRank: boolean;
   showHomeHotTopics: boolean;

@@ -31,35 +31,21 @@
   scroll-behavior: auto !important;
 }
 
-/* 无图模式：图片、视频、图片组件和所有图片占位都不参与显示。 */
-:root[data-no-image-mode='true'] img,
+/* 无图模式下仍隐藏视频；图片只允许详情及其大图浮层按独立设置放行。 */
 :root[data-no-image-mode='true'] video,
-:root[data-no-image-mode='true'] .app-image-container,
-:root[data-no-image-mode='true'] .feed-image-grid,
-:root[data-no-image-mode='true'] .image-grid,
 :root[data-no-image-mode='true'] .feed-video-card,
-:root[data-no-image-mode='true'] .live-photo-preview,
-:root[data-no-image-mode='true'] .app-avatar-container,
-:root[data-no-image-mode='true'] .image-viewer-backdrop,
-:root[data-no-image-mode='true'] .live-player-shell,
-:root[data-no-image-mode='true'] .publish-media-preview,
-:root[data-no-image-mode='true'] .forward-media-preview,
-:root[data-no-image-mode='true'] .comment-media-preview,
-:root[data-no-image-mode='true'] .emoji-panel,
-:root[data-no-image-mode='true'] .emoji-picker-popover,
-:root[data-no-image-mode='true'] [class*='fallback']:not(.goods-price-fallback),
-:root[data-no-image-mode='true'] .image-placeholder,
-:root[data-no-image-mode='true'] .image-error,
-:root[data-no-image-mode='true'] .collection-cover-placeholder,
-:root[data-no-image-mode='true'] .banner-cover-placeholder,
-:root[data-no-image-mode='true'] .cover-placeholder,
-:root[data-no-image-mode='true'] .cover-gradient,
-:root[data-no-image-mode='true'] .banner-cover-gradient,
-:root[data-no-image-mode='true'] .card-cover-backdrop,
-:root[data-no-image-mode='true'] .question-related-placeholder,
-:root[data-no-image-mode='true'] .answer-related-placeholder,
-:root[data-no-image-mode='true'] .live-player-placeholder,
-:root[data-no-image-mode='true'] .placeholder-avatar,
-:root[data-no-image-mode='true'] .discovery-generic-icon {
+:root[data-no-image-mode='true'] .live-player-shell {
+  display: none !important;
+}
+
+:root[data-no-image-mode='true'] :is(
+  img, .app-image-container, .feed-image-grid, .image-grid, .live-photo-preview,
+  .app-avatar-container, .image-viewer-backdrop, .publish-media-preview, .forward-media-preview,
+  .comment-media-preview, .emoji-panel, .emoji-picker-popover,
+  [class*='fallback']:not(.goods-price-fallback), .image-placeholder, .image-error,
+  .collection-cover-placeholder, .banner-cover-placeholder, .cover-placeholder, .cover-gradient,
+  .banner-cover-gradient, .card-cover-backdrop, .question-related-placeholder,
+  .answer-related-placeholder, .live-player-placeholder, .placeholder-avatar, .discovery-generic-icon
+):not(.no-image-detail-enabled, .no-image-detail-enabled *) {
   display: none !important;
 }

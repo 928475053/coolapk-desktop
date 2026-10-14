@@ -29,6 +29,14 @@
         <AppSwitch v-model="settingsStore.settings.noImageMode" />
       </div>
 
+      <div v-if="settingsStore.settings.noImageMode" class="setting-row">
+        <div class="row-info">
+          <span class="row-label">进入详情时展示图片</span>
+          <span class="row-sub">首页和列表保持无图，进入动态或问答详情后显示图片</span>
+        </div>
+        <AppSwitch v-model="settingsStore.settings.showImagesInDetail" />
+      </div>
+
       <div class="setting-row">
         <div class="row-info">
           <span class="row-label">动图自动播放</span>

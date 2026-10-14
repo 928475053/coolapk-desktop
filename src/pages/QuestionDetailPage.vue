@@ -1,5 +1,5 @@
 <template>
-  <div class="question-detail-page page-container custom-scrollbar">
+  <div class="question-detail-page page-container custom-scrollbar" :class="{ 'no-image-detail-enabled': detailImagesEnabled }">
     <div class="question-detail-shell">
       <div v-if="questionLoading && !question" class="state-wrapper">
         <LoadingState text="正在加载问题详情..." />
@@ -130,6 +130,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { provideDetailImageScope } from '../composables/useNoImageMode';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import AppButton from '../components/common/AppButton.vue';
 import AppDialog from '../components/common/AppDialog.vue';
@@ -158,6 +159,7 @@ import {
 import { showToast } from '../utils/toast';
 
 defineOptions({ name: 'QuestionDetailPage' });
+const detailImagesEnabled = provideDetailImageScope();
 
 const props = defineProps<{
   questionId: string;

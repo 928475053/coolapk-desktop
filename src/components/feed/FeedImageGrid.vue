@@ -1,6 +1,6 @@
 <template>
   <div
-    v-if="!settingsStore.settings.noImageMode && processedImages && processedImages.length > 0"
+    v-if="!noImageMode && processedImages && processedImages.length > 0"
     :class="['feed-image-grid', `count-${gridCount}`, `variant-${variant}`]"
   >
     <div
@@ -37,9 +37,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, inject, ref } from 'vue';
 import { useAppStore } from '../../stores/app';
 import { useSettingsStore } from '../../stores/settings';
+import { useNoImageMode, detailImageScopeKey } from '../../composables/useNoImageMode';
 import LivePhotoPreview from './LivePhotoPreview.vue';
 import { getStaticAnimatedImageUrl, isAnimatedImageUrl, isPortraitLongImage } from '../../utils/image';
 import { CoolapkTauriAPI } from '../../api/coolapk';
@@ -64,6 +65,8 @@ const contentType = computed<LivePhotoContextType>(() => props.contentType || 'f
 
 const appStore = useAppStore();
 const settingsStore = useSettingsStore();
+const noImageMode = useNoImageMode();
+const detailImageScope = inject(detailImageScopeKey, ref(false));
 const LONG_IMAGE_RATIO = 1.8;
 const imageRatios = defineModel<Record<string, number>>('imageRatios', { default: () => ({}) });
 
@@ -113,6 +116,7 @@ function openViewer(index: number) {
   appStore.openImageViewer(images, index, {
     contentId: props.contentId,
     contentType: contentType.value,
+    fromDetail: detailImageScope.value,
   });
 }
 </script>

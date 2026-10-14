@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <Transition name="fade">
-      <div v-if="viewerData && !noImageMode" class="image-viewer-backdrop" @click="handleBackdropClick">
+      <div v-if="viewerData && !noImageMode" class="image-viewer-backdrop" :class="{ 'no-image-detail-enabled': detailImagesEnabled }" @click="handleBackdropClick">
         <!-- 顶部工具栏 -->
         <div class="viewer-topbar">
           <div class="topbar-left">
@@ -166,6 +166,7 @@ import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue';
 import { useAppStore } from '../../stores/app';
 import { useShortcutHints } from '../../composables/useShortcutHints';
 import { useSettingsStore } from '../../stores/settings';
+import { useNoImageMode, provideDetailImageScope } from '../../composables/useNoImageMode';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { getHdImageUrl, getOriginalImageUrl } from '../../utils/image';
 import { getMemoryCachedResourceSync, loadImageResource, normalizeResourceUrl } from '../../utils/resourceCache';
@@ -179,9 +180,10 @@ import { detectLiveVideoCodec, getLiveVideoCodecSupport, waitForDecodedVideoFram
 const appStore = useAppStore();
 const showShortcutHints = useShortcutHints();
 const settingsStore = useSettingsStore();
-const noImageMode = computed(() => settingsStore.settings.noImageMode);
-
 const viewerData = computed(() => appStore.activeImageViewer);
+const viewerDetailScope = computed(() => Boolean(viewerData.value?.fromDetail));
+const detailImagesEnabled = provideDetailImageScope(viewerDetailScope);
+const noImageMode = useNoImageMode(viewerDetailScope);
 const currentIndex = ref(0);
 const scale = ref(1);
 const rotation = ref(0);

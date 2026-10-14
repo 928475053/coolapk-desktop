@@ -16,8 +16,25 @@ vi.mock('../../../api/coolapk', () => ({
 
 import AppImage from '../AppImage.vue';
 import AppAvatar from '../AppAvatar.vue';
+import { detailImageScopeKey } from '../../../composables/useNoImageMode';
 
 describe('AppImage', () => {
+  it('无图模式只放行详情图片，后台列表仍不加载，关闭详情选项后立即隐藏', async () => {
+    const settings = useSettingsStore();
+    settings.settings.noImageMode = settings.settings.showImagesInDetail = true;
+    const list = mount(AppImage, { props: { src: 'https://image.coolapk.com/list.jpg' } });
+    const detail = mount(AppImage, { props: { src: 'https://image.coolapk.com/detail.jpg' }, global: { provide: { [detailImageScopeKey as symbol]: ref(true) } } });
+    try {
+      await flushPromises();
+      expect(list.find('img').exists()).toBe(false);
+      expect(detail.find('img').exists()).toBe(true);
+      expect(mocks.getImageDataUrl).toHaveBeenCalledTimes(1);
+      settings.settings.showImagesInDetail = false;
+      await flushPromises();
+      expect(detail.find('.app-image-container').exists()).toBe(false);
+      expect(settings.settings.noImageMode).toBe(true);
+    } finally { list.unmount(); detail.unmount(); }
+  });
   beforeEach(() => {
     clearResourceMemoryCache();
     mocks.getImageDataUrl.mockReset();

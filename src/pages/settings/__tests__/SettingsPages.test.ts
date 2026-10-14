@@ -156,6 +156,7 @@ describe('设置页面交互', () => {
 
   it('内容页覆盖正文、链接和关键词设置', async () => {
     const { wrapper, settings } = mountPage(ContentSettingsPage);
+    expect(wrapper.text()).not.toContain('进入详情时展示图片');
     const selects = wrapper.findAll('select');
     await selects[0].setValue('18');
     await wrapper.get('.text-input').setValue('广告');
@@ -174,6 +175,9 @@ describe('设置页面交互', () => {
     const noImageRow = contentRows.find((row) => row.text().includes('无图模式'))!;
     await noImageRow.find('.switch-input').setValue(true);
     expect(settings.settings.noImageMode).toBe(true);
+    const detailImagesRow = wrapper.findAll('.setting-row').find(row => row.text().includes('进入详情时展示图片'))!;
+    await detailImagesRow.get('.switch-input').setValue(true);
+    expect(settings.settings.showImagesInDetail).toBe(true);
     expect(settings.settings.blockedKeywords).toEqual(['广告']);
     await wrapper.get('.chip-remove').trigger('click');
     expect(settings.settings.blockedKeywords).toEqual([]);

@@ -4,6 +4,8 @@ import type { FeedImageInput, LivePhotoContextType } from '../utils/livePhoto';
 import type { FeedItem } from '../types/feed';
 
 export interface ImageViewerContext {
+  /** 从详情打开的大图沿用该详情的无图模式例外。 */
+  fromDetail?: boolean;
   contentId?: string | number;
   contentType?: LivePhotoContextType;
 }
@@ -68,6 +70,7 @@ export const useAppStore = defineStore('app', () => {
       currentIndex,
       ...(context.contentId !== undefined ? { contentId: context.contentId } : {}),
       ...(context.contentType ? { contentType: context.contentType } : {}),
+      ...(context.fromDetail ? { fromDetail: true } : {}),
     };
   }
 

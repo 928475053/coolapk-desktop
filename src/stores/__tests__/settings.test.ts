@@ -20,6 +20,10 @@ const fileStoreState = vi.hoisted(() => {
 vi.mock('@tauri-apps/plugin-store', () => ({ Store: { load: fileStoreState.load } }));
 
 describe('settings store', () => {
+  it('详情显示图片默认关闭，并保留已保存的开关', () => {
+    expect(normalizeSettings({}).showImagesInDetail).toBe(false);
+    expect(normalizeSettings({ showImagesInDetail: true }).showImagesInDetail).toBe(true);
+  });
   it('旧配置默认开启滚动隐藏导航，并保留用户明确关闭的选择', () => {
     expect(normalizeSettings({}).autoHideMobileNavigation).toBe(true);
     expect(normalizeSettings({ autoHideMobileNavigation: false }).autoHideMobileNavigation).toBe(false);

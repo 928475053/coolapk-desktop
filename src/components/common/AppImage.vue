@@ -29,6 +29,7 @@
 import { computed, ref, watch, onMounted, onActivated, onDeactivated, onUnmounted } from 'vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { useSettingsStore } from '../../stores/settings';
+import { useNoImageMode } from '../../composables/useNoImageMode';
 import { sanitizeImageUrl } from '../../utils/image';
 import { loadImageResource, normalizeResourceUrl, getMemoryCachedResourceSync } from '../../utils/resourceCache';
 import { observeResourceVisibility } from '../../utils/resourceVisibility';
@@ -50,7 +51,7 @@ const emit = defineEmits<{
 }>();
 
 const settingsStore = useSettingsStore();
-const noImageMode = computed(() => settingsStore.settings.noImageMode);
+const noImageMode = useNoImageMode();
 const contextImageUrl = computed(() => props.src ? normalizeResourceUrl(props.src) : '');
 
 // 同步尝试命中内存缓存

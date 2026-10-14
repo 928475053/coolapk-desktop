@@ -5,6 +5,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { resolveDeviceIdentity } from '../utils/devicePresets';
 import { resolveDesktopCommentsOnRight } from '../utils/desktopCommentsPreference';
 import { normalizeSearchTabOrder } from '../utils/searchTabOrder';
+import { normalizeLightBackground, buildLightBackground } from '../utils/lightBackground';
 import { isLinuxDesktopRuntime, observeLinuxSystemTheme, type SystemTheme } from '../utils/linuxSystemTheme';
 import type {
   AppSettings,
@@ -133,6 +134,7 @@ const defaultSettings: AppSettings = {
   moreExpanded: false,
   reduceMotion: false,
   accentColor: 'green',
+  lightBackgroundColor: '',
   collapseLines: 12,
   autoPlayGif: true,
   autoPlayLivePhotoSound: false,
@@ -252,6 +254,7 @@ export function normalizeSettings(value: unknown): AppSettings {
   if (isOneOf(source.feedLayout, ['single', 'double'])) result.feedLayout = source.feedLayout;
   result.fontFamily = normalizeFontFamily(source.fontFamily, result.fontFamily);
   if (isOneOf(source.accentColor, ['green', 'blue', 'violet', 'orange'])) result.accentColor = source.accentColor;
+  result.lightBackgroundColor = normalizeLightBackground(source.lightBackgroundColor);
   if (isOneOf(source.defaultHomeTab, ['index_v8', 'digest', 'hot', 'latest', 'cool_picture', 'secondhand', 'pictures', 'dyh'])) result.defaultHomeTab = source.defaultHomeTab;
   result.liveTileEnabled = readBoolean(source.liveTileEnabled, result.liveTileEnabled);
   if (isOneOf(source.liveTileSource, ['index_v8', 'hot', 'news', 'digest'])) {
@@ -503,6 +506,17 @@ export const useSettingsStore = defineStore('settings', () => {
     applyAccent(settings.value.accentColor);
   }, { immediate: true });
   watch(() => settings.value.accentColor, applyAccent, { immediate: true });
+  watch(() => settings.value.lightBackgroundColor, color => {
+    const root = document.documentElement;
+    const palette = buildLightBackground(color);
+    if (palette) {
+      root.setAttribute('data-light-background', 'custom');
+      for (const [key, value] of Object.entries(palette)) root.style.setProperty(`--light-custom-${key}`, value);
+    } else {
+      root.removeAttribute('data-light-background');
+      for (const key of ['page', 'secondary', 'surface', 'hover', 'active', 'border', 'divider']) root.style.removeProperty(`--light-custom-${key}`);
+    }
+  }, { immediate: true });
   watch(() => settings.value.density, applyDensity, { immediate: true });
   watch(() => settings.value.fontFamily, applyFontFamily, { immediate: true });
   watch(() => settings.value.fontSize, applyFontSize, { immediate: true });

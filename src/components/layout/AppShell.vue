@@ -21,7 +21,7 @@
         <button v-if="showWindowControls && !isMobileLayoutDisabled && mobileLayout && route.path !== '/'" type="button" class="narrow-titlebar-back" aria-label="返回" title="返回上一页" data-tauri-drag-region="false" @click="navigateBack(router)"><i class="fas fa-arrow-left" aria-hidden="true"></i></button>
       </template>
     </TopBar>
-    <div class="mobile-reading-topbar"><div class="mobile-reading-topbar-content" :inert="reading.hidden.value" :aria-hidden="reading.hidden.value || undefined">
+    <div class="mobile-reading-topbar"><div class="mobile-reading-topbar-content" :inert="reading.hidden.value || undefined" :aria-hidden="reading.hidden.value || undefined">
     <MobileTopBar
       v-if="!isMobileLayoutDisabled && !route.path.startsWith('/my-plugins')"
       :navigation-open="mobileNavigationOpen"
@@ -43,7 +43,7 @@
         </main>
       </div>
     </div>
-    <MobileBottomNav v-if="showMobileBottomNav" :inert="reading.hidden.value" :aria-hidden="reading.hidden.value || undefined" />
+    <MobileBottomNav v-if="showMobileBottomNav" :inert="reading.hidden.value || undefined" :aria-hidden="reading.hidden.value || undefined" />
   </div>
 </template>
 

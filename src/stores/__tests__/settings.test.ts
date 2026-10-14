@@ -20,6 +20,18 @@ const fileStoreState = vi.hoisted(() => {
 vi.mock('@tauri-apps/plugin-store', () => ({ Store: { load: fileStoreState.load } }));
 
 describe('settings store', () => {
+  it('自定义浅色底色即时应用，恢复默认后移除自定义变量', async () => {
+    const store = useSettingsStore();
+    store.settings.lightBackgroundColor = '#e5e7eb';
+    await nextTick();
+    expect(document.documentElement.getAttribute('data-light-background')).toBe('custom');
+    expect(document.documentElement.style.getPropertyValue('--light-custom-page')).toBe('#e5e7eb');
+    store.settings.lightBackgroundColor = '';
+    await nextTick();
+    expect(document.documentElement.hasAttribute('data-light-background')).toBe(false);
+    expect(document.documentElement.style.getPropertyValue('--light-custom-page')).toBe('');
+    expect(normalizeSettings({ lightBackgroundColor: 'bad' }).lightBackgroundColor).toBe('');
+  });
   it('详情显示图片默认关闭，并保留已保存的开关', () => {
     expect(normalizeSettings({}).showImagesInDetail).toBe(false);
     expect(normalizeSettings({ showImagesInDetail: true }).showImagesInDetail).toBe(true);

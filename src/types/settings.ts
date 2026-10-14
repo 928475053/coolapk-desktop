@@ -147,6 +147,8 @@ export interface AppSettings {
   moreExpanded: boolean;
   reduceMotion: boolean;
   accentColor: AccentColor;
+  /** 浅色界面的自定义底色；空字符串沿用默认主题。 */
+  lightBackgroundColor: string;
   collapseLines: number;
   autoPlayGif: boolean;
   autoPlayLivePhotoSound: boolean;
@@ -158,7 +160,7 @@ export interface AppSettings {
   showDeviceInfo: boolean;
   showHomeMonthlyRank: boolean;
   showHomeHotTopics: boolean;
-  /** 移动首页阅读时自动收起顶部搜索栏与底部 Dock，保留栏目导航。 */
+  /** 移动阅读时自动收起首页搜索栏、Dock 或详情底栏，保留栏目导航。 */
   autoHideMobileNavigation: boolean;
   defaultHomeTab: HomeTabKey;
   liveTileEnabled: boolean;

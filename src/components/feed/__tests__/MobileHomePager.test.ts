@@ -53,6 +53,8 @@ describe('移动首页一体滑动', () => {
     try {
       await flushPromises(); reset.mockClear(); hidden.value = true;
       await flushPromises();
+      expect(w.get('.pager-page[data-tab-key="digest"]').attributes('inert')).toBeUndefined();
+      expect(w.get('.pager-page[data-tab-key="follow"]').attributes('inert')).toBeDefined();
       expect(w.get('.home-toolbar').attributes('inert')).toBeUndefined();
       expect(w.get('.home-toolbar').attributes('aria-hidden')).toBeUndefined();
       w.findComponent({ name: 'FeedTabs' }).vm.$emit('update:activeKey', 'hot');

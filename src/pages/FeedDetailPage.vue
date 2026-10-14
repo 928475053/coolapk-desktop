@@ -1,5 +1,5 @@
 <template>
-  <div class="feed-detail-page custom-scrollbar" :class="{ 'is-official-mobile': officialMobileDetail, 'is-split': showSplit, 'no-image-detail-enabled': detailImagesEnabled }">
+  <div class="feed-detail-page custom-scrollbar" :class="{ 'is-official-mobile': officialMobileDetail, 'is-split': showSplit, 'no-image-detail-enabled': detailImagesEnabled, 'reading-actions-hidden': detailReading.hidden.value }" @scroll.capture="detailReading.onScroll" @wheel.capture.passive="detailReading.onWheel" @touchstart.capture.passive="detailReading.onTouchStart" @touchmove.capture.passive="detailReading.onTouchMove">
     <button v-if="officialMobileDetail && (!feedDetail || isAnswerDetail)" type="button" aria-label="返回" class="detail-fallback-back" @click="navigateBack(router)"><i class="fas fa-arrow-left"></i> 返回</button>
     <div class="feed-detail-shell">
       <LoadingState v-if="loading && !feedDetail" text="正在加载原动态..." />
@@ -39,7 +39,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, inject, onActivated, onDeactivated, onMounted, provide, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { navigateBack } from '../utils/navigation';
 import { CoolapkTauriAPI } from '../api/coolapk';
@@ -55,6 +55,8 @@ import { useMobileLayout, useOfficialMobileFeedDetail, useWideSplitLayout } from
 import { usePageTabTitle } from '../composables/usePageTabTitle';
 import { useSettingsStore } from '../stores/settings';
 import { provideDetailImageScope } from '../composables/useNoImageMode';
+import { mobileDetailActionsHiddenKey, useMobileReadingNavigation } from '../composables/useMobileReadingNavigation';
+import { feedPageVisibleKey } from '../utils/feedPageVisibility';
 
 defineOptions({ name: 'FeedDetailPage' });
 const detailImagesEnabled = provideDetailImageScope();
@@ -73,6 +75,14 @@ const targetReplyId = computed(() => {
 const appStore = useAppStore();
 const settingsStore = useSettingsStore();
 const officialMobileDetail = useOfficialMobileFeedDetail();
+// 详情底栏沿用阅读导航设置；缓存页面和搜索、发布、大图浮层期间恢复状态。
+const detailActive = ref(true);
+const detailVisible = inject(feedPageVisibleKey, ref(true));
+const detailReading = useMobileReadingNavigation(computed(() => officialMobileDetail.value && detailActive.value && detailVisible.value
+  && settingsStore.settings.autoHideMobileNavigation && !appStore.isSearchOpen && !appStore.isPublishOpen && !appStore.activeImageViewer), '.feed-detail-page.is-official-mobile');
+provide(mobileDetailActionsHiddenKey, detailReading.hidden);
+onActivated(() => { detailActive.value = true; });
+onDeactivated(() => { detailActive.value = false; });
 // 注意：判据用 `mobileLayout`（纯布局）而不是 `officialMobileDetail`。
 // 后者是「布局 × officialMobileFeedDetail 开关」的合取 —— 用户关掉那个开关后，
 // 触摸设备上它也是 false，于是平板会误入分栏。与点击侧（FeedCard 的
@@ -162,6 +172,7 @@ onMounted(() => {
 });
 
 watch(feedId, (nextFeedId) => {
+  detailReading.reset();
   feedDetail.value = normalizeContextFeed(appStore.getFeedDetailContext(nextFeedId));
   error.value = '';
   void fetchDetail();
@@ -183,6 +194,9 @@ watch(feedId, (nextFeedId) => {
 }
 .feed-detail-page.is-official-mobile { background: var(--surface); }
 .is-official-mobile .feed-detail-shell { padding-bottom: calc(100px + env(safe-area-inset-bottom)); }
+.is-official-mobile .feed-detail-shell { transition: padding-bottom 200ms ease; }
+.is-official-mobile.reading-actions-hidden .feed-detail-shell { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+@media (prefers-reduced-motion: reduce) { .is-official-mobile .feed-detail-shell { transition: none; } }
 .feed-detail-page {
   width: 100%;
   height: 100%;

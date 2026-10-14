@@ -1,5 +1,5 @@
 <template>
-  <div class="feed-action-bar" :class="{ 'official-detail-actions': officialDetail }">
+  <div class="feed-action-bar" :class="{ 'official-detail-actions': officialDetail, 'reading-hidden': officialDetail && detailActionsHidden }" :inert="officialDetail && detailActionsHidden || undefined" :aria-hidden="officialDetail && detailActionsHidden || undefined">
     <button v-if="officialDetail" class="official-write-comment" @click.stop="$emit('write-comment')"><OfficialDetailIcon name="write" />写评论</button>
     <div class="action-group">
       <button
@@ -44,7 +44,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { inject, ref, watch } from 'vue';
+import { mobileDetailActionsHiddenKey } from '../../composables/useMobileReadingNavigation';
 import OfficialDetailIcon from './OfficialDetailIcon.vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { useAuthStore } from '../../stores/auth';
@@ -52,6 +53,7 @@ import { showToast } from '../../utils/toast';
 import { getErrorMessage } from '../../utils/errors';
 
 const authStore = useAuthStore();
+const detailActionsHidden = inject(mobileDetailActionsHiddenKey, ref(false));
 
 const props = defineProps<{
   feedId: string | number;
@@ -279,6 +281,7 @@ function shareFeed() {
 
 /* 两个独立玻璃表面，外层不遮挡滚动到下方的评论。 */
 .feed-action-bar.official-detail-actions {
+  transition: transform 200ms ease, opacity 200ms ease;
   --detail-glass-tint: color-mix(in srgb, var(--surface) 56%, transparent);
   --detail-glass-edge: #ffffffb8;
   position: fixed;
@@ -296,6 +299,8 @@ function shareFeed() {
   background: transparent;
   isolation: isolate;
 }
+.feed-action-bar.official-detail-actions.reading-hidden { transform: translateY(calc(100% + 20px + env(safe-area-inset-bottom, 0px))); opacity: 0; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .feed-action-bar.official-detail-actions { transition: none; } }
 .official-detail-actions::before,
 .official-detail-actions .official-write-comment {
   border: 1px solid var(--detail-glass-edge);

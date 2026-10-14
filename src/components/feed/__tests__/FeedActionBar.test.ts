@@ -2,8 +2,27 @@ import { describe, expect, it } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import FeedActionBar from '../FeedActionBar.vue';
+import { ref } from 'vue';
+import { mobileDetailActionsHiddenKey } from '../../../composables/useMobileReadingNavigation';
 
 describe('动态互动入口', () => {
+  it('详情操作栏随阅读状态收起并禁用交互，普通列表操作栏保持显示', async () => {
+    setActivePinia(createPinia());
+    const hidden = ref(false);
+    const wrapper = mount(FeedActionBar, { props: { feedId: '42', officialDetail: true }, global: { provide: { [mobileDetailActionsHiddenKey as symbol]: hidden } } });
+    try {
+      hidden.value = true; await wrapper.vm.$nextTick();
+      expect(wrapper.classes()).toContain('reading-hidden');
+      expect(wrapper.attributes('inert')).toBeDefined();
+      expect(wrapper.attributes('aria-hidden')).toBe('true');
+      hidden.value = false; await wrapper.vm.$nextTick();
+      expect(wrapper.classes()).not.toContain('reading-hidden');
+      await wrapper.setProps({ officialDetail: false });
+      hidden.value = true; await wrapper.vm.$nextTick();
+      expect(wrapper.classes()).not.toContain('reading-hidden');
+      expect(wrapper.attributes('inert')).toBeUndefined();
+    } finally { wrapper.unmount(); }
+  });
   it('在点赞和转发按钮中展示对应数量', () => {
     setActivePinia(createPinia());
     const wrapper = mount(FeedActionBar, {

@@ -61,6 +61,7 @@ describe('AppShell', () => {
       };
       await hide(); app.isSearchOpen = true; await nextTick();
       expect(wrapper.classes()).not.toContain('reading-navigation-hidden');
+      expect(wrapper.get('.mobile-reading-topbar-content').attributes('inert')).toBeUndefined();
       app.isSearchOpen = false; await nextTick(); await hide();
       app.isPublishOpen = true; await nextTick(); expect(wrapper.classes()).not.toContain('reading-navigation-hidden');
       app.isPublishOpen = false; await nextTick(); await hide();

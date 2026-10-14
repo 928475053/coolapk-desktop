@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
-import { ref } from 'vue';
+import { defineComponent, inject, ref } from 'vue';
+import { mobileDetailActionsHiddenKey } from '../../composables/useMobileReadingNavigation';
 
 const mocks = vi.hoisted(() => ({ detail: vi.fn(), context: vi.fn(), save: vi.fn(), back: vi.fn(), replace: vi.fn(), history: { back: '/' as string | null }, mobile: { value: true } as { value: boolean } }));
 vi.mock('../../api/coolapk', () => ({ CoolapkTauriAPI: { getFeedDetail: mocks.detail } }));
@@ -19,6 +20,30 @@ import FeedDetailPage from '../FeedDetailPage.vue';
 import { useSettingsStore } from '../../stores/settings';
 
 describe('官方详情评论加载', () => {
+  it('详情向下阅读收起底栏，反向滚动恢复，关闭设置后保持显示', async () => {
+    mocks.context.mockReturnValue(null);
+    mocks.detail.mockResolvedValue({ data: { id: '42', username: '酷友', message: '正文' } });
+    const bar = defineComponent({ setup: () => ({ hidden: inject(mobileDetailActionsHiddenKey) }), template: '<div class="detail-actions-state" :data-hidden="hidden" />' });
+    const wrapper = mount(FeedDetailPage, { props: { feedId: '42' }, global: { stubs: { FeedCard: bar } } });
+    try {
+      await flushPromises();
+      await wrapper.trigger('wheel', { deltaY: 120 });
+      (wrapper.element as HTMLElement).scrollTop = 120;
+      await wrapper.trigger('scroll');
+      expect(wrapper.classes()).toContain('reading-actions-hidden');
+      expect(wrapper.get('.detail-actions-state').attributes('data-hidden')).toBe('true');
+      await wrapper.trigger('wheel', { deltaY: -20 });
+      (wrapper.element as HTMLElement).scrollTop = 100;
+      await wrapper.trigger('scroll');
+      expect(wrapper.classes()).not.toContain('reading-actions-hidden');
+      await wrapper.trigger('wheel', { deltaY: 100 });
+      (wrapper.element as HTMLElement).scrollTop = 200;
+      await wrapper.trigger('scroll');
+      useSettingsStore().settings.autoHideMobileNavigation = false;
+      await flushPromises();
+      expect(wrapper.classes()).not.toContain('reading-actions-hidden');
+    } finally { wrapper.unmount(); }
+  });
   beforeEach(() => {
     mocks.mobile.value = true;
     useSettingsStore().settings.desktopCommentsOnRight = false;

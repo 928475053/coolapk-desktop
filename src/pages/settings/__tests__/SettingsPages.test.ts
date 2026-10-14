@@ -154,6 +154,19 @@ describe('设置页面交互', () => {
     wrapper.unmount();
   });
 
+  it('外观设置可选择浅灰底色、自定义颜色并恢复默认', async () => {
+    const { wrapper, settings } = mountPage(AppearanceSettingsPage);
+    try {
+      const options = wrapper.findAll('.light-background-option');
+      await options.find(option => option.text().includes('柔和浅灰'))!.trigger('click');
+      expect(settings.settings.lightBackgroundColor).toBe('#e5e7eb');
+      await wrapper.get('input[type="color"]').setValue('#e6eee8');
+      expect(settings.settings.lightBackgroundColor).toBe('#e6eee8');
+      await options.find(option => option.text().includes('默认'))!.trigger('click');
+      expect(settings.settings.lightBackgroundColor).toBe('');
+    } finally { wrapper.unmount(); }
+  });
+
   it('内容页覆盖正文、链接和关键词设置', async () => {
     const { wrapper, settings } = mountPage(ContentSettingsPage);
     expect(wrapper.text()).not.toContain('进入详情时展示图片');

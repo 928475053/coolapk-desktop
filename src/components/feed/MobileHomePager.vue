@@ -9,7 +9,7 @@
     <div v-if="!tabs.length" class="pager-state">正在加载栏目…</div>
     <div v-else ref="viewport" class="pager-viewport" @pointerdown="startDrag" @click.capture="blockSwipeClick" @wheel="wheel">
       <div class="pager-track" :style="{ transform: `translate3d(${-position * width}px,0,0)` }">
-        <section v-for="(tab, index) in tabs" :key="getHomeTabKey(tab)" class="pager-page" :style="{ left: `${index * 100}%` }" :inert="index !== activeIndex" :aria-hidden="index !== activeIndex" :data-tab-key="getHomeTabKey(tab)">
+        <section v-for="(tab, index) in tabs" :key="getHomeTabKey(tab)" class="pager-page" :style="{ left: `${index * 100}%` }" :inert="index !== activeIndex || undefined" :aria-hidden="index !== activeIndex" :data-tab-key="getHomeTabKey(tab)">
           <HomeTabPanel v-if="visited.has(getHomeTabKey(tab)) || index === activeIndex || (mobile && Math.abs(index - activeIndex) <= 1)" :ref="el => setPanel(getHomeTabKey(tab), el)" embedded :tab-key="getHomeTabKey(tab)" :tabs="serverTabs" :selected="index === activeIndex" />
         </section>
       </div>

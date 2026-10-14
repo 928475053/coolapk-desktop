@@ -1,3 +1,16 @@
+/* 自定义底色仅覆盖浅色主题，系统切到深色时自动沿用深色调色板。 */
+:root[data-light-background]:not([data-theme="dark"]) {
+  --background: var(--light-custom-page);
+  --background-secondary: var(--light-custom-secondary);
+  --surface: var(--light-custom-surface);
+  --surface-elevated: var(--light-custom-surface);
+  --surface-hover: var(--light-custom-hover);
+  --surface-active: var(--light-custom-active);
+  --border: var(--light-custom-border);
+  --border-light: var(--light-custom-divider);
+  --divider: var(--light-custom-divider);
+}
+
 /* src/styles/themes.css - 浅色/深色主题定义 */
 :root {
   --brand-primary: #10b768;

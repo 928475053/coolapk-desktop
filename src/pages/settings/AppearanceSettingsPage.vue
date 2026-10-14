@@ -31,6 +31,16 @@
       </div>
     </div>
 
+    <div class="setting-group light-background-settings">
+      <h4 class="group-title">浅色界面底色</h4>
+      <p class="group-sub">调整页面、卡片与导航底色，降低亮白感；自定义颜色会自动柔化，深色主题沿用原有配色。</p>
+      <div class="light-background-options">
+        <button v-for="option in lightBackgroundOptions" :key="option.label" type="button" :class="['light-background-option', { 'is-active': settingsStore.settings.lightBackgroundColor === option.color }]" :aria-pressed="settingsStore.settings.lightBackgroundColor === option.color" @click="settingsStore.settings.lightBackgroundColor = option.color"><span class="background-swatch" :style="{ backgroundColor: option.color || '#ffffff' }"></span>{{ option.label }}</button>
+        <label class="light-background-custom">自定义底色<input type="color" aria-label="自定义浅色界面底色" :value="settingsStore.settings.lightBackgroundColor || '#e9ecef'" @input="settingsStore.settings.lightBackgroundColor = ($event.target as HTMLInputElement).value" /></label>
+      </div>
+      <div v-if="lightBackgroundPreview" class="light-background-preview" :style="{ backgroundColor: lightBackgroundPreview.page, borderColor: lightBackgroundPreview.border }"><span :style="{ backgroundColor: lightBackgroundPreview.surface }">正文与卡片预览</span></div>
+    </div>
+
     <div class="setting-group">
       <h4 class="group-title">主题强调色</h4>
       <p class="group-sub">全局品牌主色调，侧边栏、按钮与链接等统一换色</p>
@@ -182,7 +192,7 @@
       <div class="setting-row">
         <div class="row-info">
           <span class="row-label">滚动时自动隐藏导航</span>
-          <span class="row-sub">移动布局首页向下阅读时收起搜索栏和底部 Dock，保留栏目栏，反向滚动恢复显示</span>
+          <span class="row-sub">移动布局向下阅读时收起首页搜索栏、底部 Dock 或详情操作栏，保留栏目栏，反向滚动恢复显示</span>
         </div>
         <AppSwitch v-model="settingsStore.settings.autoHideMobileNavigation" />
       </div>
@@ -289,8 +299,11 @@ import { usePlatformShortcuts } from '../../utils/shortcuts';
 import { useShortcutHints } from '../../composables/useShortcutHints';
 import { showToast } from '../../utils/toast';
 import { isTouchMobilePlatform } from '../../utils/platform';
+import { buildLightBackground } from '../../utils/lightBackground';
 
 const settingsStore = useSettingsStore();
+const lightBackgroundOptions = [{ label: '默认', color: '' }, { label: '柔和浅灰', color: '#e5e7eb' }, { label: '暖米色', color: '#eee8dc' }];
+const lightBackgroundPreview = computed(() => buildLightBackground(settingsStore.settings.lightBackgroundColor));
 const { formatShortcut } = usePlatformShortcuts();
 const showShortcutHints = useShortcutHints();
 const fontPickerOpening = ref(false);
@@ -366,6 +379,13 @@ function toggleNav(key: string) {
 
 
 <style scoped>
+.light-background-options { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.light-background-option, .light-background-custom { display: inline-flex; align-items: center; gap: 8px; min-height: 42px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); color: var(--text-primary); font: inherit; cursor: pointer; }
+.light-background-option.is-active { border-color: var(--brand-primary); background: var(--brand-soft); }
+.background-swatch { width: 20px; height: 20px; border: 1px solid var(--border); border-radius: 50%; flex-shrink: 0; }
+.light-background-custom input { width: 34px; height: 28px; padding: 0; border: 0; background: transparent; cursor: pointer; }
+.light-background-preview { margin-top: 12px; padding: 14px; border: 1px solid; border-radius: var(--radius-card); color: #17191c; }
+.light-background-preview span { display: block; padding: 14px; border-radius: var(--radius-control); }
 .nav-disclosure { min-width: 0; }
 .nav-disclosure > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 10px 12px; border: 1px dashed var(--border); border-radius: var(--radius-control); background: var(--background); color: var(--text-primary); font-size: var(--font-size-sub); font-weight: var(--font-weight-semibold); list-style: none; cursor: pointer; }
 .nav-disclosure > summary::-webkit-details-marker { display: none; }

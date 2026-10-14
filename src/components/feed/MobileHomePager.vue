@@ -221,7 +221,7 @@ onUnmounted(() => { unbind(); stopObservingResize?.(); });
 </script>
 <style scoped>
 .mobile-home-pager { container-type: inline-size; container-name: home-layout; display: flex; width: 100%; height: 100%; min-height: 0; overflow: hidden; background: var(--surface); }
-.home-main-column { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
+.home-main-column { position: relative; display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
 .home-toolbar { display: flex; flex: 0 0 auto; min-width: 0; }
 .home-toolbar :deep(.feed-tabs-wrapper) { flex: 1; min-width: 0; }
 .desktop-home-pager .home-main-column { border-right: 1px solid var(--border); }
@@ -235,10 +235,11 @@ onUnmounted(() => { unbind(); stopObservingResize?.(); });
 .pager-state button { min-height: 44px; }
 /* 移动首页栏目浮在动态上方，滚动内容进入玻璃背后；顶部留白保证首屏内容可见。 */
 @media (max-width: 720px) {
-  .mobile-home-pager:not(.desktop-home-pager) .home-toolbar { position: relative; z-index: 2; height: 48px; margin-bottom: -48px; background: var(--home-glass-tint, color-mix(in srgb, var(--surface) 45%, transparent)); border-radius: 0; box-shadow: 0 6px 18px #0000000a, inset 0 -1px 0 var(--home-glass-edge, #ffffffa6); -webkit-backdrop-filter: blur(24px) saturate(165%); backdrop-filter: blur(24px) saturate(165%); }
+  .mobile-home-pager:not(.desktop-home-pager) .home-toolbar { position: absolute; top: var(--mobile-glass-topbar-space, 0px); left: 0; right: 0; z-index: 2; height: 48px; background: var(--home-glass-tint, color-mix(in srgb, var(--surface) 45%, transparent)); border-radius: 0; box-shadow: 0 6px 18px #0000000a, inset 0 -1px 0 var(--home-glass-edge, #ffffffa6); -webkit-backdrop-filter: blur(24px) saturate(165%); backdrop-filter: blur(24px) saturate(165%); transition: top 200ms ease; }
   .mobile-home-pager:not(.desktop-home-pager) .home-toolbar :deep(.feed-tabs-wrapper) { background: transparent; border-bottom: 0; }
   .mobile-home-pager:not(.desktop-home-pager) .home-toolbar :deep(.tab-manage-btn) { background: transparent; border-radius: 0; }
-  .mobile-home-pager:not(.desktop-home-pager) :deep(.feed-scroll-container) { padding-top: 48px; scroll-padding-top: 48px; }
+  .mobile-home-pager:not(.desktop-home-pager) :deep(.feed-scroll-container) { padding-top: calc(var(--mobile-glass-topbar-space, 0px) + 48px); scroll-padding-top: calc(var(--mobile-glass-topbar-space, 0px) + 48px); transition: padding-top 200ms ease; }
+  @media (prefers-reduced-motion: reduce) { .mobile-home-pager:not(.desktop-home-pager) .home-toolbar, .mobile-home-pager:not(.desktop-home-pager) :deep(.feed-scroll-container) { transition: none; } }
   @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .mobile-home-pager:not(.desktop-home-pager) .home-toolbar { background: var(--surface); } }
   @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) { .mobile-home-pager:not(.desktop-home-pager) .home-toolbar { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; } }
 }

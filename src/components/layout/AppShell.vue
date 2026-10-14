@@ -194,12 +194,12 @@ onUnmounted(() => { window.removeEventListener('keydown', handleMobileNavigation
   /* 触摸平板使用桌面顶栏时，给系统状态栏留出顶部安全区。 */
   .app-shell.is-touch-mobile::before {
     content: '';
-    flex: 0 0 env(safe-area-inset-top, 0px);
+    flex: 0 0 var(--app-safe-area-top, 0px);
     background: var(--titlebar-background);
   }
 
   .app-shell.is-touch-mobile :deep(.network-status-banner) {
-    top: calc(var(--app-titlebar-height) + env(safe-area-inset-top, 0px));
+    top: calc(var(--app-titlebar-height) + var(--app-safe-area-top, 0px));
   }
 }
 
@@ -220,7 +220,7 @@ onUnmounted(() => { window.removeEventListener('keydown', handleMobileNavigation
   /* 网格折叠同时释放高度，不能只把导航移出屏幕而留下占位。 */
   .app-shell:not(.prevent-mobile-layout) .mobile-reading-topbar { display: grid; grid-template-rows: 1fr; flex: 0 0 auto; transition: grid-template-rows 200ms ease, padding-top 200ms ease; }
   .app-shell:not(.prevent-mobile-layout) .mobile-reading-topbar-content { display: block; min-height: 0; overflow: hidden; }
-  .app-shell:not(.prevent-mobile-layout).reading-navigation-hidden .mobile-reading-topbar { grid-template-rows: 0fr; padding-top: env(safe-area-inset-top, 0px); }
+  .app-shell:not(.prevent-mobile-layout).reading-navigation-hidden .mobile-reading-topbar { grid-template-rows: 0fr; padding-top: var(--app-safe-area-top, 0px); }
   .app-shell:not(.prevent-mobile-layout).reading-navigation-hidden.has-mobile-window-controls .mobile-reading-topbar { padding-top: 0; }
   .app-shell:not(.prevent-mobile-layout) :deep(.mobile-bottom-nav) { transition: transform 200ms ease, opacity 200ms ease; }
   .app-shell:not(.prevent-mobile-layout).reading-navigation-hidden :deep(.mobile-bottom-nav) { transform: translateY(calc(100% + max(20px, env(safe-area-inset-bottom)))); opacity: 0; pointer-events: none; }
@@ -233,7 +233,7 @@ onUnmounted(() => { window.removeEventListener('keydown', handleMobileNavigation
   .app-shell:not(.prevent-mobile-layout) {
     position: relative;
     --mobile-bottom-overlay-space: env(safe-area-inset-bottom, 0px);
-    --mobile-navigation-top: calc(var(--mobile-topbar-height) + env(safe-area-inset-top, 0px) + 8px);
+    --mobile-navigation-top: calc(var(--mobile-topbar-height) + var(--app-safe-area-top, 0px) + 8px);
   }
 
   .app-shell:not(.prevent-mobile-layout).has-mobile-window-controls {
@@ -243,6 +243,15 @@ onUnmounted(() => { window.removeEventListener('keydown', handleMobileNavigation
   .app-shell:not(.prevent-mobile-layout).has-mobile-bottom-nav {
     --mobile-bottom-overlay-space: calc(var(--mobile-bottom-nav-height) + max(20px, env(safe-area-inset-bottom)) + 8px);
   }
+
+  /* 首页与话题的滚动区域延伸至屏幕顶部，玻璃顶栏覆盖其上；首屏按钮和正文分别预留安全区。 */
+  .app-shell:not(.prevent-mobile-layout):is(.has-home-navigation, .has-topic-navigation) { --mobile-glass-topbar-space: calc(var(--mobile-topbar-height) + var(--app-safe-area-top, 0px)); }
+  .app-shell:not(.prevent-mobile-layout):is(.has-home-navigation, .has-topic-navigation) .mobile-reading-topbar { position: absolute; top: 0; left: 0; right: 0; z-index: 30; background: var(--home-glass-tint, var(--topic-glass-tint)); -webkit-backdrop-filter: blur(24px) saturate(165%); backdrop-filter: blur(24px) saturate(165%); }
+  .app-shell:not(.prevent-mobile-layout):is(.has-home-navigation, .has-topic-navigation) .mobile-reading-topbar-content { background: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .app-shell:not(.prevent-mobile-layout).has-home-navigation.reading-navigation-hidden { --mobile-glass-topbar-space: var(--app-safe-area-top, 0px); }
+  .app-shell:not(.prevent-mobile-layout).has-mobile-window-controls:is(.has-home-navigation, .has-topic-navigation) .mobile-reading-topbar { top: var(--mobile-window-controls-height); }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .app-shell:not(.prevent-mobile-layout):is(.has-home-navigation, .has-topic-navigation) .mobile-reading-topbar { background: var(--surface); } }
+  @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) { .app-shell:not(.prevent-mobile-layout):is(.has-home-navigation, .has-topic-navigation) .mobile-reading-topbar { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; } }
 
   .app-shell:not(.prevent-mobile-layout) :deep(.top-bar),
   .app-shell:not(.prevent-mobile-layout) :deep(.page-tab-bar) {
@@ -278,7 +287,7 @@ onUnmounted(() => { window.removeEventListener('keydown', handleMobileNavigation
 
   /* 移动端顶栏自身会因为安全区变高（iPhone 上约 99px），横幅必须让开它。 */
   .app-shell:not(.prevent-mobile-layout):not(.has-mobile-window-controls) :deep(.network-status-banner) {
-    top: calc(var(--mobile-topbar-height) + env(safe-area-inset-top, 0px) + 8px);
+    top: calc(var(--mobile-topbar-height) + var(--app-safe-area-top, 0px) + 8px);
   }
 
   .app-shell:not(.prevent-mobile-layout) :deep(.main-sidebar) {

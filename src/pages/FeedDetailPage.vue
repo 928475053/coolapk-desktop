@@ -188,7 +188,7 @@ watch(feedId, (nextFeedId) => {
     z-index: 20;
     width: 100%;
     text-align: left;
-    padding-top: calc(8px + env(safe-area-inset-top, 0px));
+    padding-top: calc(8px + var(--app-safe-area-top, 0px));
     padding-left: max(16px, env(safe-area-inset-left, 0px));
   }
 }

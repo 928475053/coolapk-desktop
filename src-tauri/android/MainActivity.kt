@@ -19,6 +19,7 @@ import android.provider.OpenableColumns
 import android.view.View
 import android.view.WindowManager
 import android.webkit.MimeTypeMap
+import android.webkit.WebView
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.Keep
@@ -30,8 +31,26 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import java.io.File
+import java.lang.ref.WeakReference
 
 class MainActivity : TauriActivity() {
+    @Volatile private var topSafeAreaPx = 0
+    private var mainWebView: WeakReference<WebView>? = null
+
+    override fun onWebViewCreate(webView: WebView) {
+        super.onWebViewCreate(webView)
+        mainWebView = WeakReference(webView)
+    }
+
+    @Keep
+    fun getSafeAreaTop(unused: String): String = topSafeAreaPx.toString()
+
+    private fun syncWebSafeArea(top: Int) {
+        topSafeAreaPx = top
+        // WebView 不可靠地提供 CSS safe-area，按实际像素比例传入顶部安全区；旋转时同步更新。
+        mainWebView?.get()?.evaluateJavascript("document.documentElement.style.setProperty('--android-safe-area-top', ($top / window.devicePixelRatio) + 'px')", null)
+    }
+
     @Keep
     fun getRuntimeInfo(unused: String): String {
         val webview = androidx.webkit.WebViewCompat.getCurrentWebViewPackage(this)
@@ -49,8 +68,7 @@ class MainActivity : TauriActivity() {
     private fun applySystemBarTheme(dark: Boolean, profile: Boolean = false, dimmed: Boolean = false) {
         // 个人页背景与网页一致；吸顶或离开个人页后恢复普通顶栏颜色。
         val surface = if (profile) { if (dark) Color.rgb(0x0e, 0x10, 0x12) else Color.rgb(0xf2, 0xf2, 0xf6) } else { if (dark) Color.rgb(0x18, 0x1b, 0x1e) else Color.WHITE }
-        // 状态栏保持透明；给原生安全区与网页顶栏使用相同的背景色。
-        // 回复弹层的网页遮罩是 #0006（40% 黑色），原生安全区同步同一遮罩。
+        // 状态栏保持透明，网页直接绘制后方内容；原生底部安全区仍同步主题和弹层遮罩。
         val background = if (dimmed) ColorUtils.blendARGB(surface, Color.BLACK, 0.4f) else surface
         window.decorView.setBackgroundColor(background)
         findViewById<View>(android.R.id.content).setBackgroundColor(background)
@@ -255,7 +273,7 @@ class MainActivity : TauriActivity() {
         applySystemBarTheme(resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES)
         // 保证旧版 Android 也派发键盘遮挡区域，由原生容器统一避让。
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
-        // Android WebView 的 CSS safe-area 可能为 0，原生预留系统栏、刘海及键盘区域。
+        // 顶部由网页安全区避让，让内容可以绘制在透明状态栏后；左右、底部和键盘仍由原生处理。
         val content = findViewById<View>(android.R.id.content)
         val safeAreaTypes = WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
         val handledTypes = safeAreaTypes or WindowInsetsCompat.Type.ime()
@@ -263,8 +281,9 @@ class MainActivity : TauriActivity() {
             val bars = insets.getInsets(safeAreaTypes)
             val keyboard = insets.getInsets(WindowInsetsCompat.Type.ime())
             // 键盘高度已包含底部系统区域，取较大值而非相加，避免输入框被重复顶起。
-            view.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, keyboard.bottom))
-            // 父容器已完成避让，清除向 WebView 派发的同类区域，避免再次缩小内容区。
+            view.setPadding(bars.left, 0, bars.right, maxOf(bars.bottom, keyboard.bottom))
+            syncWebSafeArea(bars.top)
+            // 网页使用显式传入的顶部安全区，清除重复派发，避免再次缩小内容区。
             WindowInsetsCompat.Builder(insets)
                 .setInsets(handledTypes, Insets.NONE)
                 .setInsetsIgnoringVisibility(safeAreaTypes, Insets.NONE)

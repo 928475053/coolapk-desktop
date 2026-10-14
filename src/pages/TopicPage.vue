@@ -851,6 +851,9 @@ onMounted(() => {
   .topic-official-hero .topic-title,.topic-official-hero .topic-stats-text { color: #fffc; }
   .topic-official-hero .topic-icon-wrapper { width: 64px; height: 64px; }
   .topic-sticky-controls { border-radius: 0 0 16px 16px; margin: 0 -16px; }
+  /* 页面从状态栏后方开始滚动，首屏话题背景延伸到顶端，吸顶栏目停在操作栏下方。 */
+  .page-container:not(.is-embedded) { padding-top: calc(var(--topic-page-top-space) + var(--mobile-glass-topbar-space, 0px)); scroll-padding-top: calc(var(--mobile-glass-topbar-space, 0px) + 104px); }
+  .page-container:not(.is-embedded) .topic-official-hero { margin-top: calc(-1 * (var(--topic-page-top-space) + var(--mobile-glass-topbar-space, 0px))); padding-top: var(--mobile-glass-topbar-space, 0px); }
   .topic-sub-tabs { border-radius: 12px 12px 0 0; box-shadow: none; justify-content: space-around; gap: 0; border: 0; }
 }
 .topic-rating-entry { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; width: 100%; margin-top: 16px; padding: 12px 0 0; border: 0; border-top: 1px solid var(--border-light); background: transparent; color: var(--text-secondary); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }

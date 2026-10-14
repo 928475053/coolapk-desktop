@@ -6,6 +6,7 @@ import '@fortawesome/fontawesome-free/css/all.min.css';
 import './styles/index.css';
 import 'virtual:android-icons.css';
 import App from './App.vue';
+import { initializeAndroidSafeArea } from './utils/androidSafeArea';
 import { router } from './router';
 import { CoolapkTauriAPI } from './api/coolapk';
 import { useSettingsStore } from './stores/settings';
@@ -140,6 +141,7 @@ async function setupDeepLinkHandling() {
 }
 
 async function bootstrap() {
+  await initializeAndroidSafeArea();
   await settingsStore.initializeSettings();
   logDiagnostic('info', 'app', 'settings-ready');
   app.mount('#app');

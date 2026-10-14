@@ -142,6 +142,7 @@ const defaultSettings: AppSettings = {
   showDeviceInfo: true,
   showHomeMonthlyRank: true,
   showHomeHotTopics: true,
+  autoHideMobileNavigation: true,
   defaultHomeTab: 'digest',
   liveTileEnabled: false,
   liveTileSource: 'index_v8',
@@ -311,6 +312,7 @@ export function normalizeSettings(value: unknown): AppSettings {
   result.showDeviceInfo = readBoolean(source.showDeviceInfo, result.showDeviceInfo);
   result.showHomeMonthlyRank = readBoolean(source.showHomeMonthlyRank, result.showHomeMonthlyRank);
   result.showHomeHotTopics = readBoolean(source.showHomeHotTopics, result.showHomeHotTopics);
+  result.autoHideMobileNavigation = readBoolean(source.autoHideMobileNavigation, result.autoHideMobileNavigation);
   result.downloadPath = readString(source.downloadPath, result.downloadPath);
   result.maxConcurrentDownloads = [1, 2, 3, 4, 5, 6, 8].includes(Number(source.maxConcurrentDownloads)) ? Number(source.maxConcurrentDownloads) : result.maxConcurrentDownloads;
   result.autoCleanCache = readBoolean(source.autoCleanCache, result.autoCleanCache);

@@ -7,7 +7,12 @@
       'is-touch-mobile': isTouchMobilePlatform(),
       'prevent-mobile-layout': isMobileLayoutDisabled,
       'has-mobile-bottom-nav': showMobileBottomNav,
+      'reading-navigation-hidden': reading.hidden.value,
     }"
+    @scroll.capture="reading.onScroll"
+    @wheel.capture.passive="reading.onWheel"
+    @touchstart.capture.passive="reading.onTouchStart"
+    @touchmove.capture.passive="reading.onTouchMove"
   >
     <NetworkStatusBanner />
     <TopBar>
@@ -16,12 +21,14 @@
         <button v-if="showWindowControls && !isMobileLayoutDisabled && mobileLayout && route.path !== '/'" type="button" class="narrow-titlebar-back" aria-label="返回" title="返回上一页" data-tauri-drag-region="false" @click="navigateBack(router)"><i class="fas fa-arrow-left" aria-hidden="true"></i></button>
       </template>
     </TopBar>
+    <div class="mobile-reading-topbar"><div class="mobile-reading-topbar-content" :inert="reading.hidden.value" :aria-hidden="reading.hidden.value || undefined">
     <MobileTopBar
       v-if="!isMobileLayoutDisabled && !route.path.startsWith('/my-plugins')"
       :navigation-open="mobileNavigationOpen"
       :mac-overlay="usesMacOverlay"
       @toggle-navigation="toggleMobileNavigation"
     />
+    </div></div>
     <div class="app-body">
       <MainSidebar
         :mobile-open="isMobileLayoutDisabled ? false : mobileNavigationOpen"
@@ -36,7 +43,7 @@
         </main>
       </div>
     </div>
-    <MobileBottomNav v-if="showMobileBottomNav" />
+    <MobileBottomNav v-if="showMobileBottomNav" :inert="reading.hidden.value" :aria-hidden="reading.hidden.value || undefined" />
   </div>
 </template>
 
@@ -64,12 +71,15 @@ import { useSettingsStore } from '../../stores/settings';
 import { useAppStore } from '../../stores/app';
 import { useIosBackGesture } from '../../composables/useIosBackGesture';
 import { navigateBack } from '../../utils/navigation';
+import { mobileReadingNavigationKey, useMobileReadingNavigation } from '../../composables/useMobileReadingNavigation';
 
 const route = useRoute();
 const router = useRouter();
 const settingsStore = useSettingsStore();
 const appStore = useAppStore();
 const mobileNavigationOpen = ref(false);
+const readingViewportWidth = ref(window.innerWidth);
+function updateReadingViewport() { readingViewportWidth.value = window.innerWidth; }
 const mainContent = ref<HTMLElement | null>(null);
 const desktopCommentFeed = shallowRef<FeedItem | null>(null);
 const mobileLayout = useMobileLayout();
@@ -101,6 +111,12 @@ const isMobileLayoutDisabled = computed(() => {
 const showMobileBottomNav = computed(() => !isMobileLayoutDisabled.value
   && ['/', '/digital', '/discover', '/me'].includes(route.path));
 
+// 仅移动首页参与阅读收起；浮层打开或退出该布局时立即恢复所有导航。
+const reading = useMobileReadingNavigation(computed(() => settingsStore.settings.autoHideMobileNavigation
+  && mobileLayout.value && readingViewportWidth.value <= 720 && !isMobileLayoutDisabled.value && route.path === '/'
+  && !mobileNavigationOpen.value && !appStore.isSearchOpen && !appStore.isPublishOpen && !appStore.activeImageViewer));
+provide(mobileReadingNavigationKey, { hidden: reading.hidden, reset: reading.reset });
+
 function toggleMobileNavigation() {
   mobileNavigationOpen.value = !mobileNavigationOpen.value;
 }
@@ -118,13 +134,14 @@ function handleMobileNavigationKeydown(event: KeyboardEvent) {
 }
 
 watch(() => route.fullPath, () => {
+  reading.reset();
   desktopCommentFeed.value = null;
   closeMobileNavigation();
   rootBack.reset();
 });
 
-onMounted(() => window.addEventListener('keydown', handleMobileNavigationKeydown));
-onUnmounted(() => window.removeEventListener('keydown', handleMobileNavigationKeydown));
+onMounted(() => { window.addEventListener('keydown', handleMobileNavigationKeydown); window.addEventListener('resize', updateReadingViewport); });
+onUnmounted(() => { window.removeEventListener('keydown', handleMobileNavigationKeydown); window.removeEventListener('resize', updateReadingViewport); });
 </script>
 
 <style scoped>
@@ -136,6 +153,8 @@ onUnmounted(() => window.removeEventListener('keydown', handleMobileNavigationKe
   overflow: hidden;
   background-color: var(--background);
 }
+
+.mobile-reading-topbar, .mobile-reading-topbar-content { display: contents; }
 
 .app-body {
   --page-tabbar-height: 38px;
@@ -181,6 +200,19 @@ onUnmounted(() => window.removeEventListener('keydown', handleMobileNavigationKe
 }
 
 @media (max-width: 720px) {
+  /* 网格折叠同时释放高度，不能只把导航移出屏幕而留下占位。 */
+  .app-shell:not(.prevent-mobile-layout) .mobile-reading-topbar { display: grid; grid-template-rows: 1fr; flex: 0 0 auto; transition: grid-template-rows 200ms ease, padding-top 200ms ease; }
+  .app-shell:not(.prevent-mobile-layout) .mobile-reading-topbar-content { display: block; min-height: 0; overflow: hidden; }
+  .app-shell:not(.prevent-mobile-layout).reading-navigation-hidden .mobile-reading-topbar { grid-template-rows: 0fr; padding-top: env(safe-area-inset-top, 0px); }
+  .app-shell:not(.prevent-mobile-layout).reading-navigation-hidden.has-mobile-window-controls .mobile-reading-topbar { padding-top: 0; }
+  .app-shell:not(.prevent-mobile-layout) :deep(.mobile-bottom-nav) { transition: transform 200ms ease, opacity 200ms ease; }
+  .app-shell:not(.prevent-mobile-layout).reading-navigation-hidden :deep(.mobile-bottom-nav) { transform: translateY(calc(100% + max(20px, env(safe-area-inset-bottom)))); opacity: 0; pointer-events: none; }
+  .app-shell:not(.prevent-mobile-layout).reading-navigation-hidden.has-mobile-bottom-nav { --mobile-bottom-overlay-space: env(safe-area-inset-bottom, 0px); }
+  .app-shell:not(.prevent-mobile-layout) :deep(.feed-scroll-container) { transition: padding-bottom 200ms ease; }
+  @media (prefers-reduced-motion: reduce) {
+    .app-shell:not(.prevent-mobile-layout) .mobile-reading-topbar, .app-shell:not(.prevent-mobile-layout) :deep(.mobile-bottom-nav), .app-shell:not(.prevent-mobile-layout) :deep(.feed-scroll-container) { transition: none; }
+  }
+
   .app-shell:not(.prevent-mobile-layout) {
     position: relative;
     --mobile-bottom-overlay-space: env(safe-area-inset-bottom, 0px);

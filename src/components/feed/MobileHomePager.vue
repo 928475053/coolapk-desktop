@@ -1,5 +1,5 @@
 <template>
-  <div class="mobile-home-pager" :class="{ 'desktop-home-pager': !mobile }">
+  <div class="mobile-home-pager" :class="{ 'desktop-home-pager': !mobile, 'is-pager-moving': moving }">
     <div class="home-main-column">
     <div class="home-toolbar">
     <FeedTabs :active-key="activeKey" :tabs="tabs" :manager-tabs="serverTabs" :swipe-progress="position" :active-sub-tab-key="activePanel?.activeFollowSubChannelKey || ''" @update:active-key="select" @select-sub-tab="selectSubTab" />
@@ -32,14 +32,17 @@ import { homePagerMovingKey } from '../../utils/feedPageVisibility';
 import { observeResizeOnFrame } from '../../utils/observeResizeOnFrame';
 import { logDiagnostic, summarizeDiagnosticError } from '../../utils/diagnosticLogger';
 import { desktopFeedCommentsOpenKey } from '../../utils/desktopFeedComments';
+import { mobileReadingNavigationKey } from '../../composables/useMobileReadingNavigation';
 
 const props = withDefaults(defineProps<{ mobile?: boolean }>(), { mobile: true });
 const desktopCommentsOpen = inject(desktopFeedCommentsOpenKey, ref(false));
+const readingNavigation = inject(mobileReadingNavigationKey, undefined);
 const sidebarMounted = ref(!props.mobile);
 const settings = useSettingsStore();
 const serverTabs = ref<ConfigPageTab[]>([]), activeKey = ref(''), error = ref('');
 const position = ref(0), width = ref(1), viewport = ref<HTMLElement | null>(null);
 const moving = ref(false);
+watch(activeKey, () => readingNavigation?.reset());
 provide(homePagerMovingKey, moving);
 const visited = reactive(new Set<string>());
 type Panel = { activeFollowSubChannelKey: string; handleHomeSubChannelSelected: (selection: HomeSubChannelSelection) => void };

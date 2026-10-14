@@ -177,6 +177,17 @@
       </div>
     </div>
 
+    <div class="setting-group">
+      <h4 class="group-title">移动端阅读</h4>
+      <div class="setting-row">
+        <div class="row-info">
+          <span class="row-label">滚动时自动隐藏导航</span>
+          <span class="row-sub">移动布局首页向下阅读时收起搜索栏和底部 Dock，保留栏目栏，反向滚动恢复显示</span>
+        </div>
+        <AppSwitch v-model="settingsStore.settings.autoHideMobileNavigation" />
+      </div>
+    </div>
+
     <div v-if="!isAndroidTauri" class="setting-group">
       <h4 class="group-title">首页右侧栏</h4>
       <p class="group-sub">分别控制首页右侧的热榜和热门话题卡片，关闭后不再请求对应数据</p>

@@ -8,6 +8,7 @@ import MobileHomePager from '../MobileHomePager.vue';
 import HomePage from '../../../pages/HomePage.vue';
 import { useSettingsStore } from '../../../stores/settings';
 import { desktopFeedCommentsOpenKey } from '../../../utils/desktopFeedComments';
+import { mobileReadingNavigationKey } from '../../../composables/useMobileReadingNavigation';
 const Panel = defineComponent({ name: 'HomeTabPanel', props: ['tabKey', 'selected'], template: '<div class="panel-stub"><div class="nested" style="overflow-x:auto">内容</div></div>' });
 let now = 0, sequence = 0;
 let notifyResize: () => void;
@@ -42,6 +43,24 @@ describe('移动首页一体滑动', () => {
     HTMLElement.prototype.releasePointerCapture = vi.fn();
   });
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+  it('阅读时保留主栏目栏，切换频道会恢复外壳导航', async () => {
+    const hidden = ref(false);
+    const reset = vi.fn(() => { hidden.value = false; });
+    const w = mount(MobileHomePager, { global: {
+      provide: { [mobileReadingNavigationKey as symbol]: { hidden, reset } },
+      stubs: { HomeTabPanel: Panel, FeedTabs: true },
+    } });
+    try {
+      await flushPromises(); reset.mockClear(); hidden.value = true;
+      await flushPromises();
+      expect(w.get('.home-toolbar').attributes('inert')).toBeUndefined();
+      expect(w.get('.home-toolbar').attributes('aria-hidden')).toBeUndefined();
+      w.findComponent({ name: 'FeedTabs' }).vm.$emit('update:activeKey', 'hot');
+      finish(); await flushPromises();
+      expect(reset).toHaveBeenCalledOnce();
+      expect(hidden.value).toBe(false);
+    } finally { w.unmount(); }
+  });
   it('右侧评论展开时隐藏推荐栏，关闭后恢复同一实例并保留栏目和滚动', async () => {
     const commentsOpen = ref(false);
     const sidebarMounted = vi.fn();

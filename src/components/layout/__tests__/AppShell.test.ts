@@ -35,6 +35,45 @@ const MobileTopBarStub = { template: '<div class="mobile-top-bar-stub" />' };
 const MobileBottomNavStub = { template: '<div class="mobile-bottom-nav-stub" />' };
 
 describe('AppShell', () => {
+  it('移动首页滚动收起后，搜索、发布、设置关闭、离开首页和切换桌面布局都会恢复导航', async () => {
+    const previousWidth = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', { value: 390, configurable: true, writable: true });
+    setActivePinia(createPinia());
+    routeState.value.path = routeState.value.fullPath = '/';
+    routeState.value.controls = true;
+    const settings = useSettingsStore(), app = useAppStore();
+    settings.settings.disableAutoMobileMode = false;
+    const wrapper = mount(AppShell, { slots: { default: '<div class="mobile-home-pager"><section aria-hidden="false"><div class="feed-scroll-container">阅读内容</div></section></div>' }, global: { stubs: {
+      TopBar: TopBarStub, MainSidebar: MainSidebarStub, PageTabBar: PageTabBarStub,
+      NetworkStatusBanner: NetworkStatusBannerStub, MobileTopBar: MobileTopBarStub, MobileBottomNav: MobileBottomNavStub,
+    } } });
+    try {
+      const list = wrapper.get('.feed-scroll-container');
+      const hide = async () => {
+        (list.element as HTMLElement).scrollTop = 0;
+        await list.trigger('scroll');
+        await list.trigger('wheel', { deltaY: 100 });
+        (list.element as HTMLElement).scrollTop = 100;
+        await list.trigger('scroll');
+        expect(wrapper.classes()).toContain('reading-navigation-hidden');
+        expect(wrapper.get('.mobile-reading-topbar-content').attributes('aria-hidden')).toBe('true');
+        expect(wrapper.find('.top-bar-stub').exists()).toBe(true);
+      };
+      await hide(); app.isSearchOpen = true; await nextTick();
+      expect(wrapper.classes()).not.toContain('reading-navigation-hidden');
+      app.isSearchOpen = false; await nextTick(); await hide();
+      app.isPublishOpen = true; await nextTick(); expect(wrapper.classes()).not.toContain('reading-navigation-hidden');
+      app.isPublishOpen = false; await nextTick(); await hide();
+      settings.settings.autoHideMobileNavigation = false; await nextTick(); expect(wrapper.classes()).not.toContain('reading-navigation-hidden');
+      settings.settings.autoHideMobileNavigation = true; await nextTick(); await hide();
+      routeState.value.path = routeState.value.fullPath = '/digital'; await nextTick();
+      expect(wrapper.classes()).not.toContain('reading-navigation-hidden');
+      routeState.value.path = routeState.value.fullPath = '/'; await nextTick(); await hide();
+      window.innerWidth = 1280; window.dispatchEvent(new Event('resize')); await nextTick();
+      expect(wrapper.classes()).not.toContain('reading-navigation-hidden');
+    } finally { wrapper.unmount(); window.innerWidth = previousWidth; window.dispatchEvent(new Event('resize')); }
+  });
+
   it('桌面窄窗口在固定标题栏返回，宽窗口和移动平台不增加入口', async () => {
     const previousWidth = window.innerWidth;
     Object.defineProperty(window, 'innerWidth', { value: 600, configurable: true, writable: true });

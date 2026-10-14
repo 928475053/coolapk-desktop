@@ -20,6 +20,10 @@ const fileStoreState = vi.hoisted(() => {
 vi.mock('@tauri-apps/plugin-store', () => ({ Store: { load: fileStoreState.load } }));
 
 describe('settings store', () => {
+  it('旧配置默认开启滚动隐藏导航，并保留用户明确关闭的选择', () => {
+    expect(normalizeSettings({}).autoHideMobileNavigation).toBe(true);
+    expect(normalizeSettings({ autoHideMobileNavigation: false }).autoHideMobileNavigation).toBe(false);
+  });
   it('applies a client proxy on every platform and keeps the saved value after success', async () => {
     (window as any).__TAURI_INTERNALS__ = {};
     const store = useSettingsStore();

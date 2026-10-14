@@ -156,6 +156,8 @@ export interface AppSettings {
   showDeviceInfo: boolean;
   showHomeMonthlyRank: boolean;
   showHomeHotTopics: boolean;
+  /** 移动首页阅读时自动收起顶部搜索栏与底部 Dock，保留栏目导航。 */
+  autoHideMobileNavigation: boolean;
   defaultHomeTab: HomeTabKey;
   liveTileEnabled: boolean;
   liveTileSource: LiveTileSource;

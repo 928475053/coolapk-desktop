@@ -244,6 +244,8 @@ onMounted(() => {
 /* 应用信息头 */
 .about-head {
   display: flex;
+  /* 更新按钮空间不足时另起一行，保留应用名称和说明的正常阅读宽度。 */
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-4);
   padding: var(--space-4) 0 var(--space-5);
@@ -259,11 +261,12 @@ onMounted(() => {
 }
 
 .about-info {
-  flex: 1;
+  flex: 1 1 180px;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
+  overflow-wrap: anywhere;
 }
 
 .about-name-row {

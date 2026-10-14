@@ -110,6 +110,16 @@ onDeactivated(() => { categoriesOpen.value = false; });
 .settings-category-card:hover { background: var(--brand-soft); }
 .settings-category-card.is-active { color: var(--brand-primary); background: var(--brand-soft); }
 .settings-content { flex: 1; min-width: 0; min-height: 0; padding: var(--space-6); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; }
+/* 按内容所需宽度换行，系统放大字体或 PC 窄窗口时也不能让操作挤扁说明。 */
+.settings-content :deep(.setting-row) { flex-wrap: wrap; gap: 12px 16px; }
+.settings-content :deep(.setting-row > .row-info) { flex: 1 1 200px; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.settings-content :deep(.setting-row > .select-control), .settings-content :deep(.setting-row > .text-input) { max-width: 100%; min-width: 0; }
+.settings-content :deep(.setting-row > .row-actions) { flex-wrap: wrap; flex-shrink: 0; max-width: 100%; margin-left: 0; }
+.settings-content :deep(.setting-row .app-button) { max-width: 100%; height: auto; min-height: 28px; white-space: normal; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  /* 多按钮操作独占一行，不能为了同排展示而把说明或按钮文字挤成竖排。 */
+  .settings-content :deep(.setting-row > .row-actions) { flex-basis: 100%; justify-content: flex-start; }
+}
 /* 移动模式由分类按钮展示名称；PC 模式保留页面标题。 */
 .is-mobile .settings-content :deep(.section-title) { display: none; }
 .is-mobile .settings-navigation { padding: 10px 16px; }

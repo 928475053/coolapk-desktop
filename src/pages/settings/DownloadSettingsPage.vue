@@ -420,16 +420,19 @@ onMounted(() => {
 
 .cache-total-line {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: var(--space-2);
 }
 
 .cache-total-label {
+  white-space: nowrap;
   color: var(--text-secondary);
   font-size: var(--font-size-caption);
 }
 
 .cache-total-value {
+  white-space: nowrap;
   color: var(--text-primary);
   font-size: 16px;
   font-weight: var(--font-weight-semibold);
@@ -452,11 +455,13 @@ onMounted(() => {
 
 .cache-breakdown-item {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 4px;
 }
 
 .cache-breakdown-item strong {
+  white-space: nowrap;
   color: var(--text-secondary);
   font-weight: var(--font-weight-semibold);
 }

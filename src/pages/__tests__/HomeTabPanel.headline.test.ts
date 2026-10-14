@@ -1,0 +1,44 @@
+import { flushPromises, mount } from '@vue/test-utils';
+import { createPinia } from 'pinia';
+import { createMemoryHistory, createRouter } from 'vue-router';
+import { expect, it, vi } from 'vitest';
+import HomeTabPanel from '../HomeTabPanel.vue';
+
+const api = vi.hoisted(() => ({ getIndexV8EntitiesPaged: vi.fn(), getHotSearchKeywords: vi.fn().mockResolvedValue([]) }));
+vi.mock('../../api/coolapk', () => ({ CoolapkTauriAPI: api }));
+
+it.each([390, 1280])('宽度 %s 下头条刷新保留首条锚点，分页只传末条游标', async (width) => {
+  vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(width);
+  const feed = (id: string) => ({ id, entityId: id, entityType: 'feed', message: `动态 ${id}`, uid: '123', username: '酷友' });
+  api.getIndexV8EntitiesPaged.mockReset();
+  api.getIndexV8EntitiesPaged.mockResolvedValueOnce({ data: [feed('100'), feed('90')] })
+    .mockResolvedValueOnce({ data: [feed('80'), feed('70')] })
+    .mockResolvedValueOnce({ data: [feed('110'), feed('105')] })
+    .mockResolvedValueOnce({ data: [feed('120'), feed('115')] })
+    .mockRejectedValueOnce(new Error('网络暂时不可用'))
+    .mockResolvedValueOnce({ data: [feed('130'), feed('125')] });
+  const tab = { title: '头条', page_name: 'V9_HOME_TAB_HEADLINE', url: '/main/headline' };
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] });
+  await router.push('/');
+  const wrapper = mount(HomeTabPanel, { props: { embedded: true, selected: true, tabKey: tab.page_name, tabs: [tab] }, global: { plugins: [router, createPinia()], stubs: { FeedCard: true, FeedVideoCard: true, AppImage: true } } });
+  try {
+    await flushPromises();
+    expect(api.getIndexV8EntitiesPaged).toHaveBeenLastCalledWith({ page: 1, firstItem: '', lastItem: '' });
+    await wrapper.get('.feed-scroll-container').trigger('scroll');
+    await flushPromises();
+    expect(api.getIndexV8EntitiesPaged).toHaveBeenLastCalledWith({ page: 2, firstItem: '', lastItem: '90' });
+    // 翻页后刷新仍然使用列表首条，不能使用刚加载的旧动态。
+    window.dispatchEvent(new Event('refresh-feeds'));
+    await flushPromises();
+    expect(api.getIndexV8EntitiesPaged).toHaveBeenLastCalledWith({ page: 1, firstItem: '100', lastItem: '' });
+    window.dispatchEvent(new Event('refresh-feeds'));
+    await flushPromises();
+    expect(api.getIndexV8EntitiesPaged).toHaveBeenLastCalledWith({ page: 1, firstItem: '110', lastItem: '' });
+    // 刷新失败后重试仍保留锚点，不能退回首次加载的请求。
+    window.dispatchEvent(new Event('refresh-feeds'));
+    await flushPromises();
+    window.dispatchEvent(new Event('refresh-feeds'));
+    await flushPromises();
+    expect(api.getIndexV8EntitiesPaged).toHaveBeenLastCalledWith({ page: 1, firstItem: '120', lastItem: '' });
+  } finally { wrapper.unmount(); vi.restoreAllMocks(); }
+});

@@ -821,10 +821,11 @@ function extractHeadlineUserItems(items: any[]): any[] {
   return users;
 }
 
-function updateHeadlineCursor(items: any[]) {
+function updateHeadlineCursor(items: any[], isFirstPage: boolean) {
   const ids = items.map(getFeedEntityId).filter(Boolean);
   if (!ids.length) return;
-  if (!headlineCursor.firstItem) headlineCursor.firstItem = ids[0];
+  // 第一页返回后更新刷新锚点；加载更多不能改变列表首条。
+  if (isFirstPage || !headlineCursor.firstItem) headlineCursor.firstItem = ids[0];
   headlineCursor.lastItem = ids[ids.length - 1];
   const lastItem = items[items.length - 1];
   headlinePageContext.value = String(
@@ -1028,8 +1029,9 @@ async function fetchTabApi(tabKey: string, p: number, background = false) {
     }
     return await CoolapkTauriAPI.getIndexV8EntitiesPaged({
       page: p,
-      firstItem: headlineCursor.firstItem,
-      lastItem: headlineCursor.lastItem,
+      // 对齐 APK：刷新传首条，加载更多传末条，避免刷新退回无游标的旧推荐。
+      firstItem: p === 1 ? headlineCursor.firstItem : '',
+      lastItem: p > 1 ? headlineCursor.lastItem : '',
     });
   }
 
@@ -1111,6 +1113,8 @@ async function loadFeeds(isRefresh: boolean = false) {
   if (loading.value || (loadingMore.value && !isRefresh)) return;
 
   if (isRefresh) {
+    // 清空列表前保留默认头条的刷新锚点，子栏目继续使用各自的重置逻辑。
+    const headlineRefreshAnchor = isHeadlineTab.value && !selectedHeadlineSubChannelUrl.value ? headlineCursor.firstItem : '';
     page.value = 1;
     noMore.value = false;
     feeds.value = [];
@@ -1122,7 +1126,10 @@ async function loadFeeds(isRefresh: boolean = false) {
     feedCursor.lastItem = '';
     feedCursor.pageContext = '';
     prefetchBuffer.value = [];
-    if (isHeadlineTab.value) resetHeadlineCursor({ preserveNested: Boolean(selectedHeadlineNestedSubChannelUrl.value) });
+    if (isHeadlineTab.value) {
+      resetHeadlineCursor({ preserveNested: Boolean(selectedHeadlineNestedSubChannelUrl.value) });
+      headlineCursor.firstItem = headlineRefreshAnchor;
+    }
     loading.value = true;
   } else {
     if (noMore.value) return;
@@ -1208,7 +1215,7 @@ async function loadFeeds(isRefresh: boolean = false) {
 
     if (isHeadlineTab.value) {
       if (rawItems.length === 0) noMore.value = true;
-      else updateHeadlineCursor(validItems);
+      else updateHeadlineCursor(validItems, page.value === 2);
     } else if (validItems.length < 3) {
       noMore.value = true;
     }
@@ -1395,6 +1402,8 @@ function openHeadlineUser(item: any) {
 
 watch(activeTab, (nextTab, previousTab) => {
   if (nextTab !== previousTab) {
+    // 切换主栏目后重新初始化，避免携带上一栏目留下的头条刷新锚点。
+    resetHeadlineCursor();
     selectedHeadlineSubChannelUrl.value = '';
     const nextTabObj = orderedDynamicTabs.value.find((tab) => (tab.page_name || tab.url || String(tab.id || tab.title)) === nextTab);
     if (isFollowingHomeTab(nextTabObj, nextTab)) {

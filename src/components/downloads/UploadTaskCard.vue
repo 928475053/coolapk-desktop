@@ -233,6 +233,9 @@ async function openUrl() {
 @media (max-width: 900px) {
   .upload-task-card { flex-wrap: wrap; padding: 14px; }
   .upload-task-main { flex-basis: calc(100% - 68px); }
-  .upload-actions { width: 100%; justify-content: flex-start; padding-left: 66px; }
+  /* 上传与下载共用窄屏页面，长文件名、进度和操作都应留在卡片内。 */
+  .upload-title-row, .upload-meta, .upload-progress-meta { flex-wrap: wrap; }
+  .upload-file-name { flex: 1 1 100%; white-space: normal; overflow-wrap: anywhere; }
+  .upload-actions { width: 100%; justify-content: flex-start; padding-left: 0; flex-wrap: wrap; }
 }
 </style>

@@ -35,6 +35,33 @@ const MobileTopBarStub = { template: '<div class="mobile-top-bar-stub" />' };
 const MobileBottomNavStub = { template: '<div class="mobile-bottom-nav-stub" />' };
 
 describe('AppShell', () => {
+  it.each(['Android', 'iPhone'])('%s 话题栏目吸顶后合并玻璃，离开吸顶位置或页面后恢复', async (device) => {
+    vi.stubGlobal('navigator', { userAgent: device, platform: device, maxTouchPoints: 5 });
+    const previousWidth = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', { value: 390, configurable: true, writable: true });
+    setActivePinia(createPinia());
+    Object.assign(routeState.value, { path: '/topic/iOS', fullPath: '/topic/iOS', controls: false });
+    const wrapper = mount(AppShell, { slots: { default: '<div class="page-container"><div class="topic-sticky-controls">讨论</div></div>' }, global: { stubs: { TopBar: TopBarStub, MainSidebar: MainSidebarStub, PageTabBar: PageTabBarStub, NetworkStatusBanner: NetworkStatusBannerStub, MobileTopBar: MobileTopBarStub, MobileBottomNav: MobileBottomNavStub } } });
+    try {
+      vi.spyOn(wrapper.get('.mobile-reading-topbar').element, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 390, 80));
+      let controlsTop = 160;
+      vi.spyOn(wrapper.get('.topic-sticky-controls').element, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, controlsTop, 390, 100));
+      await wrapper.get('.page-container').trigger('scroll');
+      expect(wrapper.classes()).not.toContain('topic-glass-joined');
+      controlsTop = 80;
+      await wrapper.get('.page-container').trigger('scroll');
+      expect(wrapper.classes()).toContain('topic-glass-joined');
+      controlsTop = 160;
+      await wrapper.get('.page-container').trigger('scroll');
+      expect(wrapper.classes()).not.toContain('topic-glass-joined');
+      controlsTop = 80;
+      await wrapper.get('.page-container').trigger('scroll');
+      routeState.value.path = routeState.value.fullPath = '/';
+      await nextTick();
+      expect(wrapper.classes()).not.toContain('topic-glass-joined');
+    } finally { wrapper.unmount(); Object.defineProperty(window, 'innerWidth', { value: previousWidth, configurable: true, writable: true }); vi.restoreAllMocks(); vi.unstubAllGlobals(); }
+  });
+
   it('移动首页滚动收起后，搜索、发布、设置关闭、离开首页和切换桌面布局都会恢复导航', async () => {
     const previousWidth = window.innerWidth;
     Object.defineProperty(window, 'innerWidth', { value: 390, configurable: true, writable: true });

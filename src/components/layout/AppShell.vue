@@ -10,8 +10,9 @@
       'reading-navigation-hidden': reading.hidden.value,
       'has-topic-navigation': route.path.startsWith('/topic/'),
       'has-home-navigation': route.path === '/',
+      'topic-glass-joined': topicGlassJoined,
     }"
-    @scroll.capture="reading.onScroll"
+    @scroll.capture="handleShellScroll"
     @wheel.capture.passive="reading.onWheel"
     @touchstart.capture.passive="reading.onTouchStart"
     @touchmove.capture.passive="reading.onTouchMove"
@@ -81,7 +82,8 @@ const settingsStore = useSettingsStore();
 const appStore = useAppStore();
 const mobileNavigationOpen = ref(false);
 const readingViewportWidth = ref(window.innerWidth);
-function updateReadingViewport() { readingViewportWidth.value = window.innerWidth; }
+const topicGlassJoined = ref(false);
+function updateReadingViewport() { readingViewportWidth.value = window.innerWidth; updateTopicGlass(); }
 const mainContent = ref<HTMLElement | null>(null);
 const desktopCommentFeed = shallowRef<FeedItem | null>(null);
 const mobileLayout = useMobileLayout();
@@ -119,6 +121,18 @@ const reading = useMobileReadingNavigation(computed(() => settingsStore.settings
   && !mobileNavigationOpen.value && !appStore.isSearchOpen && !appStore.isPublishOpen && !appStore.activeImageViewer));
 provide(mobileReadingNavigationKey, { hidden: reading.hidden, reset: reading.reset });
 
+/** 话题栏目吸顶后由下方玻璃向上延伸，避免上下两次独立模糊在接缝处产生色差。 */
+function updateTopicGlass(scroller?: Element) {
+  const controls = (scroller || mainContent.value)?.querySelector('.topic-sticky-controls');
+  const topbar = mainContent.value?.closest('.app-shell')?.querySelector('.mobile-reading-topbar');
+  topicGlassJoined.value = route.path.startsWith('/topic/') && window.innerWidth <= 720 && Boolean(controls && topbar && controls.getBoundingClientRect().top <= topbar.getBoundingClientRect().bottom + 1);
+}
+
+function handleShellScroll(event: Event) {
+  reading.onScroll(event);
+  if (route.path.startsWith('/topic/') && event.target instanceof Element && event.target.classList.contains('page-container')) updateTopicGlass(event.target);
+}
+
 function toggleMobileNavigation() {
   mobileNavigationOpen.value = !mobileNavigationOpen.value;
 }
@@ -137,6 +151,7 @@ function handleMobileNavigationKeydown(event: KeyboardEvent) {
 
 watch(() => route.fullPath, () => {
   reading.reset();
+  topicGlassJoined.value = false;
   desktopCommentFeed.value = null;
   closeMobileNavigation();
   rootBack.reset();
@@ -252,6 +267,19 @@ onUnmounted(() => { window.removeEventListener('keydown', handleMobileNavigation
   .app-shell:not(.prevent-mobile-layout).has-mobile-window-controls:is(.has-home-navigation, .has-topic-navigation) .mobile-reading-topbar { top: var(--mobile-window-controls-height); }
   @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .app-shell:not(.prevent-mobile-layout):is(.has-home-navigation, .has-topic-navigation) .mobile-reading-topbar { background: var(--surface); } }
   @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) { .app-shell:not(.prevent-mobile-layout):is(.has-home-navigation, .has-topic-navigation) .mobile-reading-topbar { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; } }
+
+  /* 状态栏、操作栏与栏目只采样一次背景；下方表面向上延伸，顶栏只承载按钮。 */
+  .app-shell:not(.prevent-mobile-layout):is(.has-home-navigation, .topic-glass-joined) .mobile-reading-topbar { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .app-shell:not(.prevent-mobile-layout).has-home-navigation :deep(.home-toolbar),
+  .app-shell:not(.prevent-mobile-layout).topic-glass-joined :deep(.topic-sticky-controls) { isolation: isolate; background: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .app-shell:not(.prevent-mobile-layout).has-home-navigation :deep(.home-toolbar::before),
+  .app-shell:not(.prevent-mobile-layout).topic-glass-joined :deep(.topic-sticky-controls::before) { content: ''; position: absolute; inset: calc(-1 * var(--mobile-glass-topbar-space)) 0 0; z-index: -1; pointer-events: none; background: var(--home-glass-tint, var(--topic-glass-tint)); border-radius: inherit; box-shadow: 0 6px 18px #0000000a, inset 0 -1px 0 var(--home-glass-edge, var(--topic-glass-edge)); -webkit-backdrop-filter: blur(24px) saturate(165%); backdrop-filter: blur(24px) saturate(165%); }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .app-shell:not(.prevent-mobile-layout).has-home-navigation :deep(.home-toolbar::before), .app-shell:not(.prevent-mobile-layout).topic-glass-joined :deep(.topic-sticky-controls::before) { background: var(--surface); }
+  }
+  @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+    .app-shell:not(.prevent-mobile-layout).has-home-navigation :deep(.home-toolbar::before), .app-shell:not(.prevent-mobile-layout).topic-glass-joined :deep(.topic-sticky-controls::before) { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  }
 
   .app-shell:not(.prevent-mobile-layout) :deep(.top-bar),
   .app-shell:not(.prevent-mobile-layout) :deep(.page-tab-bar) {

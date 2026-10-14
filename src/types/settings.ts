@@ -164,6 +164,8 @@ export interface AppSettings {
   showHomeHotTopics: boolean;
   /** 移动阅读时自动收起首页搜索栏、Dock 或详情底栏，保留栏目导航。 */
   autoHideMobileNavigation: boolean;
+  /** 首页和话题顶部导航的液态玻璃总开关，默认关闭。 */
+  headerGlass: boolean;
   defaultHomeTab: HomeTabKey;
   liveTileEnabled: boolean;
   liveTileSource: LiveTileSource;

@@ -2,7 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { nextTick } from 'vue';
+import { defineComponent, nextTick } from 'vue';
 import TopicsHubPage from '../TopicsHubPage.vue';
 import { useSettingsStore } from '../../stores/settings';
 import { useTopicHubStore } from '../../stores/topicHub';
@@ -18,6 +18,74 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../api/coolapk', () => ({ CoolapkTauriAPI: mocks }));
 
 describe('TopicsHubPage 三栏/双栏/单栏响应式与过渡', () => {
+  it.each([390, 1280])('宽度 %s 下标题条与吸顶导航合并玻璃，回到话题头部后恢复', async (width) => {
+    const previousWidth = window.innerWidth;
+    const previousCollapsed = localStorage.getItem('coolapk_topic_hub_left_collapsed');
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
+    localStorage.setItem('coolapk_topic_hub_left_collapsed', '1');
+    mocks.getTopicHubData.mockResolvedValue({ data: [] });
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/topics', component: TopicsHubPage }] });
+    await router.push('/topics?tag=今日热点');
+    const wrapper = mount(TopicsHubPage, { global: { plugins: [router], stubs: { TopicPage: { template: '<div class="page-container"><div class="topic-sticky-controls">讨论</div></div>' }, AppImage: true, TopicFeedCommentAside: true } } });
+    try {
+      await flushPromises();
+      vi.spyOn(wrapper.get('.single-column-top-nav').element, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, width, 48));
+      let top = 48;
+      vi.spyOn(wrapper.get('.topic-sticky-controls').element, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, top, width, 104));
+      await wrapper.get('.page-container').trigger('scroll');
+      expect(wrapper.get('.split-center-main').classes()).toContain('topic-glass-joined');
+      top = 200;
+      await wrapper.get('.page-container').trigger('scroll');
+      expect(wrapper.get('.split-center-main').classes()).not.toContain('topic-glass-joined');
+    } finally {
+      wrapper.unmount(); vi.restoreAllMocks(); Object.defineProperty(window, 'innerWidth', { configurable: true, value: previousWidth });
+      if (previousCollapsed === null) localStorage.removeItem('coolapk_topic_hub_left_collapsed'); else localStorage.setItem('coolapk_topic_hub_left_collapsed', previousCollapsed);
+    }
+  });
+
+  it('切到私信再返回保留话题实例、内容和滚动位置，不重新请求', async () => {
+    mocks.getTopicHubData.mockResolvedValue({ data: [] });
+    mocks.getTopicDetail.mockResolvedValue({ data: { title: '今日热点', tabList: [{ pageName: 'feed', title: '讨论' }] } });
+    mocks.getTopicDetailV7.mockResolvedValue({ data: null });
+    mocks.getTopicFeeds.mockResolvedValue({ data: [{ id: 'feed-keep', entityType: 'feed', message: '保留的话题动态', uid: '123', username: '酷友' }] });
+    const router = createRouter({ history: createMemoryHistory(), routes: [
+      { path: '/topics', component: TopicsHubPage },
+      { path: '/messages', component: { template: '<div class="messages-stub">私信</div>' } },
+    ] });
+    const host = defineComponent({ template: '<router-view v-slot="{ Component, route }"><keep-alive><component :is="Component" :key="route.path" /></keep-alive></router-view>' });
+    await router.push('/topics?tag=今日热点');
+    const wrapper = mount(host, { global: { plugins: [router], stubs: { FeedCard: { props: ['feed'], template: '<article>{{ feed.message }}</article>' }, AppImage: true, AppAvatar: true, TopicFeedCommentAside: true } } });
+    try {
+      await flushPromises();
+      const topic = wrapper.findComponent({ name: 'TopicPage' });
+      expect(topic.exists()).toBe(true);
+      const scroll = topic.get('.page-container').element as HTMLElement;
+      Object.defineProperties(scroll, { clientHeight: { value: 600 }, scrollHeight: { value: 4000 } });
+      scroll.scrollTop = 180;
+      await topic.get('.page-container').trigger('scroll');
+      const requestCount = mocks.getTopicFeeds.mock.calls.length;
+      const headerCount = mocks.getTopicDetail.mock.calls.length;
+      expect(requestCount).toBe(1);
+      expect(topic.text()).toContain('保留的话题动态');
+      await router.push('/messages');
+      await flushPromises();
+      expect(wrapper.text()).toBe('私信');
+      expect(useTopicHubStore().activeTopicTag).toBe('今日热点');
+      await router.push('/topics?tag=今日热点');
+      await flushPromises();
+      const restored = wrapper.findComponent({ name: 'TopicPage' });
+      expect(restored.get('.page-container').element).toBe(scroll);
+      expect(restored.text()).toContain('保留的话题动态');
+      expect((restored.get('.page-container').element as HTMLElement).scrollTop).toBe(180);
+      expect(mocks.getTopicFeeds).toHaveBeenCalledTimes(requestCount);
+      expect(mocks.getTopicDetail).toHaveBeenCalledTimes(headerCount);
+      // 在话题页内明确返回目录时，仍正常退出分屏。
+      await router.push('/topics');
+      await flushPromises();
+      expect(useTopicHubStore().viewMode).toBe('grid');
+    } finally { wrapper.unmount(); }
+  });
+
   beforeEach(() => {
     const pinia = createPinia();
     setActivePinia(pinia);

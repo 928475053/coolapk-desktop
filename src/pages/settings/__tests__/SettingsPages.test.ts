@@ -81,6 +81,20 @@ function mountPage(component: Parameters<typeof mount>[0]) {
 }
 
 describe('设置页面交互', () => {
+  it('外观页只提供一个默认关闭的液态玻璃总开关', async () => {
+    const { wrapper, settings } = mountPage(AppearanceSettingsPage);
+    try {
+      const rows = wrapper.findAll('.setting-row');
+      const glassRows = rows.filter(row => row.text().includes('液态玻璃'));
+      expect(glassRows).toHaveLength(1);
+      expect(settings.settings.headerGlass).toBe(false);
+      await glassRows[0].get('.switch-input').setValue(true);
+      expect(settings.settings.headerGlass).toBe(true);
+      await glassRows[0].get('.switch-input').setValue(false);
+      expect(settings.settings.headerGlass).toBe(false);
+    } finally { wrapper.unmount(); }
+  });
+
   afterEach(() => { vi.unstubAllGlobals(); });
 
   beforeEach(() => {

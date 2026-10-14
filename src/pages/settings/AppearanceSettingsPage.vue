@@ -188,7 +188,11 @@
     </div>
 
     <div class="setting-group">
-      <h4 class="group-title">移动端阅读</h4>
+      <h4 class="group-title">导航与阅读</h4>
+      <div class="setting-row">
+        <div class="row-info"><span class="row-label">液态玻璃</span><span class="row-sub">统一控制首页和话题顶部导航的透明模糊效果，关闭时使用实色背景</span></div>
+        <AppSwitch v-model="settingsStore.settings.headerGlass" />
+      </div>
       <div class="setting-row">
         <div class="row-info">
           <span class="row-label">滚动时自动隐藏导航</span>

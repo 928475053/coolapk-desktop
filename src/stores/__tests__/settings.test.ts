@@ -20,6 +20,23 @@ const fileStoreState = vi.hoisted(() => {
 vi.mock('@tauri-apps/plugin-store', () => ({ Store: { load: fileStoreState.load } }));
 
 describe('settings store', () => {
+  it('液态玻璃总开关默认关闭，保留已保存的选择', () => {
+    expect(normalizeSettings({}).headerGlass).toBe(false);
+    expect(normalizeSettings({ headerGlass: true }).headerGlass).toBe(true);
+    expect(normalizeSettings({ headerGlass: false }).headerGlass).toBe(false);
+  });
+
+  it('液态玻璃总开关即时应用', async () => {
+    const store = useSettingsStore();
+    expect(document.documentElement.getAttribute('data-header-glass')).toBe('off');
+    store.settings.headerGlass = true;
+    await nextTick();
+    expect(document.documentElement.getAttribute('data-header-glass')).toBe('on');
+    store.settings.headerGlass = false;
+    await nextTick();
+    expect(document.documentElement.getAttribute('data-header-glass')).toBe('off');
+  });
+
   it('旧配置默认显示动态背景，并保留用户关闭的选择', () => {
     expect(normalizeSettings({}).showFeedBackground).toBe(true);
     expect(normalizeSettings({ showFeedBackground: false }).showFeedBackground).toBe(false);

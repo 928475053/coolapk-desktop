@@ -170,7 +170,7 @@
       </aside>
 
       <!-- 2. 中间栏：话题动态信息流（核心栏目，自动 100% 撑满） -->
-      <main class="split-center-main">
+      <main class="split-center-main" :class="{ 'has-topic-top-nav': !showLeftSidebarActual, 'topic-glass-joined': topicGlassJoined }" @scroll.capture="updateTopicGlass">
         <!-- 单栏模式或左栏收起时的顶部展开快捷条 -->
         <div v-if="!showLeftSidebarActual" class="single-column-top-nav">
           <div class="top-nav-left-actions">
@@ -308,6 +308,17 @@ let topicRequestGeneration = 0;
 
 const viewMode = computed(() => topicHubStore.viewMode);
 const activeTopicTag = computed(() => topicHubStore.activeTopicTag);
+const topicGlassJoined = ref(false);
+
+/** 聚合页的标题条覆盖在滚动内容上，栏目吸顶后使用同一玻璃表面，所有平台保持一致。 */
+function updateTopicGlass(event: Event) {
+  const scroller = event.target;
+  if (!(scroller instanceof Element) || !scroller.classList.contains('page-container')) return;
+  const header = scroller.closest('.split-center-main')?.querySelector('.single-column-top-nav');
+  const controls = scroller.querySelector('.topic-sticky-controls');
+  topicGlassJoined.value = Boolean(header && controls && controls.getBoundingClientRect().top <= header.getBoundingClientRect().bottom + 1);
+}
+watch(activeTopicTag, () => { topicGlassJoined.value = false; });
 const activeFeed = computed(() => topicHubStore.activeFeed);
 
 const isCategoryPickerOpen = ref(false);
@@ -665,8 +676,10 @@ function handleBackToGrid() {
 
 // 监听路由 query.tag 变化（响应顶栏全局后退/前进、鼠标侧键后退）
 watch(
-  () => route.query.tag,
-  (newTag) => {
+  () => [route.path, route.query.tag] as const,
+  ([path, newTag]) => {
+    // 缓存中的话题页也会收到其他标签页的路由变化，不能因此关闭分屏并销毁话题列表。
+    if (path !== '/topics') return;
     if (newTag && typeof newTag === 'string') {
       if (activeTopicTag.value !== newTag) {
         const targetTopic = rawTopicItems.value.find((item) => getTopicName(item) === newTag) || { title: newTag, tag: newTag };
@@ -1365,6 +1378,8 @@ onUnmounted(() => {
 
 /* 2. 中间动态流主栏：核心主内容自适应占满 */
 .split-center-main {
+  position: relative;
+  --topic-hub-topbar-space: 0px;
   flex: 1;
   height: 100%;
   min-width: 480px;
@@ -1383,6 +1398,10 @@ onUnmounted(() => {
 
 /* 单栏模式或左栏收起时的顶部导航条 */
 .single-column-top-nav {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 30;
   width: 100%;
   height: 48px;
   min-height: 48px;
@@ -1390,10 +1409,21 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 0 16px;
-  background-color: var(--surface);
-  border-bottom: 1px solid var(--border-light, rgba(0, 0, 0, 0.06));
+  background: var(--topic-glass-tint);
+  -webkit-backdrop-filter: blur(24px) saturate(165%);
+  backdrop-filter: blur(24px) saturate(165%);
+  border-bottom: 0;
   box-sizing: border-box;
 }
+
+/* 标题条出现时仅给首屏正文预留位置，滚动内容可以进入玻璃后方。 */
+.split-center-main.has-topic-top-nav { --topic-hub-topbar-space: 48px; --topic-glass-tint: color-mix(in srgb, var(--surface) 45%, transparent); --topic-glass-edge: rgba(255, 255, 255, .65); }
+:global([data-theme="dark"] .split-center-main.has-topic-top-nav) { --topic-glass-tint: color-mix(in srgb, var(--surface) 65%, transparent); --topic-glass-edge: rgba(255, 255, 255, .18); }
+.split-center-main.topic-glass-joined .single-column-top-nav { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
+.split-center-main.topic-glass-joined :deep(.topic-sticky-controls) { isolation: isolate; background: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+.split-center-main.topic-glass-joined :deep(.topic-sticky-controls::before) { content: ''; position: absolute; inset: calc(-1 * var(--topic-hub-topbar-space)) 0 0; z-index: -1; pointer-events: none; border-radius: inherit; background: var(--topic-glass-tint); box-shadow: 0 6px 18px #0000000a, inset 0 -1px 0 var(--topic-glass-edge); -webkit-backdrop-filter: blur(24px) saturate(165%); backdrop-filter: blur(24px) saturate(165%); }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .single-column-top-nav, .split-center-main.topic-glass-joined :deep(.topic-sticky-controls::before) { background: var(--surface); } }
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) { .single-column-top-nav, .split-center-main.topic-glass-joined :deep(.topic-sticky-controls::before) { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; } .split-center-main.topic-glass-joined .single-column-top-nav { background: transparent; } }
 
 .top-nav-left-actions {
   display: flex;

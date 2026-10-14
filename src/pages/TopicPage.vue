@@ -877,6 +877,9 @@ onMounted(() => {
 .page-container.is-embedded {
   --topic-page-top-space: 8px;
   --topic-page-side-space: 12px;
+  /* 聚合页标题条浮在上方，正文首屏避让，吸顶后与标题条共用玻璃背景。 */
+  padding-top: calc(var(--topic-page-top-space) + var(--topic-hub-topbar-space, 0px));
+  scroll-padding-top: calc(var(--topic-hub-topbar-space, 0px) + 104px);
 }
 
 /* 1. 话题 Header */

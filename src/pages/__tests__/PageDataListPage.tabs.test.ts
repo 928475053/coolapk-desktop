@@ -84,3 +84,27 @@ it('配置内容加载失败或地址循环时显示错误，不误报为空数�
   expect(api.getDiscoveryPageData).toHaveBeenCalledTimes(1);
   wrapper.unmount();
 });
+
+it.each(['填满窗口', '没有更多', '重复数据', '请求失败'])('系统榜不足一屏时自动请求第二页，并在%s时停止', async (scenario) => {
+  api.query.url = '/topic/tagList?tag=system';
+  api.query.title = '系统榜';
+  const topics = Array.from({ length: 20 }, (_, index) => ({ id: index + 1, entityType: 'topic', title: `系统 ${index + 1}` }));
+  api.getDiscoveryPageData.mockImplementation(async ({ page }: { page: number }) => {
+    if (page === 1) return { data: topics, firstItem: 'first-system', lastItem: 'last-system', pageContext: 'system-context' };
+    if (scenario === '请求失败') throw new Error('第二页请求失败');
+    if (scenario === '没有更多') return { data: [], hasMore: false };
+    return { data: scenario === '重复数据' ? topics : topics.map(topic => ({ ...topic, id: Number(topic.id) + 20 })), hasMore: true };
+  });
+  const wrapper = mount(PageDataListPage, { global: { plugins: [createPinia()], stubs: { FeedSkeleton: true, DiscoveryEntityCard: { props: ['entity'], template: '<article class="test-topic">{{ entity.title }}</article>' } } } });
+  // 模拟大屏网格：20 项不足一屏，40 项已超过预加载范围，全程不触发滚动事件。
+  Object.defineProperties(wrapper.get('.page-container').element, {
+    clientHeight: { value: 800 },
+    scrollHeight: { get: () => wrapper.findAll('.test-topic').length > 20 ? 1500 : 700 },
+  });
+  try {
+    await flushPromises();
+    expect(api.getDiscoveryPageData).toHaveBeenCalledTimes(2);
+    expect(api.getDiscoveryPageData).toHaveBeenLastCalledWith(expect.objectContaining({ url: api.query.url, page: 2, firstItem: 'first-system', lastItem: 'last-system', pageContext: 'system-context' }));
+    expect(wrapper.findAll('.test-topic')).toHaveLength(scenario === '填满窗口' ? 40 : 20);
+  } finally { wrapper.unmount(); }
+});

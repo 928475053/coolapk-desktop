@@ -1,6 +1,6 @@
 <template>
   <ProductCategoryBrowser v-if="isProductCategoryDirectory" :selected-id="productCategoryId" @open="openEntity" />
-  <div v-else class="page-container custom-scrollbar" @scroll="handleScroll">
+  <div v-else ref="scrollContainer" class="page-container custom-scrollbar" @scroll="handleScroll">
     <div v-if="!isDynamicPage" class="page-header page-data-header">
       <div class="header-titles">
         <h2 class="page-title"><i class="fas fa-list-ul icon"></i>{{ pageTitle }}</h2>
@@ -55,7 +55,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import DiscoveryEntityCard from '../components/discovery/DiscoveryEntityCard.vue';
@@ -88,6 +88,7 @@ const pageSubTitle = computed(() => typeof pageQuery.subTitle === 'string' ? pag
   : new URLSearchParams(pageUrl.value.split('?')[1] || '').get('subTitle') || '');
 
 const page = ref(1);
+const scrollContainer = ref<HTMLElement | null>(null);
 const feeds = ref<any[]>([]);
 const dynamicItems = ref<DiscoveryEntity[]>([]);
 const loading = ref(false);
@@ -220,7 +221,10 @@ async function loadDynamicPage(isRefresh = false) {
       dynamicItems.value = replaceSortedProducts(dynamicItems.value, incoming, sortTarget.value);
     } else {
       const existingKeys = new Set(dynamicItems.value.map((item, index) => getEntityKey(item, index)));
-      dynamicItems.value = [...dynamicItems.value, ...incoming.filter((item, index) => !existingKeys.has(getEntityKey(item, dynamicItems.value.length + index)))];
+      const appended = incoming.filter((item, index) => !existingKeys.has(getEntityKey(item, dynamicItems.value.length + index)));
+      // 服务端重复返回同一页时停止，避免未填满窗口的列表持续请求。
+      if (appended.length === 0) dynamicNoMore.value = true;
+      dynamicItems.value = [...dynamicItems.value, ...appended];
     }
     page.value += 1;
   } catch (loadError: any) {
@@ -229,6 +233,10 @@ async function loadDynamicPage(isRefresh = false) {
     loading.value = false;
     loadingMore.value = false;
   }
+  // 网格首屏可能不足一屏，等待布局更新后主动补页，不依赖用户产生滚动事件。
+  await nextTick();
+  const element = scrollContainer.value;
+  if (!error.value && element && element.clientHeight > 0 && element.scrollHeight - element.scrollTop - element.clientHeight < 480) void loadDynamicPage(false);
 }
 
 function entityExtra(entity: DiscoveryEntity): Record<string, unknown> {

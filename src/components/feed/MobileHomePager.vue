@@ -233,4 +233,13 @@ onUnmounted(() => { unbind(); stopObservingResize?.(); });
 .pager-warning button { min-height: 32px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: inherit; cursor: pointer; }
 .pager-state { padding: 24px; text-align: center; color: var(--text-secondary); }
 .pager-state button { min-height: 44px; }
+/* 移动首页栏目浮在动态上方，滚动内容进入玻璃背后；顶部留白保证首屏内容可见。 */
+@media (max-width: 720px) {
+  .mobile-home-pager:not(.desktop-home-pager) .home-toolbar { position: relative; z-index: 2; height: 48px; margin-bottom: -48px; background: var(--home-glass-tint, color-mix(in srgb, var(--surface) 45%, transparent)); border-radius: 0; box-shadow: 0 6px 18px #0000000a, inset 0 -1px 0 var(--home-glass-edge, #ffffffa6); -webkit-backdrop-filter: blur(24px) saturate(165%); backdrop-filter: blur(24px) saturate(165%); }
+  .mobile-home-pager:not(.desktop-home-pager) .home-toolbar :deep(.feed-tabs-wrapper) { background: transparent; border-bottom: 0; }
+  .mobile-home-pager:not(.desktop-home-pager) .home-toolbar :deep(.tab-manage-btn) { background: transparent; border-radius: 0; }
+  .mobile-home-pager:not(.desktop-home-pager) :deep(.feed-scroll-container) { padding-top: 48px; scroll-padding-top: 48px; }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .mobile-home-pager:not(.desktop-home-pager) .home-toolbar { background: var(--surface); } }
+  @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) { .mobile-home-pager:not(.desktop-home-pager) .home-toolbar { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; } }
+}
 </style>

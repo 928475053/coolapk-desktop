@@ -24,6 +24,8 @@
     </button>
 
     <!-- 频道管理弹窗 (九宫格/磁贴网格) -->
+    <!-- 玻璃导航会形成定位容器，弹窗挂到页面根节点以覆盖完整窗口。 -->
+    <Teleport to="body">
     <TabManagerModal
       :visible="showTabManager"
       :tabs="props.managerTabs || tabs"
@@ -35,6 +37,7 @@
       @select-sub-tab="$emit('selectSubTab', $event)"
       @updated="$emit('tabOrderUpdated')"
     />
+    </Teleport>
   </div>
 </template>
 

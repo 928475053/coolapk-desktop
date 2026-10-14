@@ -75,6 +75,7 @@
 
       <!-- 4. 排序筛选与搜索工具条 -->
       <EntityFilterBar
+        glass
         v-if="isDiscussionTab(activeTopicTab)"
         v-model:sort="currentSort"
         v-model:search-keyword="searchKeyword"
@@ -118,6 +119,7 @@
           @open-comment="handleFeedCardClick(item)"
           @deleted="handleFeedDeleted"
         />
+        <TopicMyRatingCard v-else-if="isMyRatingItem(item)" :entity="item" :detail="topicDetail || {}" />
         <DiscoveryEntityCard v-else :entity="item" @open="openTopicEntity" />
       </template>
 
@@ -143,6 +145,7 @@ import EmptyState from '../components/common/EmptyState.vue';
 import EntityFilterBar from '../components/common/EntityFilterBar.vue';
 import TopicRatingPanel from '../components/topic/TopicRatingPanel.vue';
 import TopicRatingSummary from '../components/topic/TopicRatingSummary.vue';
+import TopicMyRatingCard from '../components/topic/TopicMyRatingCard.vue';
 import { hasTopicRating } from '../utils/topicRating';
 import { showToast } from '../utils/toast';
 import { normalizeCoolapkPageRoute, normalizeCoolapkRoute } from '../utils/coolapkRoute';
@@ -476,6 +479,11 @@ function isTopicFeedItem(item: any): boolean {
   return ['feed', 'feed_reply', 'feedreply', 'article', 'news'].includes(type) || type.startsWith('feed_') || Boolean(item.message || item.message_raw_output || item.username || item.userInfo || item.user_info);
 }
 
+function isMyRatingItem(item: any): boolean {
+  return activeTopicTab.value?.kind === 'rating' && [item?.entityType, item?.entity_type, item?.entityTemplate, item?.entity_template]
+    .some(type => String(type || '').toLowerCase() === 'singleratingcard');
+}
+
 function isTopicDisplayItem(item: any): boolean {
   if (!item || typeof item !== 'object') return false;
   return Boolean(item.title || item.description || item.subTitle || item.sub_title || item.message || item.pic || item.logo || item.cover || item.url);
@@ -483,6 +491,9 @@ function isTopicDisplayItem(item: any): boolean {
 
 function appendTopicRows(value: any, output: any[]): void {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+  // 讨论与点评的排序卡片已由顶部排序栏呈现，不能再展开成列表入口。
+  const hasSortToolbar = isDiscussionTab(activeTopicTab.value) || activeTopicTab.value?.kind === 'rating';
+  if (hasSortToolbar && [value.entityTemplate, value.entity_template, value.entityType, value.entity_type].some(type => String(type || '').toLowerCase() === 'sortselectcard')) return;
   const isFeed = isTopicFeedItem(value);
   if (!isFeed) {
     const nested = value.feed || value.ratingFeed || value.rating_feed;
@@ -511,7 +522,11 @@ function extractTopicRows(response: any): any[] {
           : [];
   const output: any[] = [];
   rows.forEach((row: any) => appendTopicRows(row, output));
-  return output;
+  // 原生端会提前展开排序卡片；按服务端排序项的标题和地址识别这些条目，避免依赖已丢失的卡片类型。
+  const hasSortToolbar = isDiscussionTab(activeTopicTab.value) || activeTopicTab.value?.kind === 'rating';
+  const serverSortOptions = hasSortToolbar ? normalizeSortOptions(response?.sortOptions) : [];
+  return output.filter(item => isTopicFeedItem(item) || !serverSortOptions.some(option => option.url
+    && String(item.url || '').trim() === option.url && String(item.title || '').trim() === option.label));
 }
 
 function topicItemKey(item: any, index: number): string {
@@ -835,18 +850,20 @@ onMounted(() => {
   .topic-official-hero .topic-header-card { position: relative; background: color-mix(in srgb, var(--topic-color) 88%, black); color: white; border: 0; margin-bottom: 12px; }
   .topic-official-hero .topic-title,.topic-official-hero .topic-stats-text { color: #fffc; }
   .topic-official-hero .topic-icon-wrapper { width: 64px; height: 64px; }
-  .topic-sticky-controls { border-radius: 12px 12px 0 0; margin: 0 -16px; }
+  .topic-sticky-controls { border-radius: 0 0 16px 16px; margin: 0 -16px; }
   .topic-sub-tabs { border-radius: 12px 12px 0 0; box-shadow: none; justify-content: space-around; gap: 0; border: 0; }
 }
 .topic-rating-entry { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; width: 100%; margin-top: 16px; padding: 12px 0 0; border: 0; border-top: 1px solid var(--border-light); background: transparent; color: var(--text-secondary); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
 .topic-rating-entry > i, .topic-rating-entry strong { color: #ef8b13; }
 .topic-rating-entry > span:last-child { margin-left: auto; color: var(--brand-primary); }
 .page-container {
+  --topic-page-top-space: 14px;
+  --topic-page-side-space: 16px;
   width: 100%;
   max-width: 100%;
   height: 100%;
   overflow-y: auto;
-  padding: 14px 16px;
+  padding: var(--topic-page-top-space) var(--topic-page-side-space);
   margin: 0;
   display: flex;
   flex-direction: column;
@@ -855,7 +872,8 @@ onMounted(() => {
 }
 
 .page-container.is-embedded {
-  padding: 8px 12px;
+  --topic-page-top-space: 8px;
+  --topic-page-side-space: 12px;
 }
 
 /* 1. 话题 Header */
@@ -989,23 +1007,31 @@ onMounted(() => {
 
 /* 2. Sub-Tabs 分类栏 */
 .topic-sticky-controls {
+  /* 整块工具栏共用一个玻璃表面，内部间隙也经过模糊，不让正文从缝隙直接透出。 */
+  --topic-glass-tint: color-mix(in srgb, var(--surface) 45%, transparent);
+  --topic-glass-edge: rgba(255, 255, 255, .65);
   position: sticky;
-  top: 0;
+  /* 吸顶位置抵消滚动容器的顶部内边距，避免与上方标题栏之间露出正文。 */
+  top: calc(-1 * var(--topic-page-top-space, 14px));
   z-index: 20;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding-bottom: 8px;
-  background: var(--background);
+  gap: 0;
+  padding: 0 12px 8px;
+  background: var(--topic-glass-tint);
+  border-radius: 0 0 16px 16px;
+  box-shadow: 0 6px 18px #0000000a, inset 0 -1px 0 var(--topic-glass-edge);
+  -webkit-backdrop-filter: blur(24px) saturate(165%);
+  backdrop-filter: blur(24px) saturate(165%);
 }
 
-.topic-sub-tabs {
+.topic-sticky-controls .topic-sub-tabs {
   display: flex;
   align-items: center;
   gap: 20px;
-  background-color: var(--surface);
-  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.06));
-  border-radius: var(--radius-card, 12px);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
   padding: 0 16px;
   height: 48px;
   min-height: 48px;
@@ -1013,7 +1039,7 @@ onMounted(() => {
   overflow-x: auto;
   user-select: none;
   scrollbar-width: none;
-  box-shadow: var(--shadow-sm, 0 2px 8px rgba(0, 0, 0, 0.04));
+  box-shadow: none;
   box-sizing: border-box;
 }
 
@@ -1022,6 +1048,7 @@ onMounted(() => {
 }
 
 .topic-tab-item {
+  isolation: isolate;
   position: relative;
   border: none;
   background: transparent;
@@ -1048,6 +1075,10 @@ onMounted(() => {
   font-weight: 700;
   font-size: 16px;
 }
+/* 与首页栏目一致，选中项只使用加粗文字和下方指示线，不添加彩色胶囊。 */
+:global([data-theme="dark"] .topic-sticky-controls) { --topic-glass-tint: color-mix(in srgb, var(--surface) 65%, transparent); --topic-glass-edge: rgba(255, 255, 255, .18); }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .topic-sticky-controls { background: var(--surface); } }
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) { .topic-sticky-controls { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; } }
 
 .tab-line {
   position: absolute;
@@ -1107,7 +1138,7 @@ onMounted(() => {
   font-size: 12px;
 }
 @media(max-width:720px){
-  .topic-sticky-controls { border-radius: 12px 12px 0 0; margin: 0 -16px; }
+  .topic-sticky-controls { border-radius: 0 0 16px 16px; margin: 0 -16px; }
   .topic-sub-tabs { border-radius: 12px 12px 0 0; box-shadow: none; justify-content: space-around; gap: 0; border: 0; }
   .feed-list :deep(.rating-dimensions-row) { background: transparent; padding: 0; gap: 6px 10px; }
   .feed-list :deep(.sub-stars),.feed-list :deep(.sub-description) { display: none; }

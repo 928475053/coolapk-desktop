@@ -26,6 +26,48 @@ function deferred<T>() {
 }
 
 describe('话题排序按钮', () => {
+  it('点评排序卡片只呈现为顶部按钮，保留我的打分和真实点评', async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    mocks.getTopicDetail.mockResolvedValue({ data: { title: 'iOS27', selectedTab: 'rating', tabList: [
+      { pageName: 'feed', title: '讨论' },
+      { pageName: 'rating', title: '点评', url: '#/topic/tagFeedList?type=rating&id=76' },
+    ] } });
+    mocks.getTopicDetailV7.mockResolvedValue({ data: {} });
+    const options = [
+      { title: '默认', url: '#/topic/tagFeedList?type=rating&id=76' },
+      { title: '最新', url: '#/topic/tagFeedList?type=rating&id=76&listType=dateline_desc' },
+      { title: '热度', url: '#/topic/tagFeedList?type=rating&id=76&listType=popular' },
+    ];
+    mocks.getTopicTabData.mockReset().mockResolvedValue({ code: 200, sortOptions: options, data: [
+      { entityType: 'singleRatingCard', title: '我的打分' },
+      { entityType: 'card', entities: [{ entityTemplate: 'sortSelectCard', entities: options }] },
+      { entity_type: 'sortSelectCard', entities: options },
+      // 原生端实际会把排序卡片展开为独立页面条目，丢失 sortSelectCard 类型。
+      ...options.map(option => ({ entityType: 'page', ...option })),
+      { entityType: 'feed', id: 'review', ...options[0], message: '真实点评' },
+      { entityType: 'page', title: '最新', url: '/other-page' },
+    ] });
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/topic/:tag', component: TopicPage }] });
+    await router.push('/topic/iOS27');
+    const wrapper = mount(TopicPage, { global: { plugins: [pinia, router], stubs: {
+      FeedCard: { props: ['feed'], template: '<div class="feed-card-stub">{{ feed.message }}</div>' },
+      DiscoveryEntityCard: { props: ['entity'], template: '<div class="entity-card-stub">{{ entity.title }}</div>' },
+      TopicMyRatingCard: { template: '<button class="my-rating-card-stub">我的打分</button>' },
+      AppImage: true, LoadingState: true, EmptyState: true,
+    } } });
+    await flushPromises();
+    expect(wrapper.findAll('.topic-rating-toolbar button').map(button => button.text())).toEqual(['默认', '最新', '热度']);
+    expect(wrapper.find('.my-rating-card-stub').exists()).toBe(true);
+    expect(wrapper.findAll('.entity-card-stub').map(card => card.text())).toEqual(['最新']);
+    expect(wrapper.find('.feed-card-stub').text()).toBe('真实点评');
+    await wrapper.findAll('.topic-rating-toolbar button')[1].trigger('click');
+    await flushPromises();
+    expect(mocks.getTopicTabData).toHaveBeenLastCalledWith(expect.objectContaining({ url: '#/topic/tagFeedList?type=rating&id=76&listType=dateline_desc' }));
+    expect(wrapper.findAll('.entity-card-stub')).toHaveLength(1);
+    wrapper.unmount();
+  });
+
   it('有评分的话题显示官方详情入口，切换评分不请求普通动态', async () => {
     const pinia = createPinia();
     setActivePinia(pinia);

@@ -1,5 +1,5 @@
 <template>
-  <div class="entity-filter-bar">
+  <div class="entity-filter-container" :class="{ 'is-glass': glass }"><div class="entity-filter-bar" :class="{ 'has-feed-type': showFeedTypeControl }">
     <div class="filter-main">
       <!-- 1. 左侧排序选项胶囊；输入关键词后切换为 APK 动态搜索排序 -->
       <div v-if="showSort && activeOptions.length > 0" class="filter-options" role="tablist" aria-label="动态排序">
@@ -80,7 +80,7 @@
         </button>
       </div>
     </div>
-  </div>
+  </div></div>
 </template>
 
 <script setup lang="ts">
@@ -112,6 +112,7 @@ const props = withDefaults(
     showFeedType?: boolean;
     showSort?: boolean;
     showSearch?: boolean;
+    glass?: boolean;
     searchKeyword?: string;
     placeholder?: string;
     targetTitle?: string;
@@ -298,22 +299,21 @@ async function handleTriggerSearch() {
 </script>
 
 <style scoped>
+.entity-filter-container { container-type: inline-size; width: 100%; min-width: 0; flex-shrink: 0; }
 .entity-filter-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   padding: 4px 0;
-  gap: 16px;
+  gap: 8px 12px;
   width: 100%;
   box-sizing: border-box;
 }
 
 .filter-main {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  flex-wrap: wrap;
+  /* 排序、动态类型与搜索共同按实际宽度换行，避免固定断点浪费空间。 */
+  display: contents;
 }
 
 .filter-placeholder-spacer {
@@ -322,6 +322,9 @@ async function handleTriggerSearch() {
 
 .filter-options {
   display: flex;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
   align-items: center;
   background: var(--surface, #ffffff);
   border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
@@ -333,6 +336,7 @@ async function handleTriggerSearch() {
 }
 
 .filter-btn {
+  flex-shrink: 0;
   border: none;
   background: transparent;
   padding: 0 12px;
@@ -362,10 +366,14 @@ async function handleTriggerSearch() {
 .filter-actions {
   display: flex;
   align-items: center;
-  flex-shrink: 0;
+  flex: 1 1 155px;
+  min-width: 0;
+  max-width: 240px;
+  margin-left: auto;
 }
 
 .filter-type-control {
+  flex-shrink: 0;
   position: relative;
   z-index: 2;
   display: flex;
@@ -459,7 +467,8 @@ async function handleTriggerSearch() {
   box-sizing: border-box;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  width: 155px;
+  width: 100%;
+  min-width: 0;
 }
 
 .filter-search-box:hover {
@@ -471,7 +480,7 @@ async function handleTriggerSearch() {
   border-color: var(--brand-primary, #10b981);
   background: var(--surface, #ffffff);
   box-shadow: 0 0 0 2.5px rgba(16, 185, 129, 0.18);
-  width: 200px;
+  width: 100%;
 }
 
 .filter-search-icon {
@@ -519,4 +528,26 @@ async function handleTriggerSearch() {
 .search-clear-btn:hover {
   color: var(--text-primary, #0f172a);
 }
+
+/* 窄区域允许搜索填满余下空间，不强制排序和搜索各占一行。 */
+@container (max-width: 640px) {
+  .filter-actions { max-width: none; }
+}
+
+/* 玻璃由话题工具栏整体承载，排序和类型筛选不再各自绘制独立玻璃卡片。 */
+.is-glass :is(.filter-options, .filter-type-control) { background: transparent; border-color: transparent; box-shadow: none; }
+.is-glass .filter-search-box { background: color-mix(in srgb, var(--surface) 18%, transparent); border-color: var(--topic-glass-edge, #ffffff9c); box-shadow: inset 0 1px 0 #ffffff30; }
+.is-glass .filter-type-menu {
+  background: linear-gradient(145deg, #ffffff38, transparent 50%, #ffffff0a), var(--topic-glass-tint, color-mix(in srgb, var(--surface) 45%, transparent));
+  border-color: var(--topic-glass-edge, #ffffff9c);
+  box-shadow: 0 4px 14px #00000009, inset 0 1px 0 var(--topic-glass-edge, #ffffff9c), inset 0 -1px 0 #ffffff18;
+  -webkit-backdrop-filter: blur(24px) saturate(165%);
+  backdrop-filter: blur(24px) saturate(165%);
+}
+/* 玻璃排序栏与首页栏目统一，用文字和下划线表示选中状态。 */
+.is-glass .filter-btn.active { position: relative; background: transparent; color: var(--text-primary); font-weight: 700; box-shadow: none; }
+.is-glass .filter-btn.active::after { content: ''; position: absolute; bottom: 0; left: 50%; width: 20px; height: 3px; border-radius: 3px; background: var(--brand-primary); transform: translateX(-50%); pointer-events: none; }
+.is-glass .filter-search-box:focus-within { border-color: color-mix(in srgb, var(--brand-primary) 65%, var(--topic-glass-edge, white)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-primary) 15%, transparent), inset 0 1px 0 #ffffff60; }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .is-glass .filter-type-menu { background: var(--surface); } }
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) { .is-glass .filter-type-menu { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; border-color: var(--border); } }
 </style>

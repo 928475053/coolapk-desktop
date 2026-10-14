@@ -8,6 +8,8 @@
       'prevent-mobile-layout': isMobileLayoutDisabled,
       'has-mobile-bottom-nav': showMobileBottomNav,
       'reading-navigation-hidden': reading.hidden.value,
+      'has-topic-navigation': route.path.startsWith('/topic/'),
+      'has-home-navigation': route.path === '/',
     }"
     @scroll.capture="reading.onScroll"
     @wheel.capture.passive="reading.onWheel"
@@ -155,6 +157,8 @@ onUnmounted(() => { window.removeEventListener('keydown', handleMobileNavigation
 }
 
 .mobile-reading-topbar, .mobile-reading-topbar-content { display: contents; }
+.app-shell.has-topic-navigation { --topic-glass-tint: color-mix(in srgb, var(--surface) 45%, transparent); --topic-glass-edge: rgba(255, 255, 255, .65); }
+:global([data-theme="dark"] .app-shell.has-topic-navigation) { --topic-glass-tint: color-mix(in srgb, var(--surface) 65%, transparent); --topic-glass-edge: rgba(255, 255, 255, .18); }
 
 .app-body {
   --page-tabbar-height: 38px;
@@ -200,6 +204,19 @@ onUnmounted(() => { window.removeEventListener('keydown', handleMobileNavigation
 }
 
 @media (max-width: 720px) {
+  /* 首页搜索与栏目使用连续玻璃底色；只收起搜索，保留栏目与原有滚动状态。 */
+  .app-shell:not(.prevent-mobile-layout).has-home-navigation { --home-glass-tint: color-mix(in srgb, var(--surface) 45%, transparent); --home-glass-edge: rgba(255, 255, 255, .65); }
+  :global([data-theme="dark"] .app-shell:not(.prevent-mobile-layout).has-home-navigation) { --home-glass-tint: color-mix(in srgb, var(--surface) 65%, transparent); --home-glass-edge: rgba(255, 255, 255, .18); }
+  .app-shell:not(.prevent-mobile-layout).has-home-navigation .mobile-reading-topbar-content { background: var(--home-glass-tint); -webkit-backdrop-filter: blur(24px) saturate(165%); backdrop-filter: blur(24px) saturate(165%); box-shadow: inset 0 1px 0 var(--home-glass-edge); }
+  .app-shell:not(.prevent-mobile-layout).has-home-navigation :deep(.mobile-top-bar) { background: transparent; border-bottom: 0; }
+  .app-shell:not(.prevent-mobile-layout).has-home-navigation :deep(.mobile-search-entry) { background: color-mix(in srgb, var(--surface) 28%, transparent); border: 1px solid color-mix(in srgb, var(--border) 45%, transparent); box-shadow: inset 0 1px 0 var(--home-glass-edge); }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .app-shell:not(.prevent-mobile-layout).has-home-navigation .mobile-reading-topbar-content { background: var(--surface); } }
+  @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) { .app-shell:not(.prevent-mobile-layout).has-home-navigation .mobile-reading-topbar-content { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; } }
+  /* 话题标题栏和下方吸顶筛选共用底色与边缘，拼成连续的玻璃导航。 */
+  .app-shell:not(.prevent-mobile-layout).has-topic-navigation .mobile-reading-topbar-content { background: var(--topic-glass-tint); -webkit-backdrop-filter: blur(24px) saturate(165%); backdrop-filter: blur(24px) saturate(165%); box-shadow: inset 0 1px 0 var(--topic-glass-edge); }
+  .app-shell:not(.prevent-mobile-layout).has-topic-navigation :deep(.mobile-top-bar) { background: transparent; border-bottom: 0; }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .app-shell:not(.prevent-mobile-layout).has-topic-navigation .mobile-reading-topbar-content { background: var(--surface); } }
+  @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) { .app-shell:not(.prevent-mobile-layout).has-topic-navigation .mobile-reading-topbar-content { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; } }
   /* 网格折叠同时释放高度，不能只把导航移出屏幕而留下占位。 */
   .app-shell:not(.prevent-mobile-layout) .mobile-reading-topbar { display: grid; grid-template-rows: 1fr; flex: 0 0 auto; transition: grid-template-rows 200ms ease, padding-top 200ms ease; }
   .app-shell:not(.prevent-mobile-layout) .mobile-reading-topbar-content { display: block; min-height: 0; overflow: hidden; }

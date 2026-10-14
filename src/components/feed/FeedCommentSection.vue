@@ -2016,6 +2016,8 @@ async function handleSend() {
 .official-detail-comments .comment-detail-row { grid-row: 4; grid-column: 1; color: var(--text-tertiary); font-size: 11px; align-self: center; }
 .official-detail-comments .comment-actions { grid-row: 4; grid-column: 2; justify-content: flex-end; margin: 0; gap: 14px; }
 .official-detail-comments .comment-actions button { font-size: 11px; color: var(--text-tertiary); }
+/* 已点赞状态优先于详情按钮的默认灰色，图标与计数一起沿用主题色。 */
+.official-detail-comments .comment-like-btn.is-liked { color: var(--brand-primary); }
 .official-detail-comments .comment-actions i { font-size: 18px; }
 .official-detail-comments .sub-reply-thread { grid-row: 5; grid-column: 1 / -1; margin: 12px 0 0; }
 .official-detail-comments .sub-reply-thread { border: 0; padding: 8px; border-radius: 8px; background: var(--surface-hover); }

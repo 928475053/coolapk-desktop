@@ -191,15 +191,15 @@
       </div>
       
       <div 
-        :class="['input-area', { 'is-fullscreen': isInputFullscreen }]"
-        :style="isInputFullscreen ? {} : { height: `${inputAreaHeight}px` }"
+        :class="['input-area', { 'is-fullscreen': isInputFullscreen, 'has-pending-images': pendingImages.length > 0, 'is-feedback-compose': isFeedbackCompose }]"
+        :style="isInputFullscreen ? {} : { height: `${visibleInputHeight}px` }"
       >
         <!-- 顶部拖拽调整高度分割线 -->
         <div 
           v-if="!isInputFullscreen"
           class="input-resizer" 
           title="上下拖拽调整输入框高度，双击恢复默认" 
-          @mousedown="startResizeInput" 
+          @pointerdown="startResizeInput"
           @dblclick="resetInputHeight"
         >
           <div class="resizer-handle-bar"></div>
@@ -669,7 +669,8 @@ const MIN_SIDEBAR_WIDTH = 220;
 const MAX_SIDEBAR_WIDTH = 500;
 
 const DEFAULT_INPUT_HEIGHT = 160;
-const MIN_INPUT_HEIGHT = 100;
+// 最小高度需容纳工具栏、正文和发送按钮，避免拖小时底部操作区被裁切。
+const MIN_INPUT_HEIGHT = 160;
 const MAX_INPUT_HEIGHT = 600;
 
 function getStoredNumber(key: string, fallback: number, min: number, max: number): number {
@@ -685,6 +686,9 @@ function getStoredNumber(key: string, fallback: number, min: number, max: number
 
 const sidebarWidth = ref<number>(getStoredNumber('coolapk_messages_sidebar_width', DEFAULT_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH));
 const inputAreaHeight = ref<number>(getStoredNumber('coolapk_messages_input_height', DEFAULT_INPUT_HEIGHT, MIN_INPUT_HEIGHT, MAX_INPUT_HEIGHT));
+// 反馈的展开高度只是默认值；拖动后的高度独立保存，不覆盖普通私信的偏好。
+const feedbackInputHeight = ref<number | null>(null);
+const visibleInputHeight = computed(() => Math.max(pendingImages.value.length > 0 ? 240 : MIN_INPUT_HEIGHT, isFeedbackCompose.value ? feedbackInputHeight.value ?? Math.max(inputAreaHeight.value, Math.min(pendingImages.value.length > 0 ? 440 : 360, window.innerHeight * 0.7)) : inputAreaHeight.value));
 const isInputFullscreen = ref(false);
 
 function toggleInputFullscreen() {
@@ -760,24 +764,28 @@ let isDraggingInput = false;
 let startInputY = 0;
 let startInputHeight = DEFAULT_INPUT_HEIGHT;
 
-function startResizeInput(event: MouseEvent) {
+function startResizeInput(event: PointerEvent) {
+  if (event.button !== 0) return;
   event.preventDefault();
   isDraggingInput = true;
   startInputY = event.clientY;
-  startInputHeight = inputAreaHeight.value;
+  startInputHeight = visibleInputHeight.value;
   document.body.style.cursor = 'row-resize';
   document.body.style.userSelect = 'none';
 
-  window.addEventListener('mousemove', onMouseMoveInput);
-  window.addEventListener('mouseup', stopResizeInput);
+  window.addEventListener('pointermove', onMouseMoveInput);
+  window.addEventListener('pointerup', stopResizeInput);
+  window.addEventListener('pointercancel', stopResizeInput);
 }
 
-function onMouseMoveInput(event: MouseEvent) {
+function onMouseMoveInput(event: PointerEvent) {
   if (!isDraggingInput) return;
   const delta = startInputY - event.clientY; // 向上拖拽增大输入框高度
   const maxAllowed = typeof window !== 'undefined' ? Math.floor(window.innerHeight * 0.8) : MAX_INPUT_HEIGHT;
-  const newHeight = Math.min(maxAllowed, Math.max(MIN_INPUT_HEIGHT, startInputHeight + delta));
-  inputAreaHeight.value = newHeight;
+  const minAllowed = pendingImages.value.length > 0 ? 240 : MIN_INPUT_HEIGHT;
+  const newHeight = Math.max(minAllowed, Math.min(maxAllowed, startInputHeight + delta));
+  if (isFeedbackCompose.value) feedbackInputHeight.value = newHeight;
+  else inputAreaHeight.value = newHeight;
 }
 
 function stopResizeInput() {
@@ -785,14 +793,17 @@ function stopResizeInput() {
   isDraggingInput = false;
   document.body.style.cursor = '';
   document.body.style.userSelect = '';
-  window.removeEventListener('mousemove', onMouseMoveInput);
-  window.removeEventListener('mouseup', stopResizeInput);
+  window.removeEventListener('pointermove', onMouseMoveInput);
+  window.removeEventListener('pointerup', stopResizeInput);
+  window.removeEventListener('pointercancel', stopResizeInput);
+  if (isFeedbackCompose.value) return;
   try {
     localStorage.setItem('coolapk_messages_input_height', String(inputAreaHeight.value));
   } catch {}
 }
 
 function resetInputHeight() {
+  if (isFeedbackCompose.value) { feedbackInputHeight.value = null; return; }
   inputAreaHeight.value = DEFAULT_INPUT_HEIGHT;
   try {
     localStorage.setItem('coolapk_messages_input_height', String(DEFAULT_INPUT_HEIGHT));
@@ -2845,9 +2856,14 @@ onUnmounted(() => {
   gap: var(--space-2);
   position: relative;
   box-sizing: border-box;
-  min-height: 100px;
+  /* 输入区不参与聊天列表的压缩，列表通过自身滚动让出空间。 */
+  flex-shrink: 0;
+  min-height: 160px;
   transition: height 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease, padding 0.25s ease;
 }
+
+/* 粘贴图片后为预览额外留出一行，移除后恢复用户原来的输入区高度。 */
+.input-area.has-pending-images { min-height: 240px; }
 
 .input-area.is-fullscreen {
   position: absolute;
@@ -2877,6 +2893,8 @@ onUnmounted(() => {
 }
 
 .input-resizer {
+  /* 指针拖动同时支持鼠标与触屏，避免触屏手势变成页面滚动。 */
+  touch-action: none;
   position: absolute;
   top: -4px;
   left: 0;
@@ -2907,6 +2925,7 @@ onUnmounted(() => {
 
 .input-toolbar {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
   position: relative;
@@ -3136,9 +3155,9 @@ onUnmounted(() => {
 
 .message-rich-editor {
   width: 100%;
-  flex: 1;
-  min-height: 50px;
-  height: 100%;
+  /* 正文只占剩余空间并独立滚动，不能把发送按钮挤出固定高度的输入区。 */
+  flex: 1 1 0;
+  min-height: 0;
   border: none;
   background: transparent;
   font-family: inherit;

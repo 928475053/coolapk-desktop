@@ -200,6 +200,28 @@ describe('MessagesPage 粘贴图片发送功能', () => {
     expect(area.scrollTop).toBe(atBottom ? 1300 : 400);
   });
 
+  it('反馈默认展开后可以向下缩小、向上拉高，并双击恢复默认高度', async () => {
+    mocks.route.query.feedback = '1';
+    localStorage.setItem('coolapk_messages_input_height', '160');
+    const w = await mountMessagesPage();
+    const area = w.get('.input-area');
+    expect((area.element as HTMLElement).style.height).toBe('360px');
+    w.get('.input-resizer').element.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientY: 300, bubbles: true, cancelable: true }));
+    window.dispatchEvent(new MouseEvent('pointermove', { clientY: 400 }));
+    window.dispatchEvent(new MouseEvent('pointerup'));
+    await flushPromises();
+    expect((area.element as HTMLElement).style.height).toBe('260px');
+    w.get('.input-resizer').element.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientY: 400, bubbles: true, cancelable: true }));
+    window.dispatchEvent(new MouseEvent('pointermove', { clientY: 260 }));
+    window.dispatchEvent(new MouseEvent('pointerup'));
+    await flushPromises();
+    expect((area.element as HTMLElement).style.height).toBe('400px');
+    // 反馈高度不写入普通私信设置，双击只恢复当前反馈的展开高度。
+    expect(localStorage.getItem('coolapk_messages_input_height')).toBe('160');
+    await w.get('.input-resizer').trigger('dblclick');
+    expect((area.element as HTMLElement).style.height).toBe('360px');
+  });
+
   it('反馈附带原图地址，仅发送文字私信', async () => {
     mocks.route.query.feedback = '1';
     const w = await mountMessagesPage();

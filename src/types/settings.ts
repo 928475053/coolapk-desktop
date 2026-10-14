@@ -158,6 +158,8 @@ export interface AppSettings {
   /** 无图模式下仅在动态详情中显示图片。 */
   showImagesInDetail: boolean;
   showDeviceInfo: boolean;
+  /** 是否显示动态顶部的作者背景与装饰图，不影响正文配图。 */
+  showFeedBackground: boolean;
   showHomeMonthlyRank: boolean;
   showHomeHotTopics: boolean;
   /** 移动阅读时自动收起首页搜索栏、Dock 或详情底栏，保留栏目导航。 */

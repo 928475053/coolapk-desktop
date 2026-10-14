@@ -143,6 +143,7 @@ const defaultSettings: AppSettings = {
   noImageMode: false,
   showImagesInDetail: false,
   showDeviceInfo: true,
+  showFeedBackground: true,
   showHomeMonthlyRank: true,
   showHomeHotTopics: true,
   autoHideMobileNavigation: true,
@@ -315,6 +316,7 @@ export function normalizeSettings(value: unknown): AppSettings {
   result.noImageMode = readBoolean(source.noImageMode, result.noImageMode);
   result.showImagesInDetail = readBoolean(source.showImagesInDetail, result.showImagesInDetail);
   result.showDeviceInfo = readBoolean(source.showDeviceInfo, result.showDeviceInfo);
+  result.showFeedBackground = readBoolean(source.showFeedBackground, result.showFeedBackground);
   result.showHomeMonthlyRank = readBoolean(source.showHomeMonthlyRank, result.showHomeMonthlyRank);
   result.showHomeHotTopics = readBoolean(source.showHomeHotTopics, result.showHomeHotTopics);
   result.autoHideMobileNavigation = readBoolean(source.autoHideMobileNavigation, result.autoHideMobileNavigation);

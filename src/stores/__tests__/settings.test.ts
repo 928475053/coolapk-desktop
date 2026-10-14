@@ -20,6 +20,10 @@ const fileStoreState = vi.hoisted(() => {
 vi.mock('@tauri-apps/plugin-store', () => ({ Store: { load: fileStoreState.load } }));
 
 describe('settings store', () => {
+  it('旧配置默认显示动态背景，并保留用户关闭的选择', () => {
+    expect(normalizeSettings({}).showFeedBackground).toBe(true);
+    expect(normalizeSettings({ showFeedBackground: false }).showFeedBackground).toBe(false);
+  });
   it('自定义浅色底色即时应用，恢复默认后移除自定义变量', async () => {
     const store = useSettingsStore();
     store.settings.lightBackgroundColor = '#e5e7eb';

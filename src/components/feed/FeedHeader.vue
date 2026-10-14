@@ -66,7 +66,7 @@
     </div>
 
     <div class="header-actions">
-      <span v-if="feedPluginUrl" class="desktop-feed-plugin" aria-hidden="true"><AppImage :src="feedPluginUrl" fit="contain" :hide-spinner="true" /></span>
+      <span v-if="feedPluginUrl && settingsStore.settings.showFeedBackground" class="desktop-feed-plugin" aria-hidden="true"><AppImage :src="feedPluginUrl" fit="contain" :hide-spinner="true" /></span>
       <slot name="actions">
         <span v-if="questionMode" class="question-badge" title="问答" aria-label="问答">
           <i class="fas fa-circle-question" aria-hidden="true"></i>

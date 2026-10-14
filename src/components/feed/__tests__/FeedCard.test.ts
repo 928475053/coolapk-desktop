@@ -35,6 +35,24 @@ import { useAuthStore } from '../../../stores/auth';
 import { useSettingsStore } from '../../../stores/settings';
 
 describe('动态卡片编辑记录', () => {
+  it.each(['cover', 'plugin'])('关闭背景开关后移除 %s 装饰，保留正文图片和作者头像入口', async type => {
+    const feed = { id: '42', uid: '456', username: '作者', message: '正文', userCover: 'https://img.example/cover.jpg', ...(type === 'plugin' ? { feed_plugin_url: 'https://img.example/plugin.jpg' } : {}), picArr: ['https://img.example/content.jpg'] };
+    const wrapper = mount(FeedCard, { props: { feed: feed as any }, global: { stubs: { AppImage: true, FeedImageGrid: true, FeedHeader: true, FeedContent: true, FeedActionBar: true, FeedCommentSection: true, FeedDyhShareDialog: true, FeedShareImageDialog: true, FeedInteractionListDialog: true, FeedCollectionPickerDialog: true, AppDialog: true, ForwardDialog: true } } });
+    try {
+      const selector = type === 'plugin' ? '.feed-plugin-decoration' : '.card-cover-backdrop';
+      expect(wrapper.find(selector).exists()).toBe(true);
+      useSettingsStore().settings.showFeedBackground = false;
+      await nextTick();
+      expect(wrapper.find(selector).exists()).toBe(false);
+      expect(wrapper.classes()).not.toContain('has-user-cover');
+      expect(wrapper.findComponent({ name: 'FeedHeader' }).props('feedPluginUrl')).toBe('');
+      expect(wrapper.findComponent({ name: 'FeedHeader' }).exists()).toBe(true);
+      expect(wrapper.findComponent({ name: 'FeedImageGrid' }).exists()).toBe(true);
+      useSettingsStore().settings.showFeedBackground = true;
+      await nextTick();
+      expect(wrapper.find(selector).exists()).toBe(true);
+    } finally { wrapper.unmount(); }
+  });
   it.each([false, true])('点评详情走专用评分正文并保留公共交互（移动=%s）', officialMobileDetail => {
     const wrapper = mount(FeedCard, {
       props: { feed: { id: '42', uid: '456', username: 'Zeldq', message: '【点评】摘要', feedType: 'rating', rating_score: 10 } as any, detailMode: true, officialMobileDetail },

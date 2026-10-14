@@ -482,6 +482,8 @@ const authorUid = computed(() => {
 });
 
 const userCoverUrl = computed(() => {
+  // 背景单独控制；关闭时不挂载图片节点，也不保留背景专用样式。
+  if (!settingsStore.settings.showFeedBackground) return '';
   const preloaded = authorUid.value ? reactiveUserProfileMap[authorUid.value] : null;
   const info = props.feed.userInfo as any;
   const feedAny = props.feed as any;
@@ -564,6 +566,7 @@ const emit = defineEmits<{
 
 const authStore = useAuthStore();
 const feedPluginUrl = computed(() => {
+  if (!settingsStore.settings.showFeedBackground) return '';
   if (String(authStore.user?.uid) === authorUid.value && authStore.user?.feedPluginUrl !== undefined) return authStore.user.feedPluginUrl;
   const info = props.feed.userInfo as any;
   const preloaded = authorUid.value ? reactiveUserProfileMap[authorUid.value] : null;

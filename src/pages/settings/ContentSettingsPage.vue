@@ -47,6 +47,14 @@
 
       <div class="setting-row">
         <div class="row-info">
+          <span class="row-label">显示动态背景图</span>
+          <span class="row-sub">显示作者在动态顶部的背景和装饰图，关闭后保留正文配图与头像</span>
+        </div>
+        <AppSwitch v-model="settingsStore.settings.showFeedBackground" />
+      </div>
+
+      <div class="setting-row">
+        <div class="row-info">
           <span class="row-label">显示发帖设备信息</span>
           <span class="row-sub">在动态头部展示作者使用的设备型号</span>
         </div>

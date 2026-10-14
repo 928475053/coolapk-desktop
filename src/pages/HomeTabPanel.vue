@@ -38,6 +38,7 @@
         ref="feedScrollContainer"
         class="feed-scroll-container custom-scrollbar"
         @scroll="handleScroll"
+        @load.capture="scheduleFeedEndCheck"
         @wheel="handleFeedHorizontalWheel"
         @pointerdown="handleFeedPointerDown"
         @click.capture="handleFeedClickCapture"
@@ -245,16 +246,19 @@
 
         <div v-else-if="!isDyhTab" :class="['feed-list-padding', { 'is-double-column': isDoubleColumn }]">
           <template v-if="isDoubleColumn">
-            <template v-for="entry in feedEntries" :key="entry.item.id || entry.index">
+            <div v-for="(column, columnIndex) in feedColumns" :key="columnIndex" class="feed-waterfall-column">
+            <template v-for="entry in column" :key="entry.item.id || entry.index">
               <QuestionAnswerCard
                 v-if="isQuestionTab && isAnswerHomeItem(entry.item)"
                 :answer="entry.item"
+                :style="{ order: entry.index }"
                 :class="{ 'feed-card-focused': entry.index === navIndex }"
                 :ref="(el) => setCardRef(el, entry.index)"
               />
               <QuestionFeedCard
                 v-else-if="isQuestionTab && isQuestionHomeItem(entry.item)"
                 :question="entry.item"
+                :style="{ order: entry.index }"
                 :rank-index="isHotTab ? entry.index + 1 : undefined"
                 :class="{ 'feed-card-focused': entry.index === navIndex }"
                 :ref="(el) => setCardRef(el, entry.index)"
@@ -262,18 +266,21 @@
               <RatingCard
                 v-else-if="isRatingHomeItem(entry.item)"
                 :feed="entry.item"
+                :style="{ order: entry.index }"
                 :class="{ 'feed-card-focused': entry.index === navIndex }"
                 :ref="(el) => setCardRef(el, entry.index)"
               />
               <FeedCard
                 v-else
                 :feed="entry.item"
+                :style="{ order: entry.index }"
                 :rank-index="isHotTab ? entry.index + 1 : undefined"
                 :class="{ 'feed-card-focused': entry.index === navIndex }"
                 :ref="(el) => setCardRef(el, entry.index)"
                 @deleted="handleFeedDeleted"
               />
             </template>
+            </div>
           </template>
           <template v-else v-for="(item, idx) in feeds" :key="item.id || idx">
             <QuestionAnswerCard
@@ -323,7 +330,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, watch, onMounted, onUnmounted, onActivated, onDeactivated, inject, provide } from 'vue';
+import { ref, computed, reactive, watch, nextTick, onMounted, onUnmounted, onActivated, onDeactivated, inject, provide } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import FeedTabs from '../components/feed/FeedTabs.vue';
 import FeedLayoutToggle from '../components/feed/FeedLayoutToggle.vue';
@@ -368,6 +375,8 @@ const feedLayout = computed<FeedLayout>({
   set: (value) => { settingsStore.settings.feedLayout = value; },
 });
 const feedEntries = computed(() => feeds.value.map((item, index) => ({ item, index })));
+// 固定左右归属，追加动态或图片高度变化时只更新本列，不重新平衡已有卡片。
+const feedColumns = computed(() => [feedEntries.value.filter(entry => entry.index % 2 === 0), feedEntries.value.filter(entry => entry.index % 2 === 1)]);
 
 const route = useRoute();
 const router = useRouter();
@@ -1248,18 +1257,34 @@ async function loadFeeds(isRefresh: boolean = false) {
     loading.value = false;
     loadingMore.value = false;
   }
+  // 追加数据后重新检查短列，首屏不足或两列高度差较大时不必再滚动一次。
+  if (!error.value) scheduleFeedEndCheck();
 }
 
-function handleScroll(e: Event) {
-  if (!props.selected || pagerMoving.value) return;
-  const el = e.target as HTMLElement;
-  if (!el) return;
-  if (el.scrollHeight - el.scrollTop - el.clientHeight < 250) {
-    if (!loading.value && !loadingMore.value && !noMore.value) {
-      loadFeeds(false);
-    }
+function loadNearFeedEnd(el: HTMLElement) {
+  if (!props.selected || pagerMoving.value || loading.value || loadingMore.value || noMore.value) return;
+  let remaining = el.scrollHeight - el.scrollTop - el.clientHeight;
+  let threshold = 250;
+  const columns = Array.from(el.querySelectorAll<HTMLElement>('.feed-waterfall-column'));
+  // 单列布局中的容器使用 display: contents，只有实际双列才按较短一列提前一个可视屏加载。
+  if (isDoubleColumn.value && columns.length === 2 && columns.every(column => getComputedStyle(column).display === 'flex')) {
+    const viewportBottom = el.getBoundingClientRect().top + el.clientTop + el.clientHeight;
+    remaining = Math.min(...columns.map(column => column.getBoundingClientRect().bottom)) - viewportBottom;
+    threshold = Math.max(480, el.clientHeight);
   }
+  if (remaining < threshold) void loadFeeds(false);
 }
+
+function scheduleFeedEndCheck() {
+  void nextTick(() => {
+    const el = feedScrollContainer.value;
+    if (!error.value && el && el.clientHeight > 0) loadNearFeedEnd(el);
+  });
+}
+
+function handleScroll(e: Event) { loadNearFeedEnd(e.currentTarget as HTMLElement); }
+
+watch([() => props.selected, feedLayout], scheduleFeedEndCheck);
 
 function resetFeedScroll() {
   if (!feedScrollContainer.value) return;
@@ -2153,16 +2178,24 @@ defineExpose({ handleHomeSubChannelSelected, activeFollowSubChannelKey });
 }
 
 .feed-list-padding.is-double-column {
-  display: block;
+  /* 两列内部各自垂直排布，保持瀑布流，不按行对齐或自动平衡已有卡片。 */
+  display: grid;
   width: 100%;
-  column-count: 2;
-  column-gap: 12px;
-  column-fill: balance;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
   padding: 12px;
 }
 
+.feed-waterfall-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
 .feed-list-padding.is-double-column :deep(.feed-card) {
-  display: inline-block;
+  display: block;
   width: 100%;
   margin-bottom: 0;
   border: 1px solid var(--border-light, rgba(0, 0, 0, 0.08));
@@ -2171,14 +2204,18 @@ defineExpose({ handleHomeSubChannelSelected, activeFollowSubChannelKey });
   break-inside: avoid;
 }
 
-.feed-list-padding.is-double-column > .loading-more {
-  column-span: all;
+.feed-list-padding.is-double-column > .loading-more,
+.feed-list-padding.is-double-column > .feed-no-more {
+  grid-column: 1 / -1;
+  order: 2147483647;
 }
 
 @container layout (max-width: 760px) {
   .feed-list-padding.is-double-column {
-    column-count: 1;
+    grid-template-columns: minmax(0, 1fr);
   }
+  /* 单列时拆开两列容器，按动态原始顺序排列，保留卡片实例和展开状态。 */
+  .feed-waterfall-column { display: contents; }
 }
 
 @media (max-width: 720px) {
@@ -2206,8 +2243,9 @@ defineExpose({ handleHomeSubChannelSelected, activeFollowSubChannelKey });
     flex-direction: column;
     gap: var(--mobile-feed-gap);
     padding: var(--mobile-feed-gap) 0;
-    column-count: auto;
   }
+
+  .feed-waterfall-column { display: contents; }
 
   .feed-list-padding.is-double-column :deep(.feed-card),
   .feed-list-padding :deep(.feed-card) {

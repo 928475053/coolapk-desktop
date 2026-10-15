@@ -25,10 +25,10 @@ describe('测试版更新渠道', () => {
     expect(result.latestVersion).toBe('v1.32.0-beta.101');
     expect(result.installerUrl).toBe('apk-url');
   });
-  it('稳定渠道只读取正式版端点且拒绝预发布响应', async () => {
+  it('稳定渠道从正式版端点检查更新且拒绝预发布响应', async () => {
     const fetch = mockReleases([beta]);
     await checkLatestRelease('stable', { os: 'windows', arch: 'x86_64' });
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0]?.[0]).toEqual(expect.stringContaining('/latest'));
     mockReleases([beta], beta);
     await expect(checkLatestRelease('stable', { os: 'windows', arch: 'x86_64' })).rejects.toThrow();
   });

@@ -145,7 +145,8 @@ function handleFeedback() {
   openFeedbackMessage(router, authStore);
 }
 
-const channelLabel = computed(() => settingsStore.settings.updateChannel === 'beta' ? '测试版渠道' : '稳定版');
+// 安装版本与更新渠道独立，测试版用户也可以选择只接收稳定版更新。
+const channelLabel = computed(() => `${appVersion.includes('-') ? '测试版' : '稳定版'} · ${settingsStore.settings.updateChannel === 'beta' ? '测试版更新渠道' : '稳定版更新渠道'}`);
 
 const techStack = ['Tauri 2', 'Vue 3', 'TypeScript', 'Rust', 'Pinia'];
 

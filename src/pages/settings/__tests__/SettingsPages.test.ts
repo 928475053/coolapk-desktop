@@ -489,6 +489,7 @@ describe('设置页面交互', () => {
     const { wrapper } = mountPage(AboutSettingsPage);
     await flushPromises();
     expect(wrapper.text()).toContain(APP_VERSION);
+    expect(wrapper.get('.about-channel').text()).toBe(`${APP_VERSION.includes('-') ? '测试版' : '稳定版'} · 稳定版更新渠道`);
     expect(wrapper.text()).toContain('1.2k');
     expect(wrapper.text()).toContain('1129528119');
     await wrapper.get('.about-head button').trigger('click');
@@ -498,6 +499,13 @@ describe('设置页面交互', () => {
     await wrapper.find('[title="加入 QQ 交流群"]').trigger('click');
     expect(mocks.openUrl).toHaveBeenCalledWith('https://qm.qq.com/q/bAOWmjCfJ0', 'system');
     vi.unstubAllGlobals();
+  });
+
+  it('关于页切换更新渠道时仍保留安装版本类型', async () => {
+    const { wrapper, settings } = mountPage(AboutSettingsPage);
+    settings.settings.updateChannel = 'beta';
+    await flushPromises();
+    expect(wrapper.get('.about-channel').text()).toBe(`${APP_VERSION.includes('-') ? '测试版' : '稳定版'} · 测试版更新渠道`);
   });
 
   it('账号页在没有本地账户时展示空状态', async () => {

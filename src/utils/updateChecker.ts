@@ -284,18 +284,32 @@ export async function checkLatestRelease(
   const selectedAsset = selectReleaseAsset(release, currentPlatform, packageType);
   const installerUrl = selectedAsset?.browser_download_url;
 
+  // 渠道最新版本可能比已安装版本旧，此时日志、日期和链接必须读取当前安装版本。
+  let notesRelease = release;
+  if (!hasNew && normalizeVersion(tagName) !== normalizeVersion(APP_VERSION)) {
+    notesRelease = null;
+    try {
+      const response = await fetch(`${RELEASES_URL}/tags/v${encodeURIComponent(APP_VERSION)}`, { headers: { Accept: 'application/vnd.github.v3+json' } });
+      if (response.ok) {
+        const currentRelease = await response.json();
+        if (!currentRelease.draft && normalizeVersion(currentRelease.tag_name) === normalizeVersion(APP_VERSION)) notesRelease = currentRelease;
+      }
+    } catch {
+      // 当前版本日志暂时不可用时不冒用其他版本日志，也不影响更新检查结果。
+    }
+  }
   const releaseNotes = hasNew
     ? (release.body ? release.body.trim() : '暂无特别更新说明')
-    : getCurrentVersionChangelog(APP_VERSION, release.body);
+    : getCurrentVersionChangelog(APP_VERSION, notesRelease?.body);
 
-  const publishedAt = release.published_at ? formatReleaseDate(release.published_at) : undefined;
+  const publishedAt = notesRelease?.published_at ? formatReleaseDate(notesRelease.published_at) : undefined;
 
   return {
     hasNew,
     latestVersion: tagName || '最新发布',
     releaseNotes,
     publishedAt,
-    downloadUrl: release.html_url || 'https://github.com/daimiaopeng/coolapk-desktop/releases',
+    downloadUrl: notesRelease?.html_url || 'https://github.com/daimiaopeng/coolapk-desktop/releases',
     installerUrl,
     installerName: selectedAsset?.name,
     packageType,

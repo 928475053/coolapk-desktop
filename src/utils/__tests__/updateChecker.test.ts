@@ -11,6 +11,9 @@ import {
   versionFromAssetName,
 } from '../updateChecker';
 
+// 固定正式版测试环境，避免 CI 注入测试版版本号后将稳定版响应误构造成预发布版本。
+vi.mock('../../constants/version', () => ({ APP_VERSION: '1.9.1' }));
+
 describe('updateChecker', () => {
   beforeEach(() => {
     vi.restoreAllMocks();

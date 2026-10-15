@@ -4,9 +4,9 @@
     <header class="downloads-header">
       <div class="header-main">
         <div class="header-icon-badge">
-          <i class="fas fa-arrow-up-from-bracket"></i>
+          <i class="fas fa-download"></i>
         </div>
-        <h1 class="downloads-title">上传和下载</h1>
+        <h1 class="downloads-title">下载管理</h1>
       </div>
       <div class="header-actions">
         <AppButton
@@ -34,7 +34,7 @@
       <!-- 进行中 -->
       <div class="summary-card card-active">
         <div class="summary-icon-wrap active-icon">
-          <i class="fas fa-arrows-up-down"></i>
+          <i class="fas fa-cloud-arrow-down"></i>
         </div>
         <div class="summary-body">
           <div class="summary-top">
@@ -86,17 +86,6 @@
     <!-- 工具栏：胶囊 Tab 切换与批量快捷操作 -->
     <div class="downloads-toolbar">
       <div class="toolbar-tab-groups">
-        <div class="segmented-control transfer-tabs" role="tablist" aria-label="传输类型">
-          <button :class="['segmented-tab', { active: selectedMode === 'download' }]" type="button" @click="selectedMode = 'download'">
-            <i class="fas fa-cloud-arrow-down"></i>
-            <span>下载</span>
-          </button>
-          <button :class="['segmented-tab', { active: selectedMode === 'upload' }]" type="button" @click="selectedMode = 'upload'">
-            <i class="fas fa-cloud-arrow-up"></i>
-            <span>上传</span>
-            <span v-if="uploadStore.activeCount" class="tab-badge">{{ uploadStore.activeCount }}</span>
-          </button>
-        </div>
         <div class="segmented-control status-tabs" role="tablist" aria-label="任务状态">
           <button
             :class="['segmented-tab', { active: selectedTab === 'active' }]"
@@ -104,7 +93,7 @@
             @click="selectedTab = 'active'"
           >
             <i class="fas fa-list-check"></i>
-            <span>{{ selectedMode === 'download' ? '当前任务' : '上传任务' }}</span>
+            <span>当前任务</span>
             <span class="tab-badge">{{ currentActiveCount }}</span>
           </button>
           <button
@@ -113,14 +102,14 @@
             @click="selectedTab = 'history'"
           >
             <i class="fas fa-clock-rotate-left"></i>
-            <span>{{ selectedMode === 'download' ? '下载历史' : '上传历史' }}</span>
+            <span>下载历史</span>
             <span class="tab-badge">{{ currentHistoryCount }}</span>
           </button>
         </div>
       </div>
 
       <div class="toolbar-batch-actions">
-        <template v-if="selectedMode === 'download' && selectedTab === 'active' && activeTasks.length > 0">
+        <template v-if="selectedTab === 'active' && activeTasks.length > 0">
           <AppButton
             v-if="hasActiveDownloading"
             variant="secondary"
@@ -140,7 +129,7 @@
             全部继续
           </AppButton>
         </template>
-        <template v-else-if="selectedMode === 'download' && selectedTab === 'history' && downloadStore.historyTasks.length > 0">
+        <template v-else-if="selectedTab === 'history' && downloadStore.historyTasks.length > 0">
           <AppButton
             variant="ghost"
             size="sm"
@@ -150,24 +139,11 @@
             清空历史
           </AppButton>
         </template>
-        <AppButton
-          v-else-if="selectedMode === 'upload' && selectedTab === 'history' && uploadStore.historyTasks.length > 0"
-          variant="ghost"
-          size="sm"
-          icon="fas fa-trash-can"
-          @click="handleClearHistory"
-        >
-          清空上传历史
-        </AppButton>
-        <!-- 有任务时保留工具栏入口；空列表时使用与下载页一致的居中入口。 -->
-        <AppButton v-if="selectedMode === 'upload' && visibleUploadTasks.length > 0" variant="secondary" size="sm" icon="fas fa-cloud-arrow-up" @click="router.push('/cdn-upload')">
-          CDN 文件上传
-        </AppButton>
       </div>
     </div>
 
     <!-- 空状态 -->
-    <div v-if="selectedMode === 'download' && visibleTasks.length === 0" class="downloads-empty">
+    <div v-if="visibleTasks.length === 0" class="downloads-empty">
       <EmptyState
         :icon="selectedTab === 'active' ? 'fas fa-cloud-arrow-down' : 'fas fa-clock-rotate-left'"
         :title="selectedTab === 'active' ? '暂无正在进行的下载任务' : '暂无下载历史记录'"
@@ -181,7 +157,7 @@
     </div>
 
     <!-- 任务卡片列表 -->
-    <div v-else-if="selectedMode === 'download'" class="download-list">
+    <div v-else class="download-list">
       <TransitionGroup name="task-item">
         <article v-for="task in visibleTasks" :key="task.id" class="download-card">
           <!-- 应用图标 -->
@@ -317,35 +293,6 @@
       </TransitionGroup>
     </div>
 
-    <div v-if="selectedMode === 'upload' && visibleUploadTasks.length === 0" class="downloads-empty">
-      <EmptyState
-        :icon="selectedTab === 'active' ? 'fas fa-cloud-arrow-up' : 'fas fa-clock-rotate-left'"
-        :title="selectedTab === 'active' ? '暂无上传任务' : '暂无上传历史记录'"
-        :description="selectedTab === 'active' ? '选择文件上传到酷安 CDN，上传进度和结果会显示在这里' : '成功和失败的上传记录会保存在这里'"
-      />
-      <div class="empty-action">
-        <AppButton variant="secondary" size="sm" icon="fas fa-cloud-arrow-up" @click="router.push('/cdn-upload')">
-          CDN 文件上传
-        </AppButton>
-      </div>
-    </div>
-
-    <div v-else-if="selectedMode === 'upload'" class="upload-task-list">
-      <div class="upload-format-note">
-        <i class="fas fa-circle-info"></i>
-        <span>需要先登录当前酷安账号。可选择任意文件尝试上传，格式和大小由酷安服务端校验，具体结果以服务端响应为准。</span>
-      </div>
-      <TransitionGroup name="task-item">
-        <UploadTaskCard
-          v-for="task in visibleUploadTasks"
-          :key="task.id"
-          :task="task"
-          @retry="uploadStore.retry"
-          @remove="removeUploadTask"
-          @cancel="uploadStore.cancel"
-        />
-      </TransitionGroup>
-    </div>
   </div>
 </template>
 
@@ -355,9 +302,7 @@ import { useRoute, useRouter } from 'vue-router';
 import AppButton from '../components/common/AppButton.vue';
 import AppImage from '../components/common/AppImage.vue';
 import EmptyState from '../components/common/EmptyState.vue';
-import UploadTaskCard from '../components/downloads/UploadTaskCard.vue';
 import { useDownloadStore } from '../stores/downloads';
-import { useUploadStore } from '../stores/uploads';
 import { useSettingsStore } from '../stores/settings';
 import { requestConfirmation } from '../utils/confirm';
 import type { DownloadStatus, DownloadTask } from '../types/download';
@@ -366,14 +311,11 @@ const route = useRoute();
 const isAndroid = /android/i.test(navigator.userAgent);
 const router = useRouter();
 const downloadStore = useDownloadStore();
-const uploadStore = useUploadStore();
 const settingsStore = useSettingsStore();
 const selectedTab = ref<'active' | 'history'>('active');
-const selectedMode = ref<'download' | 'upload'>('download');
 
 watch(
-  () => [route.query.mode, route.query.tab], ([mode, tab]) => {
-    selectedMode.value = mode === 'upload' ? 'upload' : 'download';
+  () => route.query.tab, (tab) => {
     selectedTab.value = tab === 'history' ? 'history' : 'active';
   },
   { immediate: true },
@@ -381,13 +323,12 @@ watch(
 
 const activeTasks = computed(() => downloadStore.activeTasks);
 const visibleTasks = computed(() => selectedTab.value === 'active' ? activeTasks.value : downloadStore.historyTasks);
-const visibleUploadTasks = computed(() => selectedTab.value === 'active' ? uploadStore.activeTasks : uploadStore.historyTasks);
 const downloadCompletedCount = computed(() => downloadStore.tasks.filter((task) => task.status === 'completed').length);
-const completedCount = computed(() => downloadCompletedCount.value + uploadStore.completedCount);
-const allActiveCount = computed(() => downloadStore.activeCount + uploadStore.activeCount);
-const allTransferSpeed = computed(() => downloadStore.totalSpeed + uploadStore.totalSpeed);
-const currentActiveCount = computed(() => selectedMode.value === 'download' ? downloadStore.activeCount : uploadStore.activeCount);
-const currentHistoryCount = computed(() => selectedMode.value === 'download' ? downloadStore.historyTasks.length : uploadStore.historyTasks.length);
+const completedCount = computed(() => downloadCompletedCount.value);
+const allActiveCount = computed(() => downloadStore.activeCount);
+const allTransferSpeed = computed(() => downloadStore.totalSpeed);
+const currentActiveCount = computed(() => downloadStore.activeCount);
+const currentHistoryCount = computed(() => downloadStore.historyTasks.length);
 const downloadDirTooltip = computed(() => settingsStore.settings.downloadPath || '保存至系统默认下载目录');
 
 const hasActiveDownloading = computed(() =>
@@ -399,14 +340,13 @@ const hasActivePaused = computed(() =>
 
 const activeTasksHint = computed(() => {
   if (allActiveCount.value === 0) return '队列空闲';
-  if (hasActiveDownloading.value || uploadStore.activeTasks.some((task) => task.status === 'uploading' || task.status === 'cancelling')) return '正在传输';
-  if (uploadStore.activeTasks.some((task) => task.status === 'queued' || task.status === 'preparing')) return '上传队列处理中';
+  if (hasActiveDownloading.value) return '正在下载';
   return '下载已暂停';
 });
 
 const completedTasksHint = computed(() => {
   if (completedCount.value === 0) return '暂无完成记录';
-  return '上传与下载已完成';
+  return '下载已完成';
 });
 
 const storageCardHint = computed(() => {
@@ -475,10 +415,6 @@ function statusText(status: DownloadStatus) {
   }[status];
 }
 
-function removeUploadTask(taskId: string) {
-  uploadStore.remove(taskId);
-}
-
 async function removeTask(task: DownloadTask) {
   const deleteFile =
     task.status !== 'completed' ||
@@ -492,17 +428,6 @@ async function removeTask(task: DownloadTask) {
 }
 
 async function handleClearHistory() {
-  if (selectedMode.value === 'upload') {
-    if (uploadStore.historyTasks.length === 0) return;
-    const confirmed = await requestConfirmation({
-      title: '清空上传历史',
-      message: '确定要清空全部上传历史记录吗？已上传到酷安 CDN 的文件不会被删除。',
-      confirmText: '清空记录',
-      danger: true,
-    });
-    if (confirmed) uploadStore.clearHistory();
-    return;
-  }
   if (downloadStore.historyTasks.length === 0) return;
   const confirmed = await requestConfirmation({
     title: '清空下载历史',
@@ -516,9 +441,8 @@ async function handleClearHistory() {
 }
 
 onMounted(async () => {
-  await Promise.all([downloadStore.initialize(), uploadStore.initialize()]);
+  await downloadStore.initialize();
   void downloadStore.pump();
-  void uploadStore.pump();
 });
 </script>
 
@@ -770,30 +694,6 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-}
-
-.upload-task-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.upload-format-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 10px 12px;
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-control);
-  color: var(--text-secondary);
-  background: var(--surface);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.upload-format-note i {
-  margin-top: 2px;
-  color: var(--brand-primary);
 }
 
 .download-card {
@@ -1197,11 +1097,9 @@ onMounted(async () => {
   .summary-value { font-size: 20px; line-height: 1.25; white-space: normal; overflow-wrap: anywhere; }
   .speed-badge { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 
-  /* 一级切换占满整行，二级筛选使用轻量按钮，减少嵌套胶囊的拥挤感。 */
+  /* 窄屏使用轻量状态按钮，方便切换当前任务和下载历史。 */
   .downloads-toolbar { gap: 10px; margin-bottom: 16px; }
   .toolbar-tab-groups { flex-direction: column; align-items: stretch; gap: 12px; }
-  .transfer-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 4px; border-radius: 10px; }
-  .transfer-tabs .segmented-tab { justify-content: center; min-height: 40px; border-radius: 7px; }
   .status-tabs { display: flex; padding: 0; gap: 8px; border: 0; background: transparent; }
   .status-tabs .segmented-tab { min-height: 36px; padding: 6px 10px; border-radius: 8px; font-size: 13px; }
   .status-tabs .segmented-tab > i { display: none; }

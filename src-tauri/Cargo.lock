@@ -860,7 +860,6 @@ dependencies = [
  "tauri-plugin-store",
  "tauri-plugin-stronghold",
  "tokio",
- "tokio-util",
  "tracing",
  "unicode-segmentation",
  "webview2-com",

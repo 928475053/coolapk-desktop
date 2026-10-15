@@ -91,8 +91,7 @@ export function describePageTab(route: TabRoute): PageTabDescriptor {
   if (name === 'External' && isFeedReportUrl(route.query.url)) title = String(route.query.url).includes('type=reply') ? '举报回复' : '举报动态';
   let icon = staticPages[name]?.[1] || 'far fa-file-lines';
 
-  if (name === 'CdnUpload') [title, icon] = ['酷安 CDN 文件上传', 'fas fa-cloud-arrow-up'];
-  else if (name === 'Downloads') [title, icon] = ['上传和下载', 'fas fa-arrow-up-from-bracket'];
+  if (name === 'Downloads') [title, icon] = ['下载管理', 'fas fa-download'];
   else if (name === 'Topic') [title, icon] = [param.trim().startsWith('#') && param.trim().endsWith('#') ? param.trim().slice(1, -1).trim() || '话题' : param.trim() || '话题', 'fas fa-hashtag'];
   else if (name === 'FeedDetail') [title, icon] = [`动态 ${param}`, 'far fa-comment-alt'];
   else if (name === 'QuestionDetail') [title, icon] = [`问题 ${param}`, 'far fa-circle-question'];

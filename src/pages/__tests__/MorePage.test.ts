@@ -28,20 +28,7 @@ describe('MorePage.vue', () => {
     const downloadEntry = wrapper.find('.featured-section').findAll('.featured-btn-item')
       .find((item) => item.text().trim() === '下载');
     expect(downloadEntry).toBeDefined();
-
-    const featuresSection = wrapper.findAll('.category-section')
-      .find((section) => section.find('.section-title').text().includes('特色功能'));
-    expect(featuresSection).toBeDefined();
-    expect(featuresSection!.text()).toContain('酷安 CDN 文件上传');
-  });
-
-  it('特色功能上传卡片会进入独立的文件选择页', async () => {
-    const wrapper = mount(MorePage);
-    const featuresSection = wrapper.findAll('.category-section')
-      .find((section) => section.find('.section-title').text().includes('特色功能'));
-    await featuresSection!.find('.hub-card-item').trigger('click');
-
-    expect(mockPush).toHaveBeenCalledWith('/cdn-upload');
+    expect(wrapper.text()).not.toContain('酷安 CDN 文件上传');
   });
 
   it('filters items correctly when searching', async () => {
@@ -65,19 +52,19 @@ describe('MorePage.vue', () => {
     expect(mockPush).toHaveBeenLastCalledWith('/downloads');
     await wrapper.get('.clear-search-btn').trigger('click');
     expect(wrapper.findAll('.featured-btn-item')).toHaveLength(10);
-    expect(wrapper.findAll('.category-section .hub-card-item')).toHaveLength(9);
+    expect(wrapper.findAll('.category-section .hub-card-item')).toHaveLength(8);
     wrapper.unmount();
   });
 
   it('分类仅展示常用网格以外的服务，所有平台共享准确的服务总数', () => {
     const wrapper = mount(MorePage);
-    expect(wrapper.get('.hub-count-tag').text()).toContain('19');
-    expect(wrapper.findAll('.category-section .section-count').map(count => count.text())).toEqual(['(2)', '(3)', '(1)', '(2)', '(1)']);
+    expect(wrapper.get('.hub-count-tag').text()).toContain('18');
+    expect(wrapper.findAll('.category-section .section-count').map(count => count.text())).toEqual(['(2)', '(3)', '(1)', '(2)']);
     const categories = wrapper.get('.categories-container').text();
     expect(categories).not.toContain('我的数码装备');
     expect(categories).not.toContain('二手市场');
     expect(categories).toContain('机型多维对比');
-    expect(categories).toContain('酷安 CDN 文件上传');
+    expect(categories).not.toContain('酷安 CDN 文件上传');
     wrapper.unmount();
   });
 

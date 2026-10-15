@@ -7,7 +7,6 @@ import DiscoverPage from '../pages/DiscoverPage.vue';
 import AppsPage from '../pages/AppsPage.vue';
 import GamesPage from '../pages/GamesPage.vue';
 import DownloadsPage from '../pages/DownloadsPage.vue';
-import CdnUploadPage from '../pages/CdnUploadPage.vue';
 import FavoritesPage from '../pages/FavoritesPage.vue';
 import MyLikesPage from '../pages/MyLikesPage.vue';
 import MoreWorkspacePage from '../pages/MoreWorkspacePage.vue';
@@ -81,7 +80,6 @@ const routes = [
   { path: '/apps', name: 'Apps', component: AppsPage },
   { path: '/games', name: 'Games', component: GamesPage },
   { path: '/downloads', name: 'Downloads', component: DownloadsPage },
-  { path: '/cdn-upload', name: 'CdnUpload', component: CdnUploadPage },
   { path: '/topics', name: 'Topics', component: TopicsHubPage },
   { path: '/favorites', name: 'Favorites', component: FavoritesPage },
   { path: '/collection/:collectionId', redirect: (to: any) => ({ path: '/favorites', query: { collectionId: to.params.collectionId } }) },

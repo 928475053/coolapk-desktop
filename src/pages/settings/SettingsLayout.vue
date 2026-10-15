@@ -120,8 +120,8 @@ onDeactivated(() => { categoriesOpen.value = false; });
   /* 多按钮操作独占一行，不能为了同排展示而把说明或按钮文字挤成竖排。 */
   .settings-content :deep(.setting-row > .row-actions) { flex-basis: 100%; justify-content: flex-start; }
 }
-/* 移动模式由分类按钮展示名称；PC 模式保留页面标题。 */
-.is-mobile .settings-content :deep(.section-title) { display: none; }
+/* 栏目名称由桌面侧栏或移动端分类按钮展示，内容区不再重复标题，保留说明与账号信息。 */
+.settings-content :deep(.section-title) { display: none; }
 .is-mobile .settings-navigation { padding: 10px 16px; }
 .is-mobile .settings-title { display: none; }
 .is-mobile .settings-category-picker, .is-mobile .settings-category-panel { width: 100%; }

@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import type { RouteLocationNormalizedLoaded, RouteLocationNormalized } from 'vue-router';
-import { describePageTab, getPageTabId, type PageTabDescriptor } from '../utils/pageTabs';
+import { describePageTab, getPageTabId, isSettingsPagePath, type PageTabDescriptor } from '../utils/pageTabs';
 
 export interface PageTab extends PageTabDescriptor {
   generation: number;
@@ -27,7 +27,19 @@ function loadSavedPages(): SavedPageTab[] {
   try {
     const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((item): item is SavedPageTab => Boolean(item && typeof item.id === 'string' && typeof item.route === 'string' && item.route.startsWith('/') && typeof item.title === 'string' && typeof item.icon === 'string' && (item.pinned || item.favorite))).slice(0, 100).map((item, index) => ({ ...item, pinned: Boolean(item.pinned), favorite: Boolean(item.favorite), order: Number.isFinite(item.order) ? item.order : index }));
+    const pages = parsed.filter((item): item is SavedPageTab => Boolean(item && typeof item.id === 'string' && typeof item.route === 'string' && item.route.startsWith('/') && typeof item.title === 'string' && typeof item.icon === 'string' && (item.pinned || item.favorite))).slice(0, 100).map((item, index) => ({ ...item, pinned: Boolean(item.pinned), favorite: Boolean(item.favorite), order: Number.isFinite(item.order) ? item.order : index }));
+    // 兼容旧版固定或收藏的多个设置子页，合并时保留固定、收藏状态及原有顺序。
+    const normalized: SavedPageTab[] = [];
+    for (const page of pages) {
+      if (!isSettingsPagePath(page.route.split(/[?#]/)[0])) { normalized.push(page); continue; }
+      const settings = normalized.find((item) => item.id === 'settings');
+      if (settings) {
+        settings.pinned ||= page.pinned;
+        settings.favorite ||= page.favorite;
+        settings.order = Math.min(settings.order, page.order);
+      } else normalized.push({ ...page, id: 'settings', title: '设置', icon: 'fas fa-gear' });
+    }
+    return normalized;
   } catch {
     return [];
   }

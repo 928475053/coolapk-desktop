@@ -53,16 +53,17 @@ const mySectionTitles: Record<string, string> = {
   my_likes: '我的赞', my_comments: '我的评论', my_feeds: '我的动态', followed_nodes: '关注的论坛', followed_topics: '关注的话题', followed_collections: '关注的收藏单', followed_questions: '关注的问题', followed_products: '关注的数码吧', recent_contacts: '最近联系人', recycle_bin: '内容回收站', hidden_replies: '隐藏的回复', my_devices: '我的设备', my_albums: '我的专辑', my_votes: '我的投票', my_recent: '我的常去',
 };
 
-const settingsTitles: Record<string, string> = {
-  profile: '个人资料设置', account: '账号设置', notifications: '通知设置', privacy: '隐私设置', content: '内容设置', downloads: '下载设置', appearance: '外观设置', shortcuts: '快捷键设置', startup: '启动设置', device: '设备设置', about: '关于',
-};
+/** 设置中心的子菜单共用一个标签，保留地址以便返回最近访问的菜单。 */
+export function isSettingsPagePath(path: string): boolean {
+  return path === '/settings' || path.startsWith('/settings/');
+}
 
 /**
  * 为路由生成稳定的标签页身份。同一详情实体只保留一个标签；筛选、分页等查询变化更新原标签地址。
  */
 export function getPageTabId(route: TabRoute): string {
   if (route.path === '/') return 'home';
-  if (route.path.startsWith('/settings')) return `settings:${route.path.split('/').filter(Boolean)[1] || 'appearance'}`;
+  if (isSettingsPagePath(route.path)) return 'settings';
   if (route.path === '/page') return `page:${decodeRouteText(route.query.url) || route.fullPath}`;
   if (route.path === '/external') return `external:${decodeRouteText(route.query.url) || 'current'}`;
   const params = allParams(route);
@@ -106,7 +107,7 @@ export function describePageTab(route: TabRoute): PageTabDescriptor {
   else if (name === 'Node') [title, icon] = ['讨论区', 'fas fa-comments'];
   else if (name === 'AnyListDetail') [title, icon] = [`清单 ${param}`, 'fas fa-list'];
   else if (name === 'GoodsListDetail' || name === 'GoodsRankingDetail') [title, icon] = ['好物详情', 'fas fa-bag-shopping'];
-  else if (route.path.startsWith('/settings')) [title, icon] = [settingsTitles[route.path.split('/').filter(Boolean)[1] || 'appearance'] || '设置', 'fas fa-gear'];
+  else if (isSettingsPagePath(route.path)) [title, icon] = ['设置', 'fas fa-gear'];
 
   const section = decodeRouteText(route.query.section);
   const category = decodeRouteText(route.query.category);

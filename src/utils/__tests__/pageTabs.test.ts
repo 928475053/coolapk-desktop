@@ -10,6 +10,10 @@ function route(path: string, name: string, params: Record<string, string> = {}, 
 }
 
 describe('页面标签身份', () => {
+  it.each(['', '/profile', '/account', '/notifications', '/privacy', '/content', '/downloads', '/proxy', '/appearance', '/shortcuts', '/startup', '/device', '/diagnostics', '/about'])('设置子页 %s 共用设置标签', (section) => {
+    expect(describePageTab(route(`/settings${section}`, 'Settings'))).toMatchObject({ id: 'settings', title: '设置', icon: 'fas fa-gear', closable: true });
+  });
+
   it('同一详情页的查询变化复用标签，不同实体分开显示', () => {
     const first = route('/topic/摄影', 'Topic', { tag: '摄影' }, { type: 'hot' });
     const sameTopic = route('/topic/摄影', 'Topic', { tag: '摄影' }, { type: 'latest' });
@@ -42,6 +46,37 @@ describe('页面标签状态', () => {
   beforeEach(() => {
     localStorage.clear();
     setActivePinia(createPinia());
+  });
+
+  it('切换设置菜单只更新一个标签，返回时打开最近访问的菜单', () => {
+    const store = usePageTabsStore();
+    store.syncRoute(route('/settings/profile', 'SettingsProfile'));
+    store.syncRoute(route('/settings/account', 'SettingsAccount'));
+    store.syncRoute(route('/settings/appearance', 'SettingsAppearance'));
+    expect(store.tabs.map((tab) => tab.id)).toEqual(['home', 'settings']);
+    expect(store.activeTab).toMatchObject({ title: '设置', route: '/settings/appearance' });
+    store.syncRoute(route('/notifications', 'Notifications'));
+    expect(store.activate('settings')).toBe('/settings/appearance');
+    expect(store.close('settings')).toBe('/notifications');
+  });
+
+  it('旧版固定和收藏的设置子页合并，并保存最近访问菜单', () => {
+    localStorage.setItem('coolapk_page_tabs_v1', JSON.stringify([
+      { id: 'settings:profile', route: '/settings/profile', title: '个人资料设置', icon: 'fas fa-gear', pinned: true, favorite: false, order: 1 },
+      { id: 'settings:account', route: '/settings/account', title: '账号设置', icon: 'fas fa-gear', pinned: true, favorite: true, order: 2 },
+    ]));
+    const store = usePageTabsStore();
+    expect(store.tabs.map((tab) => tab.id)).toEqual(['home', 'settings']);
+    expect(store.favoritePages).toHaveLength(1);
+    expect(store.activeId).toBe('home');
+    store.syncRoute(route('/settings/about', 'SettingsAbout'));
+    expect(store.activeTab).toMatchObject({ id: 'settings', title: '设置', pinned: true, favorite: true, closable: false });
+
+    setActivePinia(createPinia());
+    const restored = usePageTabsStore();
+    expect(restored.tabs.map((tab) => tab.id)).toEqual(['home', 'settings']);
+    expect(restored.activate('settings')).toBe('/settings/about');
+    expect(restored.favoritePages).toHaveLength(1);
   });
 
   it('重复进入同一页面只更新地址，不创建重复标签', () => {

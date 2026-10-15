@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import { KeepAlive, defineComponent, h, ref, type Ref } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
@@ -769,6 +769,82 @@ describe('MessagesPage 粘贴图片发送功能', () => {
 
     expect(sendEvent.defaultPrevented).toBe(true);
     expect(mocks.sendPrivateMessage).toHaveBeenCalledWith('20002', '测试消息');
+  });
+
+  it.each([true, false])('收到通知后立即同步当前聊天并保持阅读位置，原来位于底部=%s', async (atBottom) => {
+    const session = { ukey: '10001_20002', messageUid: 20002, fromuid: 20002, message: '旧消息' };
+    const oldMessage = { id: 'm1', fromuid: 20002, message: '旧消息', dateline: 1 };
+    const newMessage = { id: 'm2', fromuid: 20002, message: '新消息', dateline: 2 };
+    sessionStorage.setItem('coolapk_message_sessions_10001', JSON.stringify([session]));
+    mocks.listMessages.mockResolvedValue({ data: [session] });
+    mocks.listChatHistory.mockResolvedValue({ data: [oldMessage] });
+    const w = await mountMessagesPage(ref(true));
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    const area = w.get('.chat-area').element as HTMLElement;
+    Object.defineProperty(area, 'scrollHeight', { configurable: true, get: () => w.findAll('.message-item').length * 1000 });
+    Object.defineProperty(area, 'clientHeight', { configurable: true, value: 200 });
+    area.scrollTop = atBottom ? 800 : 400;
+    const editor = w.get('.message-rich-editor');
+    editor.element.textContent = '未发送的草稿';
+    await editor.trigger('input');
+    mocks.listChatHistory.mockClear();
+    mocks.readMessage.mockClear();
+    mocks.listMessages.mockResolvedValue({ data: [{ ...session, message: '新消息', isnew: 1, unreadNum: 1 }] });
+    mocks.listChatHistory.mockResolvedValue({ data: [oldMessage, newMessage] });
+    window.dispatchEvent(new Event('coolapk-message-count-increased'));
+    await flushPromises();
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+
+    expect(mocks.listChatHistory).toHaveBeenCalledWith('10001_20002', 1, '', 'm1');
+    expect(w.findAll('.message-item .msg-text').map((item: { text(): string }) => item.text())).toEqual(['旧消息', '新消息']);
+    expect(area.scrollTop).toBe(atBottom ? 2000 : 400);
+    expect(editor.text()).toBe('未发送的草稿');
+    expect(mocks.readMessage).toHaveBeenCalledWith('10001_20002');
+    expect(w.find('.session-unread-badge').exists()).toBe(false);
+  });
+
+  it('定时轮询同步当前聊天，离开页面后停止拉取', async () => {
+    vi.useFakeTimers();
+    try {
+      const session = { ukey: '10001_20002', messageUid: 20002, message: '会话摘要' };
+      sessionStorage.setItem('coolapk_message_sessions_10001', JSON.stringify([session]));
+      mocks.listMessages.mockResolvedValue({ data: [session] });
+      mocks.listChatHistory.mockResolvedValue({ data: [{ id: 'm1', message: '旧消息', dateline: 1 }] });
+      const visible = ref(true);
+      const w = await mountMessagesPage(visible);
+      mocks.listChatHistory.mockClear();
+      mocks.listChatHistory.mockResolvedValue({ data: [{ id: 'm2', message: '轮询收到的消息', dateline: 2 }] });
+      await vi.advanceTimersByTimeAsync(10_000);
+      await flushPromises();
+      expect(mocks.listChatHistory).toHaveBeenCalledWith('10001_20002', 1, '', 'm1');
+      expect(w.findAll('.message-item .msg-text').map((item: { text(): string }) => item.text())).toEqual(['旧消息', '轮询收到的消息']);
+      visible.value = false;
+      await flushPromises();
+      mocks.listChatHistory.mockClear();
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(mocks.listChatHistory).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('切换会话后丢弃旧会话的延迟响应', async () => {
+    const session = { ukey: '10001_20002', messageUid: 20002, message: '旧消息' };
+    const other = { ukey: '10001_30003', messageUid: 30003, message: '另一个会话' };
+    sessionStorage.setItem('coolapk_message_sessions_10001', JSON.stringify([session, other]));
+    mocks.listMessages.mockResolvedValue({ data: [session, other] });
+    mocks.listChatHistory.mockResolvedValue({ data: [{ id: 'm1', message: '旧消息', dateline: 1 }] });
+    const w = await mountMessagesPage(ref(true));
+    let resolveHistory!: (value: any) => void;
+    mocks.listChatHistory.mockImplementationOnce(() => new Promise(resolve => { resolveHistory = resolve; }));
+    window.dispatchEvent(new Event('coolapk-message-count-increased'));
+    await flushPromises();
+    expect(resolveHistory).toBeTypeOf('function');
+    await w.findAll('.session-item')[1].trigger('click');
+    await flushPromises();
+    resolveHistory({ data: [{ id: 'late', message: '旧会话迟到的新消息', dateline: 2 }] });
+    await flushPromises();
+    expect(w.text()).not.toContain('旧会话迟到的新消息');
   });
 
   it('刷新会话标识变化时按对方 UID 合并，保留最新摘要和其他联系人', async () => {

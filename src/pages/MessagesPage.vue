@@ -421,6 +421,7 @@ interface ChatHistoryPaginationState {
 }
 const chatHistoryPagination = new Map<string, ChatHistoryPaginationState>();
 let historyRequestSequence = 0;
+const refreshingHistoryRequests = new Set<number>();
 const MESSAGE_POLL_INTERVAL_MS = 10_000;
 let messagePollTimer: number | null = null;
 let messagePollingActive = false;
@@ -1402,16 +1403,14 @@ const loadSessions = async () => {
         sessions.value = mergedSessions;
       }
 
-      // 当前聊天已打开时，即使轮询接口暂时返回旧的未读值，也保持当前会话的即时已读状态。
-      if (currentSession.value && isSessionUnread(currentSession.value)) {
-        if (markSessionRead(currentSession.value)) notificationStore.markViewed('message');
-      }
       persistSessionsCache();
 
       const queryUid = getRouteTargetUid();
       if (queryUid && String(getSessionPartnerUid(currentSession.value)) !== queryUid) {
         await openTargetConversation(queryUid);
       }
+      // 通知和定时轮询都要同步当前聊天，不能只更新左侧摘要。
+      void refreshCurrentChatHistory();
     } else {
       throw new Error('会话列表返回格式不正确');
     }
@@ -1500,6 +1499,54 @@ function startMessagePolling() {
   if (messagePollingActive) return;
   messagePollingActive = true;
   scheduleMessagePolling();
+}
+
+/** 静默合并新消息，保留历史分页、输入草稿和用户正在阅读的位置。 */
+async function refreshCurrentChatHistory() {
+  const session = currentSession.value;
+  const sessionKey = getSessionKey(session);
+  const requestSequence = historyRequestSequence;
+  if (!messagePageActive || !authStore.isLoggedIn || !sessionKey || session.isNewConversation || loadingHistory.value || refreshingHistoryRequests.has(requestSequence)) return;
+  const isCurrentRequest = () => messagePageActive && authStore.isLoggedIn && requestSequence === historyRequestSequence && getSessionKey(currentSession.value) === sessionKey;
+  refreshingHistoryRequests.add(requestSequence);
+  try {
+    const res = await withTimeout(CoolapkTauriAPI.listChatHistory(sessionKey, 1, '', getNewestChatHistoryCursor(chatHistory.value)), 15_000, '同步聊天记录超时');
+    if (!isCurrentRequest()) return;
+    if (!Array.isArray(res?.data)) throw new Error('聊天记录返回格式不正确');
+    const area = chatAreaRef.value;
+    const atBottom = !area || area.scrollHeight - area.clientHeight - area.scrollTop <= 32;
+    const previousTop = area?.scrollTop || 0;
+    // 基于响应到达时的记录合并，避免覆盖同步期间发出的消息或加载的历史。
+    const list = sortChatHistory(mergeChatHistory(chatHistory.value, res.data));
+    chatHistory.value = list;
+    chatHistoryCache.set(sessionKey, list);
+    historyError.value = '';
+    const pagination = getChatHistoryPagination(sessionKey);
+    if (!pagination.firstItem && list.length) {
+      pagination.firstItem = getOldestChatHistoryCursor(list);
+      pagination.hasMore = true;
+      hasMoreHistory.value = true;
+    }
+    await nextTick();
+    if (!isCurrentRequest()) return;
+    if (atBottom) await scrollToBottom();
+    else if (chatAreaRef.value) chatAreaRef.value.scrollTop = previousTop;
+
+    // 收到并展示记录后再清理新角标；同步失败时保留未读提示。
+    const hasUnread = isSessionUnread(session) || sessions.value.some((item) => isSameSession(item, session) && isSessionUnread(item));
+    if (hasUnread) {
+      const readResult = await withTimeout(CoolapkTauriAPI.readMessage(sessionKey), 10_000, '标记已读请求超时');
+      if (!isCurrentRequest()) return;
+      if (markSessionRead(session)) notificationStore.markViewed('message');
+      if (readResult?.data && typeof readResult.data === 'object') notificationStore.applyServerResponse(readResult);
+      persistSessionsCache();
+    }
+  } catch (err) {
+    // 后台同步失败不遮挡已有聊天记录，下一轮通知或轮询会继续尝试。
+    console.error('同步当前聊天记录失败', err);
+  } finally {
+    refreshingHistoryRequests.delete(requestSequence);
+  }
 }
 
 async function openTargetConversation(uid: string) {
@@ -2107,6 +2154,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  messagePageActive = false;
   clearPendingImages();
   unbindGlobalListeners();
   if (isDraggingSidebar) stopResizeSidebar();

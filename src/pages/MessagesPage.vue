@@ -21,7 +21,7 @@
           :data-context-message-ukey="String(session.ukey || (session.isNewConversation ? '' : session.id) || '')"
           :data-context-message-id="String(session.id || '')"
           :data-context-message-new="session.isNewConversation ? 'true' : 'false'"
-          :class="{ active: currentSession && (currentSession.ukey === session.ukey || currentSession.id === session.id), unread: isSessionUnread(session) }"
+          :class="{ active: isSameSession(currentSession, session), unread: isSessionUnread(session) }"
           @click="selectSession(session)"
         >
           <AppAvatar :src="getSessionPartnerAvatar(session)" size="md" />
@@ -883,7 +883,7 @@ function restoreSessionsCache() {
     if (!cached) return;
     const parsed = JSON.parse(cached);
     if (Array.isArray(parsed)) {
-      sessions.value = parsed.map(normalizeSessionUnreadState);
+      sessions.value = mergeSessionsByKey(parsed.map(normalizeSessionUnreadState), []);
       const pagination = JSON.parse(sessionStorage.getItem(sessionsPaginationCacheKey()) || 'null');
       sessionsNextPage = Number.isInteger(pagination?.nextPage) && pagination.nextPage >= 2 ? pagination.nextPage : 2;
       hasMoreSessions.value = typeof pagination?.hasMore === 'boolean' ? pagination.hasMore : parsed.length > 0;
@@ -1424,12 +1424,17 @@ const loadSessions = async () => {
 };
 
 function mergeSessionsByKey(newer: any[], older: any[]): any[] {
-  const seen = new Set<string>();
+  const seenKeys = new Set<string>();
+  const seenPartners = new Set<string>();
   return [...newer, ...older].filter((session) => {
-    const key = String(session?.ukey || session?.id || getSessionPartnerUid(session) || '');
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
+    // 同一聊天对象的临时会话、缓存和接口记录可能使用不同标识，必须同时按对方 UID 去重。
+    const key = getSessionKey(session);
+    const partnerUid = String(getSessionPartnerUid(session) || '').trim();
+    if (!key && !partnerUid) return false;
+    const duplicate = Boolean((key && seenKeys.has(key)) || (partnerUid && seenPartners.has(partnerUid)));
+    if (key) seenKeys.add(key);
+    if (partnerUid) seenPartners.add(partnerUid);
+    return !duplicate;
   });
 }
 

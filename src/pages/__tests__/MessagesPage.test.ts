@@ -771,6 +771,48 @@ describe('MessagesPage 粘贴图片发送功能', () => {
     expect(mocks.sendPrivateMessage).toHaveBeenCalledWith('20002', '测试消息');
   });
 
+  it('刷新会话标识变化时按对方 UID 合并，保留最新摘要和其他联系人', async () => {
+    const cached = { id: 'old-message', messageUid: 20002, messageUsername: '好友酷友', message: '旧摘要' };
+    const latest = { ...cached, id: 'new-message', messageUid: '20002', message: '最新摘要' };
+    const other = { id: 'other-message', messageUid: 30003, messageUsername: '另一个酷友', message: '其他消息' };
+    sessionStorage.setItem('coolapk_message_sessions_10001', JSON.stringify([cached, other]));
+    mocks.listMessages.mockResolvedValue({ data: [cached] });
+    const w = await mountMessagesPage(ref(true));
+
+    mocks.listMessages.mockResolvedValue({ data: [latest, { ...latest, id: 'duplicate-message' }] });
+    window.dispatchEvent(new Event('coolapk-message-count-increased'));
+    await flushPromises();
+
+    expect(w.findAll('.session-item')).toHaveLength(2);
+    expect(w.find('.session-item .last-message').text()).toBe('最新摘要');
+    expect(w.findAll('.session-item.active')).toHaveLength(1);
+    expect(JSON.parse(sessionStorage.getItem('coolapk_message_sessions_10001')!)).toHaveLength(2);
+  });
+
+  it('接口未返回时也清理缓存中同一聊天对象的重复会话', async () => {
+    const cached = { ukey: '10001_20002', id: 'cached-message', messageUid: 20002, messageUsername: '好友酷友', message: '缓存摘要' };
+    sessionStorage.setItem('coolapk_message_sessions_10001', JSON.stringify([cached, { ...cached, ukey: '20002_10001', id: 'duplicate-message', messageUid: '20002' }]));
+    // 保持列表请求未完成，验证去重在缓存恢复时就生效。
+    mocks.listMessages.mockImplementation(() => new Promise(() => {}));
+    const w = await mountMessagesPage();
+
+    expect(w.findAll('.session-item')).toHaveLength(1);
+  });
+
+  it('分页返回不同标识的同一联系人时不重复添加，同时保留新联系人', async () => {
+    const first = { ukey: '10001_20002', id: 'first-message', messageUid: 20002, messageUsername: '好友酷友', message: '第一页摘要' };
+    const other = { ukey: '10001_30003', id: 'other-message', messageUid: 30003, messageUsername: '另一个酷友', message: '其他消息' };
+    sessionStorage.setItem('coolapk_message_sessions_10001', JSON.stringify([first]));
+    mocks.listMessages.mockImplementation(async (page: number) => ({ data: page === 1 ? [first] : [{ ...first, ukey: '20002_10001', id: 'older-message', messageUid: '20002', message: '旧摘要' }, other] }));
+    const w = await mountMessagesPage();
+    await w.find('.session-pagination-action').trigger('click');
+    await flushPromises();
+
+    expect(w.findAll('.session-item')).toHaveLength(2);
+    expect(w.find('.session-item .last-message').text()).toBe('第一页摘要');
+    expect(mocks.listMessages).toHaveBeenCalledWith(2, '', '10001_20002');
+  });
+
   it('滚动加载更早会话，并在刷新第一页后保留旧会话', async () => {
     const makeSession = (uid: number) => ({
       ukey: `10001_${uid}`,

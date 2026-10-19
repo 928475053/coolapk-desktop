@@ -1277,12 +1277,12 @@ impl CoolapkClient {
             request = request.header("X-App-Device", header_value);
         }
         for (header_name, value) in [
-            ("X-Sdk-Int", profile.sdk_int.as_ref()),
-            ("X-Sdk-Locale", profile.locale.as_ref()),
+            ("X-Sdk-Int", profile.sdk_int.as_deref()),
+            ("X-Sdk-Locale", profile.locale.as_deref()),
             ("X-App-Version", app_version),
             ("X-App-Code", app_code),
-            ("X-Api-Version", profile.api_version.as_ref()),
-            ("X-Dark-Mode", profile.dark_mode.as_ref()),
+            ("X-Api-Version", profile.api_version.as_deref()),
+            ("X-Dark-Mode", profile.dark_mode.as_deref()),
         ] {
             if let Some(value) = value.filter(|s| !s.trim().is_empty()) {
                 if let Ok(header_value) = HeaderValue::from_str(value) {

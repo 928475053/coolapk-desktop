@@ -67,18 +67,38 @@ export function extractCaptchaParamsFromResponse(data: any): { captchaId?: strin
   return null;
 }
 
+function extractCaptchaIdFromText(text: string): string | null {
+  const match = text.match(/captchaId["']?\s*[:=]\s*["']?([0-9a-f]{32})/i);
+  return match?.[1] || null;
+}
+
 /** 从原生接口抛出的验证码响应中提取配置，兼容服务端只返回 code=403 的情况。 */
 export function extractCaptchaParamsFromError(error: unknown): { captchaId: string; captchaField: string } | null {
   let response: any = error instanceof Error ? error.message : error;
   if (typeof response === 'string') {
-    try { response = JSON.parse(response); } catch { return null; }
+    const rawText = response;
+    try {
+      response = JSON.parse(rawText);
+    } catch {
+      // 网关偶尔直接返回包含 EasyDun 脚本的 HTML/纯文本。
+      if (/(captcha|dun\.163|163yun\.com\/api|验证码)/i.test(rawText)) {
+        return {
+          captchaId: extractCaptchaIdFromText(rawText) || DEFAULT_COOLAPK_CAPTCHA_ID,
+          captchaField: '_v2_post_token',
+        };
+      }
+      return null;
+    }
   }
   if (!response || typeof response !== 'object') return null;
   const params = extractCaptchaParamsFromResponse(response);
   if (params?.captchaId) return { captchaId: params.captchaId, captchaField: params.captchaField || '_v2_post_token' };
   const reason = [response.messageStatus, response.message, response.error].filter((value) => typeof value === 'string').join(' ');
-  if (Number(response.code) === 403 && /(captcha|验证码)/i.test(reason)) {
-    return { captchaId: DEFAULT_COOLAPK_CAPTCHA_ID, captchaField: '_v2_post_token' };
+  if ((Number(response.code) === 403 || Number(response.code) === 501) && /(captcha|验证码|dun\.163)/i.test(reason)) {
+    return {
+      captchaId: extractCaptchaIdFromText(reason) || DEFAULT_COOLAPK_CAPTCHA_ID,
+      captchaField: '_v2_post_token',
+    };
   }
   return null;
 }

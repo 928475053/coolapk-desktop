@@ -1303,7 +1303,7 @@ async function loadSubReplies(floor: any, reset: boolean) {
     if (String(props.feedId || '').trim() !== requestedFeedId) return;
     updateSubReplyState(floorId, {
       loading: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: getErrorMessage(error, '加载楼中楼失败'),
     });
   }
 }

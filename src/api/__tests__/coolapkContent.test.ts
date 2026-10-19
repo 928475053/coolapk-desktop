@@ -156,6 +156,96 @@ describe('CoolapkTauriAPI 内容新页接口封装', () => {
     });
   });
 
+  it('楼中楼使用服务端下发的验证码 ID，而不是旧的内置 ID', async () => {
+    window.initNECaptcha = vi.fn((config) => {
+      config.onVerify?.(null, { validate: 'dynamic-validated' });
+    });
+    vi.mocked(invoke)
+      .mockRejectedValueOnce(JSON.stringify({
+        code: 403,
+        messageStatus: 'err_request_captcha_v2',
+        messageExtra: JSON.stringify({
+          captchaId: '5fc4c10eccd64d178982bc560da43a91',
+          captchaField: '',
+        }),
+      }))
+      .mockResolvedValueOnce(okResponse([{ id: 'child-1', message: '动态验证码' }]));
+
+    await expect(CoolapkTauriAPI.getSubReplies('feed-1', 'reply-1', 1)).resolves.toEqual(
+      okResponse([{ id: 'child-1', message: '动态验证码' }]),
+    );
+    expect(invoke).toHaveBeenNthCalledWith(2, 'get_sub_replies', expect.objectContaining({
+      postToken: 'NEC:5fc4c10e:dynamic-validated',
+      postTokenField: '_v2_post_token',
+    }));
+  });
+
+  it('主评论热门兜底携带验证码时，验证成功后重试完整分页', async () => {
+    window.initNECaptcha = vi.fn((config) => {
+      config.onVerify?.(null, { validate: 'comment-validated' });
+    });
+    vi.mocked(invoke)
+      .mockResolvedValueOnce({
+        code: 200,
+        data: [{ id: 'hot-1', message: '热门评论' }],
+        fallback: 'hot',
+        captcha: {
+          code: 403,
+          messageStatus: 'err_request_captcha_v2',
+          messageExtra: JSON.stringify({
+            captchaId: '5fc4c10eccd64d178982bc560da43a91',
+            captchaField: '',
+          }),
+        },
+      })
+      .mockResolvedValueOnce(okResponse([{ id: 'full-1', message: '完整评论' }]));
+
+    await expect(CoolapkTauriAPI.getFeedReplies('feed-1', 1)).resolves.toEqual(
+      okResponse([{ id: 'full-1', message: '完整评论' }]),
+    );
+    expect(invoke).toHaveBeenNthCalledWith(1, 'get_feed_replies', {
+      feedId: 'feed-1',
+      page: 1,
+      firstItem: '',
+      lastItem: '',
+      listType: 'lastupdate_desc',
+      fromFeedAuthor: 0,
+    });
+    expect(invoke).toHaveBeenNthCalledWith(2, 'get_feed_replies', {
+      feedId: 'feed-1',
+      page: 1,
+      firstItem: '',
+      lastItem: '',
+      listType: 'lastupdate_desc',
+      fromFeedAuthor: 0,
+      postToken: 'NEC:5fc4c10e:comment-validated',
+      postTokenField: '_v2_post_token',
+    });
+  });
+
+  it('主评论验证码取消时保留热门评论兜底', async () => {
+    window.initNECaptcha = vi.fn((config) => {
+      config.onClose?.();
+    });
+    const fallback = {
+      code: 200,
+      data: [{ id: 'hot-1', message: '热门评论' }],
+      fallback: 'hot',
+      captcha: {
+        code: 403,
+        messageStatus: 'err_request_captcha_v2',
+        messageExtra: JSON.stringify({
+          captchaId: '5fc4c10eccd64d178982bc560da43a91',
+          captchaField: '',
+        }),
+      },
+    };
+    vi.mocked(invoke).mockResolvedValueOnce(fallback);
+
+    await expect(CoolapkTauriAPI.getFeedReplies('feed-1', 1)).resolves.toEqual(fallback);
+    expect(invoke).toHaveBeenCalledTimes(1);
+  });
+
   it('酷友圈活动列表调用 get_event_list', async () => {
     await CoolapkTauriAPI.getEventList(3);
     expect(invoke).toHaveBeenCalledWith('get_event_list', { page: 3 });

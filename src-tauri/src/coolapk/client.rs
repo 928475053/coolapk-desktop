@@ -1,4 +1,5 @@
 use super::http_session::{session, Policy as SessionPolicy};
+use super::native_device::{APP_CODE, APP_VERSION, SDK_INT};
 use crate::coolapk::auth::CoolapkAuth;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use reqwest::header::{COOKIE, HeaderMap, HeaderValue, LOCATION, USER_AGENT};
@@ -1042,15 +1043,15 @@ pub(crate) fn base_http_client_builder() -> reqwest::ClientBuilder {
 fn build_api_clients(profile: &DeviceProfile) -> Result<(Client, Client), String> {
     let mut headers = HeaderMap::new();
     headers.insert(USER_AGENT, profile.user_agent.as_deref().and_then(|value| HeaderValue::from_str(value).ok()).unwrap_or_else(|| HeaderValue::from_static(super::native_device::COMPATIBILITY_UA)));
-    headers.insert("X-Sdk-Int", profile.sdk_int.as_deref().and_then(|value| HeaderValue::from_str(value).ok()).unwrap_or_else(|| HeaderValue::from_static("36")));
+    headers.insert("X-Sdk-Int", profile.sdk_int.as_deref().and_then(|value| HeaderValue::from_str(value).ok()).unwrap_or_else(|| HeaderValue::from_static(SDK_INT)));
     headers.insert("X-Sdk-Locale", HeaderValue::from_static("zh-CN"));
     headers.insert("X-App-Mode", HeaderValue::from_static("universal"));
     headers.insert("X-App-Channel", HeaderValue::from_static("coolapk"));
     headers.insert("X-App-Id", HeaderValue::from_static("com.coolapk.market"));
-    headers.insert("X-App-Version", HeaderValue::from_static("16.2.0"));
-    headers.insert("X-App-Code", HeaderValue::from_static("2604201"));
+    headers.insert("X-App-Version", HeaderValue::from_static(APP_VERSION));
+    headers.insert("X-App-Code", HeaderValue::from_static(APP_CODE));
     headers.insert("X-Api-Version", HeaderValue::from_static("16"));
-    headers.insert("X-App-Supported", HeaderValue::from_static("2604201"));
+    headers.insert("X-App-Supported", HeaderValue::from_static(APP_CODE));
     headers.insert("X-Dark-Mode", HeaderValue::from_static("0"));
     let client = http_client_builder().default_headers(headers.clone()).build().map_err(|_| "创建酷安 HTTP 客户端失败".to_string())?;
     let redirect_client = http_client_builder().default_headers(headers).redirect(reqwest::redirect::Policy::none()).build().map_err(|_| "创建酷安重定向客户端失败".to_string())?;
@@ -1252,14 +1253,34 @@ impl CoolapkClient {
     ) -> Result<reqwest::RequestBuilder, String> {
         let profile = self.effective_device_profile();
         let mut request = request;
+        // 低于当前网关最低版本的 App-Code 会被楼中楼接口直接拒绝（501）。
+        // 自定义指纹只影响设备身份，请求版本仍必须落在服务端支持范围内。
+        let minimum_app_code = APP_CODE.parse::<u32>().unwrap_or(0);
+        let profile_app_code = profile
+            .app_code
+            .as_deref()
+            .and_then(|value| value.trim().parse::<u32>().ok());
+        let app_code_supported = profile_app_code
+            .map(|code| code >= minimum_app_code)
+            .unwrap_or(true);
+        let app_version = if app_code_supported {
+            profile.app_version.as_deref()
+        } else {
+            Some(APP_VERSION)
+        };
+        let app_code = if app_code_supported {
+            profile.app_code.as_deref()
+        } else {
+            Some(APP_CODE)
+        };
         if let Ok(header_value) = HeaderValue::from_str(device_code) {
             request = request.header("X-App-Device", header_value);
         }
         for (header_name, value) in [
             ("X-Sdk-Int", profile.sdk_int.as_ref()),
             ("X-Sdk-Locale", profile.locale.as_ref()),
-            ("X-App-Version", profile.app_version.as_ref()),
-            ("X-App-Code", profile.app_code.as_ref()),
+            ("X-App-Version", app_version),
+            ("X-App-Code", app_code),
             ("X-Api-Version", profile.api_version.as_ref()),
             ("X-Dark-Mode", profile.dark_mode.as_ref()),
         ] {
@@ -1269,13 +1290,18 @@ impl CoolapkClient {
                 }
             }
         }
-        if let Some(app_code) = profile.app_code.as_ref().filter(|s| !s.trim().is_empty()) {
+        if let Some(app_code) = app_code.filter(|s| !s.trim().is_empty()) {
             if let Ok(header_value) = HeaderValue::from_str(app_code) {
                 request = request.header("X-App-Supported", header_value);
             }
         }
         if let Some(ua) = profile.user_agent.as_ref().filter(|s| !s.trim().is_empty()) {
-            if let Ok(header_value) = HeaderValue::from_str(ua) {
+            let ua = if app_code_supported {
+                ua.clone()
+            } else {
+                normalize_client_version_in_ua(ua)
+            };
+            if let Ok(header_value) = HeaderValue::from_str(&ua) {
                 request = request.header(USER_AGENT, header_value);
             }
         }
@@ -1445,15 +1471,15 @@ impl CoolapkClient {
         let request = request
             .header("X-App-Token", self.get_token()?)
             .header("X-Requested-With", "XMLHttpRequest")
-            .header("X-Sdk-Int", "36")
+            .header("X-Sdk-Int", SDK_INT)
             .header("X-Sdk-Locale", "zh-CN")
             .header("X-App-Mode", "universal")
             .header("X-App-Channel", "coolapk")
             .header("X-App-Id", "com.coolapk.market")
-            .header("X-App-Version", "16.2.0")
-            .header("X-App-Code", "2604201")
+            .header("X-App-Version", APP_VERSION)
+            .header("X-App-Code", APP_CODE)
             .header("X-Api-Version", "16")
-            .header("X-App-Supported", "2604201")
+            .header("X-App-Supported", APP_CODE)
             .header("X-Dark-Mode", "0");
         self.apply_device_profile(request)
     }
@@ -3210,17 +3236,8 @@ impl CoolapkClient {
         if !last_item.trim().is_empty() {
             query.push(("lastItem", last_item.trim().to_string()));
         }
-        if let Some(token) = post_token.filter(|value| !value.trim().is_empty()) {
-            let field = post_token_field
-                .filter(|value| {
-                    value.starts_with('_')
-                        && value.len() <= 64
-                        && value
-                            .bytes()
-                            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
-                })
-                .unwrap_or("_v2_post_token");
-            query.push((field, token.to_string()));
+        if let Some((field, token)) = append_post_token(post_token, post_token_field) {
+            query.push((field, token));
         }
 
         let primary = self.api_get("/v6/feed/replyList", &query).await;
@@ -3356,7 +3373,7 @@ impl CoolapkClient {
     // /v6/feed/hotReplyList，保证评论正文可见。热榜没有旧接口的游标分页，
     // 因此响应会携带 fallback 标记，前端据此停止继续请求后续页。
     pub async fn get_feed_replies(&self, feed_id: &str, page: u32) -> Result<Value, String> {
-        self.get_feed_replies_paged(feed_id, page, "", "", "lastupdate_desc", 0)
+        self.get_feed_replies_paged(feed_id, page, "", "", "lastupdate_desc", 0, None, None)
             .await
     }
 
@@ -3368,6 +3385,8 @@ impl CoolapkClient {
         last_item: &str,
         list_type: &str,
         from_feed_author: u32,
+        post_token: Option<&str>,
+        post_token_field: Option<&str>,
     ) -> Result<Value, String> {
         let requested_list_type = list_type.trim();
         if !requested_list_type.is_empty()
@@ -3406,8 +3425,11 @@ impl CoolapkClient {
             ("blockStatus", "0".to_string()),
             ("fromFeedAuthor", from_feed_author.to_string()),
         ]);
+        if let Some((field, token)) = append_post_token(post_token, post_token_field) {
+            query.push((field, token));
+        }
         let primary = self.api_get("/v6/feed/replyList", &query).await;
-        let (raw, fallback) = match primary {
+        let (raw, fallback, captcha) = match primary {
             Ok(value) if is_reply_list_captcha_response(&value) => (
                 self.api_get(
                     "/v6/feed/hotReplyList",
@@ -3419,12 +3441,19 @@ impl CoolapkClient {
                 )
                 .await?,
                 true,
+                Some(value),
             ),
-            Ok(value) => (value, false),
+            Ok(value) => (value, false, None),
             Err(error)
-                if error.to_ascii_lowercase().contains("captcha")
-                    || error.contains("验证码") =>
+                if is_captcha_error_text(&error) =>
             {
+                let captcha = serde_json::from_str::<Value>(&error).unwrap_or_else(|_| {
+                    json!({
+                        "code": 403,
+                        "messageStatus": "err_request_captcha_v2",
+                        "message": "当前访问需要验证码"
+                    })
+                });
                 (
                     self.api_get(
                         "/v6/feed/hotReplyList",
@@ -3436,6 +3465,7 @@ impl CoolapkClient {
                     )
                     .await?,
                     true,
+                    Some(captcha),
                 )
             }
             Err(error) => return Err(error),
@@ -3562,6 +3592,9 @@ impl CoolapkClient {
         let mut output = json!({ "code": 200, "data": cleaned_replies });
         if fallback {
             output["fallback"] = json!("hot");
+        }
+        if let Some(captcha) = captcha {
+            output["captcha"] = captcha;
         }
         Ok(output)
     }
@@ -7121,8 +7154,8 @@ impl CoolapkClient {
         // 覆盖默认 UA 和自定义 UA，避免从 #Build 或 Dalvik 片段重新识别机型。
         let mut headers = HeaderMap::new();
         headers.insert(USER_AGENT, HeaderValue::from_str(&format!("CoolMarket/{}-{}-universal",
-            profile.app_version.as_deref().unwrap_or("16.2.0"),
-            profile.app_code.as_deref().unwrap_or("2604201"))).map_err(|_| "发布 UA 格式无效")?);
+            profile.app_version.as_deref().unwrap_or(APP_VERSION),
+            profile.app_code.as_deref().unwrap_or(APP_CODE))).map_err(|_| "发布 UA 格式无效")?);
         Ok(request.headers(headers))
     }
 
@@ -9300,9 +9333,53 @@ fn application_failure(value: &Value) -> Option<(i64, &'static str)> {
     Some((code, reason))
 }
 
+/// 服务端验证码字段名通常为空，此时使用官方 APK 的默认字段。
+fn append_post_token<'a>(
+    post_token: Option<&str>,
+    post_token_field: Option<&'a str>,
+) -> Option<(&'a str, String)> {
+    let token = post_token.filter(|value| !value.trim().is_empty())?;
+    let field = post_token_field
+        .filter(|value| {
+            value.starts_with('_')
+                && value.len() <= 64
+                && value
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+        })
+        .unwrap_or("_v2_post_token");
+    Some((field, token.to_string()))
+}
+
+fn normalize_client_version_in_ua(value: &str) -> String {
+    let Some(index) = value.find("+CoolMarket/") else {
+        return value.to_string();
+    };
+    let suffix_end = value[index..]
+        .find(' ')
+        .map(|offset| index + offset)
+        .unwrap_or(value.len());
+    format!(
+        "{}+CoolMarket/{}-{}-universal{}",
+        &value[..index],
+        APP_VERSION,
+        APP_CODE,
+        &value[suffix_end..]
+    )
+}
+
 /// 旧评论列表被服务端验证码拦截时，仍可改用热门评论接口读取正文。
 fn is_reply_list_captcha_response(value: &Value) -> bool {
     matches!(application_failure(value), Some((_, "captcha")))
+}
+
+/// 兼容网关把验证码挑战渲染成 HTML 的情况。
+fn is_captcha_error_text(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    lower.contains("captcha")
+        || lower.contains("dun.163")
+        || lower.contains("163yun.com/api")
+        || text.contains("验证码")
 }
 
 async fn response_json(response: reqwest::Response) -> Result<Value, String> {
@@ -9313,6 +9390,25 @@ async fn response_json(response: reqwest::Response) -> Result<Value, String> {
         .map_err(|e| format!("failed to read Coolapk response: {e}"))?;
 
     if !status.is_success() {
+        // 部分网关会把 EasyDun 挑战渲染成 501/403 HTML，直接截断展示会让用户
+        // 只看到一段 c.dun.163yun.com/api 文本。转成验证码信封交给前端处理。
+        if is_captcha_error_text(&body) {
+            let mut payload = json!({
+                "code": 403,
+                "messageStatus": "err_request_captcha_v2",
+                "message": "当前访问需要验证码"
+            });
+            if let Some(captcha_id) = extract_captcha_id_from_text(&body) {
+                let extra = json!({
+                    "captchaId": captcha_id,
+                    "captchaField": ""
+                });
+                if let Ok(extra) = serde_json::to_string(&extra) {
+                    payload["messageExtra"] = json!(extra);
+                }
+            }
+            return Err(payload.to_string());
+        }
         let detail = if body.trim().is_empty() {
             "empty response body".to_string()
         } else {
@@ -9324,9 +9420,26 @@ async fn response_json(response: reqwest::Response) -> Result<Value, String> {
     serde_json::from_str(&body).map_err(|e| format!("invalid Coolapk JSON response: {e}"))
 }
 
+fn extract_captcha_id_from_text(text: &str) -> Option<String> {
+    let lower = text.to_ascii_lowercase();
+    let start = lower.find("captchaid")? + "captchaid".len();
+    let rest = text.get(start..)?;
+    let rest = rest.trim_start_matches(|value: char| {
+        value == '"' || value == '\'' || value == ':' || value == '=' || value.is_whitespace()
+    });
+    let candidate: String = rest
+        .chars()
+        .take_while(|value| value.is_ascii_hexdigit())
+        .collect();
+    (candidate.len() == 32).then_some(candidate)
+}
+
 #[cfg(test)]
 mod api_failure_log_tests {
-    use super::{application_failure, classify_api_failure, is_reply_list_captcha_response};
+    use super::{
+        append_post_token, application_failure, classify_api_failure, extract_captcha_id_from_text,
+        is_captcha_error_text, is_reply_list_captcha_response, normalize_client_version_in_ua,
+    };
     use serde_json::json;
 
     #[test]
@@ -9352,6 +9465,41 @@ mod api_failure_log_tests {
             "code": 200,
             "data": []
         })));
+    }
+
+    #[test]
+    fn accepts_dynamic_captcha_fields_and_defaults_empty_field() {
+        assert_eq!(
+            append_post_token(Some("NEC:5fc4c10e:validated"), None),
+            Some(("_v2_post_token", "NEC:5fc4c10e:validated".to_string()))
+        );
+        assert_eq!(
+            append_post_token(Some("token"), Some("_custom_token")),
+            Some(("_custom_token", "token".to_string()))
+        );
+        assert_eq!(append_post_token(Some(""), None), None);
+    }
+
+    #[test]
+    fn recognizes_gateway_captcha_html_and_id() {
+        let html = r#"<html><script src="https://c.dun.163yun.com/api/v2/getconf"></script>
+            <script>window.__config={"captchaId":"5fc4c10eccd64d178982bc560da43a91"}</script></html>"#;
+        assert!(is_captcha_error_text(html));
+        assert_eq!(
+            extract_captcha_id_from_text(html).as_deref(),
+            Some("5fc4c10eccd64d178982bc560da43a91")
+        );
+        assert!(!is_captcha_error_text("Coolapk API returned HTTP 404"));
+    }
+
+    #[test]
+    fn normalizes_old_client_version_without_dropping_ua_markers() {
+        assert_eq!(
+            normalize_client_version_in_ua(
+                "Dalvik/2.1.0 (#Build; Xiaomi; model; build; 16) +CoolMarket/16.2.0-2604201-universal CoolapkDesktopAuto"
+            ),
+            "Dalvik/2.1.0 (#Build; Xiaomi; model; build; 16) +CoolMarket/16.6.1-2608212-universal CoolapkDesktopAuto"
+        );
     }
 }
 

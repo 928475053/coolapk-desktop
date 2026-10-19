@@ -81,6 +81,19 @@
         }
       }
 
+      function notifyError(message) {
+        var api = bridge();
+        if (!api || typeof api.onError !== 'function') {
+          notifyCancelled();
+          return;
+        }
+        try {
+          api.onError(String(message || '人机验证加载失败'));
+        } catch (e) {
+          // 忽略 JS 桥异常。
+        }
+      }
+
       function finishVerified(validate) {
         if (finished) {
           return;
@@ -95,6 +108,14 @@
         }
         finished = true;
         notifyCancelled();
+      }
+
+      function finishError(message) {
+        if (finished) {
+          return;
+        }
+        finished = true;
+        notifyError(message);
       }
 
       function setStatus(text) {
@@ -183,7 +204,7 @@
       function initCaptcha(captchaId) {
         var container = document.getElementById('captcha-container');
         if (!container || !window.initNECaptcha) {
-          finishCancelled();
+          finishError('易盾验证码容器不可用');
           return;
         }
         try {
@@ -199,14 +220,18 @@
             },
             onVerify: function (err, data) {
               if (err) {
-                finishCancelled();
+                finishError(
+                  typeof err === 'string'
+                    ? err
+                    : (err && err.message) || '人机验证失败'
+                );
                 return;
               }
               var validate = data && data.validate ? String(data.validate) : '';
               if (validate) {
                 finishVerified(validate);
               } else {
-                finishCancelled();
+                finishError('验证码凭证无效');
               }
             },
             onClose: function () {
@@ -222,13 +247,17 @@
               // popup 模式不会自动弹出，需要主动唤起滑块。
               captchaInstance.verify();
             } catch (e) {
-              finishCancelled();
+              finishError((e && e.message) || '唤起人机验证失败');
             }
-          }, function () {
-            finishCancelled();
+          }, function (err) {
+            finishError(
+              typeof err === 'string'
+                ? err
+                : (err && err.message) || '初始化人机验证失败'
+            );
           });
         } catch (e) {
-          finishCancelled();
+          finishError((e && e.message) || '初始化人机验证失败');
         }
       }
 
@@ -237,7 +266,7 @@
           return;
         }
         if (!captchaId) {
-          finishCancelled();
+          finishError('验证码 ID 为空');
           return;
         }
         initializing = true;
@@ -254,7 +283,7 @@
           if (finished) {
             return;
           }
-          finishCancelled();
+          finishError(message || '易盾验证码脚本加载失败');
         });
       }
 

@@ -1115,6 +1115,8 @@ pub async fn get_feed_replies(
     last_item: Option<String>,
     list_type: Option<String>,
     from_feed_author: Option<u32>,
+    post_token: Option<String>,
+    post_token_field: Option<String>,
 ) -> Result<Value, String> {
     state
         .client
@@ -1125,6 +1127,8 @@ pub async fn get_feed_replies(
             last_item.as_deref().unwrap_or(""),
             list_type.as_deref().unwrap_or("lastupdate_desc"),
             from_feed_author.unwrap_or(0),
+            post_token.as_deref(),
+            post_token_field.as_deref(),
         )
         .await
 }

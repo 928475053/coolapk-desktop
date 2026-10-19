@@ -6,31 +6,51 @@ import { getCoolapkUserLinkName, isCoolapkWebUrl, normalizeCoolapkRoute } from '
 import { normalizeUserUid } from '../utils/userRoute';
 import { requestWithPolicy, type RequestKind } from '../utils/requestCenter';
 import { logDiagnostic, summarizeDiagnosticError } from '../utils/diagnosticLogger';
-import { extractCaptchaParamsFromError, verifyWithCaptcha } from '../utils/neteaseCaptcha';
+import { extractCaptchaParamsFromError, extractCaptchaParamsFromResponse, verifyWithCaptcha } from '../utils/neteaseCaptcha';
 import type { UpdatePackageType } from '../utils/updateChecker';
 import { showToast } from '../utils/toast';
 import { getOriginalImageUrl } from '../utils/image';
 import { getMemoryCachedResourceSync } from '../utils/resourceCache';
 import { useSettingsStore } from '../stores/settings';
 
-type SubReplyCaptchaCache = {
+type CommentCaptchaCache = {
   token: string;
   field: string;
   expiresAt: number;
 };
 
-let subReplyCaptchaCache: SubReplyCaptchaCache | null = null;
+let commentCaptchaCache: CommentCaptchaCache | null = null;
 
-export function clearSubReplyCaptchaCache() {
-  subReplyCaptchaCache = null;
+export function clearCommentCaptchaCache() {
+  commentCaptchaCache = null;
 }
 
-function getCachedSubReplyCaptcha(): SubReplyCaptchaCache | null {
-  if (subReplyCaptchaCache && subReplyCaptchaCache.expiresAt > Date.now()) {
-    return subReplyCaptchaCache;
+export function clearSubReplyCaptchaCache() {
+  clearCommentCaptchaCache();
+}
+
+function getCachedCommentCaptcha(): CommentCaptchaCache | null {
+  if (commentCaptchaCache && commentCaptchaCache.expiresAt > Date.now()) {
+    return commentCaptchaCache;
   }
-  subReplyCaptchaCache = null;
+  commentCaptchaCache = null;
   return null;
+}
+
+function cacheCommentCaptcha(token: string, field: string) {
+  commentCaptchaCache = {
+    token,
+    field,
+    expiresAt: Date.now() + 10 * 60_000,
+  };
+}
+
+function safeJsonParse(value: string): any {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
 }
 
 async function safeFetchOnce(pythonEndpoint: string, tauriCmd: string, tauriArgs: any = {}) {
@@ -509,14 +529,35 @@ export class CoolapkTauriAPI {
       fromFeedAuthor?: number;
     } = {},
   ) {
-    return await invokeNative('get_feed_replies', {
+    const request = (postToken?: string, postTokenField?: string) => invokeNative('get_feed_replies', {
       feedId,
       page,
       firstItem: options.firstItem || '',
       lastItem: options.lastItem || '',
       listType: options.listType ?? 'lastupdate_desc',
       fromFeedAuthor: options.fromFeedAuthor ?? 0,
+      ...(postToken ? { postToken, postTokenField } : {}),
     }, { retry: false, kind: 'comment' });
+
+    const cached = getCachedCommentCaptcha();
+    const response: any = await request(cached?.token, cached?.field);
+
+    const challenge = extractCaptchaParamsFromResponse(
+      typeof response?.captcha === 'string' ? safeJsonParse(response.captcha) : response?.captcha,
+    );
+    if (!challenge?.captchaId) return response;
+    if (cached) clearCommentCaptchaCache();
+
+    try {
+      // 风控页只给热门评论时没有旧接口游标，必须先用验证码换取完整分页。
+      const postToken = await verifyWithCaptcha(challenge.captchaId);
+      const field = challenge.captchaField || '_v2_post_token';
+      cacheCommentCaptcha(postToken, field);
+      return await request(postToken, field);
+    } catch (error) {
+      logDiagnostic('warn', 'comment', 'captcha_cancelled', summarizeDiagnosticError(error));
+      return response;
+    }
   }
 
   // 评论列表不包含完整设备信息，详情接口用于后台补齐评论元数据。
@@ -542,18 +583,14 @@ export class CoolapkTauriAPI {
       ...(postToken ? { postToken, postTokenField } : {}),
     }, { retry: false, kind: 'comment' });
 
-    const cached = getCachedSubReplyCaptcha();
+    const cached = getCachedCommentCaptcha();
     try {
       return await request(cached?.token, cached?.field);
     } catch (error) {
       const params = extractCaptchaParamsFromError(error);
       if (!params) throw error;
       const postToken = await verifyWithCaptcha(params.captchaId);
-      subReplyCaptchaCache = {
-        token: postToken,
-        field: params.captchaField,
-        expiresAt: Date.now() + 10 * 60_000,
-      };
+      cacheCommentCaptcha(postToken, params.captchaField);
       return await request(postToken, params.captchaField);
     }
   }

@@ -4,7 +4,7 @@ use md5::{Digest, Md5};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const APP_ID: &str = "com.coolapk.market";
-const APP_CODE: u64 = 2_604_201;
+const APP_CODE: u64 = 2_608_212;
 const STD_BASE64_ALPHABET: &[u8; 64] =
     b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 const AUTH_BLOB_B64: &str = include_str!("auth_blob.b64");

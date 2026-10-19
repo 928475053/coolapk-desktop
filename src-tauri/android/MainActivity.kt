@@ -43,6 +43,10 @@ class MainActivity : TauriActivity() {
             Activity.RESULT_OK -> result.data
                 ?.getStringExtra(CaptchaActivity.EXTRA_POST_TOKEN)
                 ?.takeIf { it.isNotBlank() }
+                ?: result.data
+                    ?.getStringExtra(CaptchaActivity.EXTRA_ERROR)
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { "error:$it" }
                 ?: "error:验证码凭证为空"
             Activity.RESULT_CANCELED -> "cancelled"
             else -> "error:验证窗口异常关闭"

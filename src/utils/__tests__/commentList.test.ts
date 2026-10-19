@@ -12,6 +12,7 @@ import {
   getCommentUserLevel,
   getCommentVerifyTitle,
   getExpectedCommentCount,
+  getReplyData,
   getReplyPageCursor,
   hasMoreReplyPages,
   mergeReplies,
@@ -35,6 +36,28 @@ describe('评论列表处理', () => {
     expect(COMMENT_PAGE_SIZE).toBe(10);
     expect(hasMoreReplyPages(firstPage, [], firstPage)).toBe(true);
     expect(hasMoreReplyPages(firstPage, [], firstPage, 5)).toBe(false);
+  });
+
+  it('热门回退页只展示一次，不再按帖子评论总数继续翻页', () => {
+    const firstPage = getReplyData({
+      code: 200,
+      fallback: 'hot',
+      data: [{ id: 'hot-1', message: '热门评论' }],
+    });
+    expect(hasMoreReplyPages(firstPage, [], firstPage, 125)).toBe(false);
+
+    const detailPage = getReplyData({
+      code: 200,
+      fallback: 'detail',
+      data: [{ id: 'recent-1', message: '最近回复' }],
+    });
+    expect(hasMoreReplyPages(detailPage, [], detailPage, 125)).toBe(false);
+
+    const normalPage = getReplyData({
+      code: 200,
+      data: [{ id: 'normal-1', message: '普通评论' }],
+    });
+    expect(hasMoreReplyPages(normalPage, [], normalPage, 125)).toBe(true);
   });
 
   it('首屏有完整一页且总数未知时保留下一页触发条件', () => {

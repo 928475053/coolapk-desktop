@@ -1281,7 +1281,7 @@ async function loadSubReplies(floor: any, reset: boolean) {
       lastItem: reset ? '' : state.lastItem,
     });
     if (String(props.feedId || '').trim() !== requestedFeedId) return;
-    const pageRows = Array.isArray(response?.data) ? response.data : [];
+    const pageRows = getReplyData(response);
     const previousRows = mergeSubReplyRows(getEmbeddedSubReplies(floor), state.items);
     const fetchedRows = reset ? pageRows : mergeReplies(state.items, pageRows);
     const loadedRows = mergeSubReplyRows(getEmbeddedSubReplies(floor), fetchedRows);

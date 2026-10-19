@@ -479,42 +479,10 @@ jobs:
           path: ios-release/*.ipa
           if-no-files-found: error
 
-  # Android 签名 Secrets 探测。
-  #
-  # fork 上没有配置 ANDROID_KEYSTORE_* 四个 Secrets 时，签名准备步骤必然失败，
-  # 整个 run 会变红并持续发失败邮件。Secrets 不能在 job 级 if 里直接读取，
-  # 所以先用一个小 job 把「是否具备签名条件」导出成 output，再由 android-build 消费。
-  # 上游 Secrets 齐全时输出 true，行为与原来完全一致；补齐 Secrets 后无需再改代码。
-  android-signing-check:
-    name: 检查 Android 签名 Secrets
-    if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || inputs.build_version != '' }}
-    runs-on: ubuntu-22.04
-    timeout-minutes: 5
-    outputs:
-      has_signing: ${{ steps.check.outputs.has_signing }}
-    steps:
-      - name: 探测签名 Secrets
-        id: check
-        shell: bash
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: |
-          if [[ -n "$ANDROID_KEYSTORE_BASE64" && -n "$ANDROID_KEYSTORE_PASSWORD" && -n "$ANDROID_KEY_ALIAS" && -n "$ANDROID_KEY_PASSWORD" ]]; then
-            echo "has_signing=true" >> "$GITHUB_OUTPUT"
-            echo "Android 签名 Secrets 已配置，将执行 Android Release 构建。"
-          else
-            echo "has_signing=false" >> "$GITHUB_OUTPUT"
-            echo "缺少 Android Release 签名 Secrets，本次跳过 Android Release 构建。" >&2
-            if [[ -n "$BUILD_VERSION" ]]; then exit 1; fi
-          fi
-
   android-build:
     name: Android ARM64 Release
-    needs: [android-signing-check]
-    if: ${{ needs.android-signing-check.outputs.has_signing == 'true' }}
+    # main 推送、tag、手动触发和测试版都产出 APK；PR 不重复构建 Android。
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' || inputs.build_version != '' }}
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     steps:
@@ -572,6 +540,12 @@ jobs:
         shell: bash
         run: npm run version:set -- ${GITHUB_REF_NAME#v}
 
+      - name: 恢复 Android CI 签名
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/coolapk-ci-signing
+          key: android-ci-signing-${{ github.repository_id }}
+
       - name: 准备 Android Release 签名
         shell: bash
         env:
@@ -580,18 +554,52 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          if [[ -z "$ANDROID_KEYSTORE_BASE64" || -z "$ANDROID_KEYSTORE_PASSWORD" || -z "$ANDROID_KEY_ALIAS" || -z "$ANDROID_KEY_PASSWORD" ]]; then
-            echo "缺少 Android Release 签名 Secrets" >&2
-            exit 1
+          cache_dir="$HOME/.cache/coolapk-ci-signing"
+          mkdir -p "$cache_dir"
+          if [[ -n "$ANDROID_KEYSTORE_BASE64" && -n "$ANDROID_KEYSTORE_PASSWORD" && -n "$ANDROID_KEY_ALIAS" && -n "$ANDROID_KEY_PASSWORD" ]]; then
+            keystore="$RUNNER_TEMP/coolapk-upload.jks"
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+            store_password="$ANDROID_KEYSTORE_PASSWORD"
+            key_alias="$ANDROID_KEY_ALIAS"
+            key_password="$ANDROID_KEY_PASSWORD"
+            echo "使用仓库 Secrets 中的 Android 签名。"
+          elif [[ -f "$cache_dir/coolapk-ci.jks" && -f "$cache_dir/signing.properties" ]]; then
+            keystore="$cache_dir/coolapk-ci.jks"
+            store_password="$(sed -n 's/^storePassword=//p' "$cache_dir/signing.properties")"
+            key_alias="$(sed -n 's/^keyAlias=//p' "$cache_dir/signing.properties")"
+            key_password="$(sed -n 's/^keyPassword=//p' "$cache_dir/signing.properties")"
+            echo "复用 Actions 缓存中的 Android CI 随机签名。"
+          else
+            keystore="$cache_dir/coolapk-ci.jks"
+            store_password="$(openssl rand -hex 24)"
+            key_alias="coolapk-ci"
+            key_password="$store_password"
+            echo "::add-mask::$store_password"
+            rm -f "$keystore"
+            keytool -genkeypair -noprompt \
+              -keystore "$keystore" \
+              -storepass "$store_password" \
+              -keypass "$key_password" \
+              -alias "$key_alias" \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Coolapk CI, OU=Android, O=Coolapk-Alpha, L=Hong Kong, ST=Hong Kong, C=HK"
+            {
+              echo "storePassword=$store_password"
+              echo "keyAlias=$key_alias"
+              echo "keyPassword=$key_password"
+            } > "$cache_dir/signing.properties"
+            echo "未配置 Android 签名 Secrets，已生成随机 CI 签名并写入 Actions 缓存。"
           fi
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/coolapk-upload.jks"
+          {
+            echo "ANDROID_KEYSTORE_PATH=$keystore"
+            echo "ANDROID_KEYSTORE_PASSWORD=$store_password"
+            echo "ANDROID_KEY_ALIAS=$key_alias"
+            echo "ANDROID_KEY_PASSWORD=$key_password"
+          } >> "$GITHUB_ENV"
 
       - name: 构建签名 APK 和 AAB
-        env:
-          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/coolapk-upload.jks
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: npm run android:build -- --target aarch64 --apk --aab --ci
 
       - name: 整理 Android Release 产物

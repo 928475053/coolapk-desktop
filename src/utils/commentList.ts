@@ -49,8 +49,12 @@ export function getCommentReplyRequestOptions(
   return { listType: 'lastupdate_desc', fromFeedAuthor: 0 };
 }
 
+const fallbackReplyPages = new WeakSet<any[]>();
+
 export function getReplyData(response: any): any[] {
-  return Array.isArray(response?.data) ? response.data : [];
+  const data = Array.isArray(response?.data) ? response.data : [];
+  if (response?.fallback) fallbackReplyPages.add(data);
+  return data;
 }
 
 function getReplyEntityId(item: any): string {
@@ -144,6 +148,8 @@ export function hasMoreReplyPages(
   expectedTotal?: number | null,
 ): boolean {
   if (pageReplies.length === 0 || mergedReplies.length <= previousReplies.length) return false;
+  // 风控回退接口没有旧楼层的游标分页；继续翻页只会得到空页。
+  if (fallbackReplyPages.has(pageReplies)) return false;
   const total = getExpectedCommentCount(expectedTotal);
   return total === null || mergedReplies.length < total;
 }

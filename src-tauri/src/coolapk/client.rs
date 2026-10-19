@@ -3209,7 +3209,24 @@ impl CoolapkClient {
             query.push(("lastItem", last_item.trim().to_string()));
         }
 
-        let raw = self.api_get("/v6/feed/replyList", &query).await?;
+        let primary = self.api_get("/v6/feed/replyList", &query).await;
+        let raw = match primary {
+            Ok(value) if is_reply_list_captcha_response(&value) => {
+                return self
+                    .get_recent_sub_replies_from_detail(target_reply_id, page, last_item)
+                    .await;
+            }
+            Ok(value) => value,
+            Err(error)
+                if error.to_ascii_lowercase().contains("captcha")
+                    || error.contains("验证码") =>
+            {
+                return self
+                    .get_recent_sub_replies_from_detail(target_reply_id, page, last_item)
+                    .await;
+            }
+            Err(error) => return Err(error),
+        };
         let normalized = wrap_api_data(raw)?;
         let data_arr = normalized
             .get("data")
@@ -3330,10 +3347,64 @@ impl CoolapkClient {
         Ok(json!({ "code": 200, "data": cleaned_replies }))
     }
 
-    // 8. 楼层评论：对应 APK 的 GET /v6/feed/replyList 分页请求。
-    // 每一页只走主接口；登录时由公共请求层附带 Cookie，未登录时使用游客设备身份。
-    // 空页原样返回给上层作为分页结束信号，不切换公开主机、备用主机，也不把热门评论
-    // 混入普通评论分页。
+    /// 旧楼中楼列表被验证码拦截时，父评论详情仍包含最近回复 ID，
+    /// 逐个读取 replyDetail 可保留实际回复正文。
+    async fn get_recent_sub_replies_from_detail(
+        &self,
+        parent_reply_id: &str,
+        page: u32,
+        last_item: &str,
+    ) -> Result<Value, String> {
+        if page > 1 {
+            return Ok(json!({ "code": 200, "data": [], "fallback": "detail" }));
+        }
+
+        let parent = self
+            .public_api_get_from(
+                "https://api.coolapk.com",
+                "/v6/feed/replyDetail",
+                &[("id", parent_reply_id.to_string())],
+            )
+            .await?;
+        let recent_ids = parent
+            .get("data")
+            .and_then(|value| value.get("recent_reply_ids"))
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        let mut skip = !last_item.trim().is_empty();
+        let mut rows = Vec::new();
+
+        for reply_id in recent_ids
+            .split(',')
+            .map(str::trim)
+            .filter(|value| !value.is_empty() && *value != parent_reply_id)
+            .take(20)
+        {
+            if skip {
+                if reply_id == last_item.trim() {
+                    skip = false;
+                }
+                continue;
+            }
+            let detail = self
+                .public_api_get_from(
+                    "https://api.coolapk.com",
+                    "/v6/feed/replyDetail",
+                    &[("id", reply_id.to_string())],
+                )
+                .await?;
+            if let Some(data) = detail.get("data").filter(|value| value.is_object()) {
+                rows.push(data.clone());
+            }
+        }
+
+        Ok(json!({ "code": 200, "data": rows, "fallback": "detail" }))
+    }
+
+    // 8. 楼层评论：优先请求 APK 的 GET /v6/feed/replyList。
+    // 该接口已被服务端统一加验证码风控；命中 403 captcha 时改走仍开放的
+    // /v6/feed/hotReplyList，保证评论正文可见。热榜没有旧接口的游标分页，
+    // 因此响应会携带 fallback 标记，前端据此停止继续请求后续页。
     pub async fn get_feed_replies(&self, feed_id: &str, page: u32) -> Result<Value, String> {
         self.get_feed_replies_paged(feed_id, page, "", "", "lastupdate_desc", 0)
             .await
@@ -3385,7 +3456,40 @@ impl CoolapkClient {
             ("blockStatus", "0".to_string()),
             ("fromFeedAuthor", from_feed_author.to_string()),
         ]);
-        let raw = self.api_get("/v6/feed/replyList", &query).await?;
+        let primary = self.api_get("/v6/feed/replyList", &query).await;
+        let (raw, fallback) = match primary {
+            Ok(value) if is_reply_list_captcha_response(&value) => (
+                self.api_get(
+                    "/v6/feed/hotReplyList",
+                    &[
+                        ("id", feed_id.to_string()),
+                        ("page", page.to_string()),
+                        ("discussMode", "1".to_string()),
+                    ],
+                )
+                .await?,
+                true,
+            ),
+            Ok(value) => (value, false),
+            Err(error)
+                if error.to_ascii_lowercase().contains("captcha")
+                    || error.contains("验证码") =>
+            {
+                (
+                    self.api_get(
+                        "/v6/feed/hotReplyList",
+                        &[
+                            ("id", feed_id.to_string()),
+                            ("page", page.to_string()),
+                            ("discussMode", "1".to_string()),
+                        ],
+                    )
+                    .await?,
+                    true,
+                )
+            }
+            Err(error) => return Err(error),
+        };
 
         let mut cleaned_replies = Vec::new();
         if let Some(data_arr) = raw.get("data").and_then(|v| v.as_array()) {
@@ -3505,7 +3609,11 @@ impl CoolapkClient {
             }
         }
 
-        Ok(json!({ "code": 200, "data": cleaned_replies }))
+        let mut output = json!({ "code": 200, "data": cleaned_replies });
+        if fallback {
+            output["fallback"] = json!("hot");
+        }
+        Ok(output)
     }
 
     pub async fn get_board_feeds(&self, board_tag: &str, page: u32) -> Result<Value, String> {
@@ -9242,6 +9350,11 @@ fn application_failure(value: &Value) -> Option<(i64, &'static str)> {
     Some((code, reason))
 }
 
+/// 旧评论列表被服务端验证码拦截时，仍可改用热门评论接口读取正文。
+fn is_reply_list_captcha_response(value: &Value) -> bool {
+    matches!(application_failure(value), Some((_, "captcha")))
+}
+
 async fn response_json(response: reqwest::Response) -> Result<Value, String> {
     let status = response.status();
     let body = response
@@ -9263,7 +9376,7 @@ async fn response_json(response: reqwest::Response) -> Result<Value, String> {
 
 #[cfg(test)]
 mod api_failure_log_tests {
-    use super::{application_failure, classify_api_failure};
+    use super::{application_failure, classify_api_failure, is_reply_list_captcha_response};
     use serde_json::json;
 
     #[test]
@@ -9272,6 +9385,23 @@ mod api_failure_log_tests {
         assert_eq!(application_failure(&json!({"code": -415, "message": "访问过于频繁"})), Some((-415, "rate_limit")));
         assert_eq!(application_failure(&json!({"code": 200, "message": "ok"})), None);
         assert_eq!(classify_api_failure("Coolapk API returned HTTP 403: empty response body"), "empty_body");
+    }
+
+    #[test]
+    fn detects_deprecated_reply_list_captcha_fallback() {
+        assert!(is_reply_list_captcha_response(&json!({
+            "code": 403,
+            "messageStatus": "err_request_captcha_v2",
+            "message": "当前访问需要验证码"
+        })));
+        assert!(is_reply_list_captcha_response(&json!({
+            "code": 403,
+            "message": "当前访问需要验证码"
+        })));
+        assert!(!is_reply_list_captcha_response(&json!({
+            "code": 200,
+            "data": []
+        })));
     }
 }
 

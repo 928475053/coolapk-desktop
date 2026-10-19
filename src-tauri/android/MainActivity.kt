@@ -36,6 +36,18 @@ import java.lang.ref.WeakReference
 class MainActivity : TauriActivity() {
     @Volatile private var topSafeAreaPx = 0
     private var mainWebView: WeakReference<WebView>? = null
+    @Volatile private var captchaResult = "pending"
+
+    private val captchaLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        captchaResult = when (result.resultCode) {
+            Activity.RESULT_OK -> result.data
+                ?.getStringExtra(CaptchaActivity.EXTRA_POST_TOKEN)
+                ?.takeIf { it.isNotBlank() }
+                ?: "error:验证码凭证为空"
+            Activity.RESULT_CANCELED -> "cancelled"
+            else -> "error:验证窗口异常关闭"
+        }
+    }
 
     override fun onWebViewCreate(webView: WebView) {
         super.onWebViewCreate(webView)
@@ -44,6 +56,34 @@ class MainActivity : TauriActivity() {
 
     @Keep
     fun getSafeAreaTop(unused: String): String = topSafeAreaPx.toString()
+
+    @Keep
+    fun startCoolapkCaptcha(captchaId: String): String = try {
+        val safeId = captchaId.trim()
+        require(safeId.matches(Regex("[A-Za-z0-9_-]{1,128}"))) { "验证码 ID 无效" }
+        captchaResult = "pending"
+        runOnUiThread {
+            try {
+                captchaLauncher.launch(
+                    Intent(this, CaptchaActivity::class.java)
+                        .putExtra(CaptchaActivity.EXTRA_CAPTCHA_ID, safeId),
+                )
+            } catch (error: Exception) {
+                captchaResult = "error:${error.message ?: error.javaClass.simpleName}"
+            }
+        }
+        "pending"
+    } catch (error: Exception) {
+        captchaResult = "pending"
+        "error:${error.message ?: error.javaClass.simpleName}"
+    }
+
+    @Keep
+    fun takeCoolapkCaptchaResult(unused: String): String {
+        val value = captchaResult
+        if (value != "pending") captchaResult = "pending"
+        return value
+    }
 
     private fun syncWebSafeArea(top: Int) {
         topSafeAreaPx = top

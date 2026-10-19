@@ -1,3 +1,5 @@
+import { invoke } from '@tauri-apps/api/core';
+
 /**
  * 网易易盾滑块人机验证集成模块
  * 对应酷安官方 APK 中的 NetEaseProtectSDKManager / wn.java 逻辑
@@ -152,6 +154,18 @@ export function loadNECaptchaScript(): Promise<void> {
  * @returns 返回拼装后的官方标准 Token，格式为 `NEC:{captchaId前8位}:{validate}`
  */
 export async function verifyWithCaptcha(captchaId = DEFAULT_COOLAPK_CAPTCHA_ID): Promise<string> {
+  // Android 主 WebView 的 Origin 不是酷安网页，易盾会拒绝初始化。
+  // Android 优先使用带酷安 Base URL 的原生 WebView，其它平台继续使用 Web SDK。
+  if (/android/i.test(navigator.userAgent) && (window as any).__TAURI_INTERNALS__) {
+    try {
+      return await invoke<string>('request_android_captcha', { captchaId });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('取消') || message.includes('超时')) throw error;
+      throw new Error(`Android 验证窗口启动失败：${message}`);
+    }
+  }
+
   await loadNECaptchaScript();
 
   if (!window.initNECaptcha) {

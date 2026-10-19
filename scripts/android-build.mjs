@@ -5,7 +5,9 @@ import { spawnSync } from 'node:child_process';
 const root = resolve(import.meta.dirname, '..');
 const androidDir = join(root, 'src-tauri', 'gen', 'android');
 const androidIconSourceDir = join(root, 'src-tauri', 'android', 'res');
+const androidAssetSourceDir = join(root, 'src-tauri', 'android', 'assets');
 const androidResourceDir = join(androidDir, 'app', 'src', 'main', 'res');
+const androidAssetDir = join(androidDir, 'app', 'src', 'main', 'assets');
 const gradleProperties = join(androidDir, 'gradle.properties');
 const appBuildGradle = join(androidDir, 'app', 'build.gradle.kts');
 const androidManifest = join(androidDir, 'app', 'src', 'main', 'AndroidManifest.xml');
@@ -97,6 +99,8 @@ function ensureAndroidProject() {
 
   // Tauri 生成的 Android 工程是临时目录；每次构建都同步仓库内的启动器图标资源。
   copyAndroidResources(androidIconSourceDir, androidResourceDir);
+  mkdirSync(androidAssetDir, { recursive: true });
+  copyFileSync(join(androidAssetSourceDir, 'ne_captcha.html'), join(androidAssetDir, 'ne_captcha.html'));
 
   const pathCheckSetting = 'android.overridePathCheck=true';
   const contents = existsSync(gradleProperties) ? readFileSync(gradleProperties, 'utf8') : '';
@@ -165,6 +169,7 @@ function ensureAndroidProject() {
   writeFileSync(appBuildGradle, buildGradle, 'utf8');
 
   const loginActivityMarker = 'android:name=".LoginActivity"';
+  const captchaActivityMarker = 'android:name=".CaptchaActivity"';
   let manifest = readFileSync(androidManifest, 'utf8');
   for (const permission of ['FOREGROUND_SERVICE', 'FOREGROUND_SERVICE_DATA_SYNC']) {
     const tag = `<uses-permission android:name="android.permission.${permission}" />`;
@@ -189,6 +194,14 @@ function ensureAndroidProject() {
             android:label="酷安官方授权登录" />
 ${closingTag}`);
   }
+  if (!manifest.includes(captchaActivityMarker)) {
+    manifest = manifest.replace('</application>', `    <activity
+            ${captchaActivityMarker}
+            android:exported="false"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode" />
+</application>`);
+  }
   writeFileSync(androidManifest, manifest, 'utf8');
   let filePaths = readFileSync(androidFilePaths, 'utf8');
   const localFilesPath = '<files-path name="coolapk_files" path="." /><external-files-path name="coolapk_external_files" path="." />';
@@ -206,6 +219,7 @@ ${closingTag}`);
   copyFileSync(join(root, 'src-tauri', 'android', 'CoolNotificationHandler.kt'), join(androidActivityDir, 'CoolNotificationHandler.kt'));
   copyFileSync(join(root, 'src-tauri', 'android', 'BackgroundNotificationService.kt'), join(androidActivityDir, 'BackgroundNotificationService.kt'));
   copyFileSync(join(root, 'src-tauri', 'android', 'LoginActivity.kt'), join(androidActivityDir, 'LoginActivity.kt'));
+  copyFileSync(join(root, 'src-tauri', 'android', 'CaptchaActivity.kt'), join(androidActivityDir, 'CaptchaActivity.kt'));
 }
 
 function escapeProperty(value) {

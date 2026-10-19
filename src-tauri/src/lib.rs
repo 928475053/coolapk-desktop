@@ -567,6 +567,40 @@ async fn set_android_system_bar_theme(app: tauri::AppHandle, dark: bool, profile
 }
 
 #[tauri::command]
+async fn request_android_captcha(app: tauri::AppHandle, captcha_id: String) -> Result<String, String> {
+    #[cfg(target_os = "android")]
+    {
+        let status = coolapk::commands::call_android_update_method(&app, "startCoolapkCaptcha", captcha_id).await?;
+        if status != "pending" {
+            return Err(status.trim_start_matches("error:").to_string());
+        }
+        let started = std::time::Instant::now();
+        loop {
+            if started.elapsed() > std::time::Duration::from_secs(300) {
+                return Err("等待人机验证超时".to_string());
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+            let result = coolapk::commands::call_android_update_method(&app, "takeCoolapkCaptchaResult", String::new()).await?;
+            if result == "pending" {
+                continue;
+            }
+            if result.starts_with("NEC:") {
+                return Ok(result);
+            }
+            if result == "cancelled" {
+                return Err("用户取消了人机验证".to_string());
+            }
+            return Err(result.trim_start_matches("error:").to_string());
+        }
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (app, captcha_id);
+        Err("Android 原生验证码仅能在 Android 上使用".to_string())
+    }
+}
+
+#[tauri::command]
 async fn get_android_safe_area_top(app: tauri::AppHandle) -> Result<f64, String> {
     #[cfg(target_os = "android")]
     {
@@ -1455,6 +1489,7 @@ pub fn run() {
             set_window_theme,
             system_theme::get_linux_system_theme,
             set_android_system_bar_theme,
+            request_android_captcha,
             get_android_safe_area_top,
             log_android_runtime_info,
             pick_font_family,

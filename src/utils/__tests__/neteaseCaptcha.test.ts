@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { invoke } from '@tauri-apps/api/core';
 import {
   DEFAULT_COOLAPK_CAPTCHA_ID,
   extractCaptchaParamsFromError,
@@ -16,6 +17,7 @@ describe('neteaseCaptcha', () => {
   afterEach(() => {
     vi.useRealTimers();
     delete window.initNECaptcha;
+    delete (window as any).__TAURI_INTERNALS__;
   });
 
   it('exports default coolapk captcha id', () => {
@@ -103,6 +105,20 @@ describe('neteaseCaptcha', () => {
     expect(token).toBe('NEC:414e5c9b:mock_validate_hash_12345');
     expect(verify).toHaveBeenCalledOnce();
     expect(window.initNECaptcha).toHaveBeenCalledWith(expect.objectContaining({ mode: 'popup', apiVersion: 2 }), expect.any(Function), expect.any(Function));
+  });
+
+  it('Android 优先使用酷安 Origin 的原生验证 WebView', async () => {
+    vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue('Android 16');
+    (window as any).__TAURI_INTERNALS__ = {};
+    vi.mocked(invoke).mockResolvedValueOnce('NEC:5fc4c10e:validated');
+
+    await expect(verifyWithCaptcha('5fc4c10eccd64d178982bc560da43a91')).resolves.toBe(
+      'NEC:5fc4c10e:validated',
+    );
+    expect(invoke).toHaveBeenCalledWith('request_android_captcha', {
+      captchaId: '5fc4c10eccd64d178982bc560da43a91',
+    });
+    expect(document.querySelector('script')).toBeNull();
   });
 
   it('rejects on user cancellation or verify error', async () => {

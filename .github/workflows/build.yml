@@ -599,8 +599,15 @@ jobs:
             echo "ANDROID_KEY_PASSWORD=$key_password"
           } >> "$GITHUB_ENV"
 
-      - name: 构建签名 APK 和 AAB
-        run: npm run android:build -- --target aarch64 --apk --aab --ci
+      - name: 构建签名 APK
+        shell: bash
+        run: |
+          build_args=(--target aarch64 --apk --ci)
+          # 普通 main 推送只生成 APK；正式版和测试版仍额外生成 AAB。
+          if [[ "$GITHUB_REF" == refs/tags/v* || -n "$BUILD_VERSION" ]]; then
+            build_args+=(--aab)
+          fi
+          npm run android:build -- "${build_args[@]}"
 
       - name: 整理 Android Release 产物
         shell: bash
@@ -609,7 +616,6 @@ jobs:
           apk="src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk"
           aab="src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab"
           test -f "$apk"
-          test -f "$aab"
           # minSdk >= 24 时 apksigner 默认不验证 v1，按 API 23 验证才能检查 v1/v2 是否都存在。
           verification="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --min-sdk-version 23 "$apk")"
           printf '%s\n' "$verification"
@@ -620,7 +626,9 @@ jobs:
           badging="$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk")"
           grep '^package:' <<< "$badging" | grep -F "versionName='$expected_version'" | grep -F "versionCode='$expected_code'"
           cp "$apk" "android-release/coolapk-${RELEASE_TAG}-android-arm64.apk"
-          cp "$aab" "android-release/coolapk-${RELEASE_TAG}-android-arm64.aab"
+          if [[ -f "$aab" ]]; then
+            cp "$aab" "android-release/coolapk-${RELEASE_TAG}-android-arm64.aab"
+          fi
 
       - name: 上传 Android Release 产物
         uses: actions/upload-artifact@v6

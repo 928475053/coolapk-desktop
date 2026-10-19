@@ -858,7 +858,7 @@ async fn test_reply_list_api() {
     for page in 1..=5 {
         println!("\nTesting APK sub-reply request page={page}, feedType=feed_reply");
         let json = match client
-            .get_sub_replies_paged(&feed_id, &target_cid, page, &last_item)
+            .get_sub_replies_paged(&feed_id, &target_cid, page, &last_item, None, None)
             .await
         {
             Ok(value) => value,

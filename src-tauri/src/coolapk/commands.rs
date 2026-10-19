@@ -1136,6 +1136,8 @@ pub async fn get_sub_replies(
     reply_id: String,
     page: u32,
     last_item: Option<String>,
+    post_token: Option<String>,
+    post_token_field: Option<String>,
 ) -> Result<Value, String> {
     state
         .client
@@ -1144,6 +1146,8 @@ pub async fn get_sub_replies(
             &reply_id,
             page,
             last_item.as_deref().unwrap_or(""),
+            post_token.as_deref(),
+            post_token_field.as_deref(),
         )
         .await
 }

@@ -13,6 +13,26 @@ import { getOriginalImageUrl } from '../utils/image';
 import { getMemoryCachedResourceSync } from '../utils/resourceCache';
 import { useSettingsStore } from '../stores/settings';
 
+type SubReplyCaptchaCache = {
+  token: string;
+  field: string;
+  expiresAt: number;
+};
+
+let subReplyCaptchaCache: SubReplyCaptchaCache | null = null;
+
+export function clearSubReplyCaptchaCache() {
+  subReplyCaptchaCache = null;
+}
+
+function getCachedSubReplyCaptcha(): SubReplyCaptchaCache | null {
+  if (subReplyCaptchaCache && subReplyCaptchaCache.expiresAt > Date.now()) {
+    return subReplyCaptchaCache;
+  }
+  subReplyCaptchaCache = null;
+  return null;
+}
+
 async function safeFetchOnce(pythonEndpoint: string, tauriCmd: string, tauriArgs: any = {}) {
   let rustError: unknown;
 
@@ -514,13 +534,28 @@ export class CoolapkTauriAPI {
   ) {
     // APK 的楼中楼详情使用同一个 feed/replyList；父评论 ID 作为 id，
     // 原生命令固定使用 feedType=feed_reply，并按 lastItem 游标翻页。
-    // 不走旧的 Python /feed/replies 路径，也不在失败时切换其他接口。
-    return await invokeNative('get_sub_replies', {
+    const request = (postToken?: string, postTokenField?: string) => invokeNative('get_sub_replies', {
       feedId,
       replyId,
       page,
       lastItem: options.lastItem || '',
+      ...(postToken ? { postToken, postTokenField } : {}),
     }, { retry: false, kind: 'comment' });
+
+    const cached = getCachedSubReplyCaptcha();
+    try {
+      return await request(cached?.token, cached?.field);
+    } catch (error) {
+      const params = extractCaptchaParamsFromError(error);
+      if (!params) throw error;
+      const postToken = await verifyWithCaptcha(params.captchaId);
+      subReplyCaptchaCache = {
+        token: postToken,
+        field: params.captchaField,
+        expiresAt: Date.now() + 10 * 60_000,
+      };
+      return await request(postToken, params.captchaField);
+    }
   }
 
   static async getFeedDetail(feedId: string) {

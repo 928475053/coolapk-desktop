@@ -3174,7 +3174,7 @@ impl CoolapkClient {
         reply_id: &str,
         page: u32,
     ) -> Result<Value, String> {
-        self.get_sub_replies_paged(feed_id, reply_id, page, "")
+        self.get_sub_replies_paged(feed_id, reply_id, page, "", None, None)
             .await
     }
 
@@ -3190,6 +3190,8 @@ impl CoolapkClient {
         reply_id: &str,
         page: u32,
         last_item: &str,
+        post_token: Option<&str>,
+        post_token_field: Option<&str>,
     ) -> Result<Value, String> {
         let target_reply_id = reply_id.trim();
         if target_reply_id.is_empty() {
@@ -3208,23 +3210,25 @@ impl CoolapkClient {
         if !last_item.trim().is_empty() {
             query.push(("lastItem", last_item.trim().to_string()));
         }
+        if let Some(token) = post_token.filter(|value| !value.trim().is_empty()) {
+            let field = post_token_field
+                .filter(|value| {
+                    value.starts_with('_')
+                        && value.len() <= 64
+                        && value
+                            .bytes()
+                            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+                })
+                .unwrap_or("_v2_post_token");
+            query.push((field, token.to_string()));
+        }
 
         let primary = self.api_get("/v6/feed/replyList", &query).await;
         let raw = match primary {
             Ok(value) if is_reply_list_captcha_response(&value) => {
-                return self
-                    .get_recent_sub_replies_from_detail(target_reply_id, page, last_item)
-                    .await;
+                return Err(value.to_string());
             }
             Ok(value) => value,
-            Err(error)
-                if error.to_ascii_lowercase().contains("captcha")
-                    || error.contains("验证码") =>
-            {
-                return self
-                    .get_recent_sub_replies_from_detail(target_reply_id, page, last_item)
-                    .await;
-            }
             Err(error) => return Err(error),
         };
         let normalized = wrap_api_data(raw)?;
@@ -3345,60 +3349,6 @@ impl CoolapkClient {
         }
 
         Ok(json!({ "code": 200, "data": cleaned_replies }))
-    }
-
-    /// 旧楼中楼列表被验证码拦截时，父评论详情仍包含最近回复 ID，
-    /// 逐个读取 replyDetail 可保留实际回复正文。
-    async fn get_recent_sub_replies_from_detail(
-        &self,
-        parent_reply_id: &str,
-        page: u32,
-        last_item: &str,
-    ) -> Result<Value, String> {
-        if page > 1 {
-            return Ok(json!({ "code": 200, "data": [], "fallback": "detail" }));
-        }
-
-        let parent = self
-            .public_api_get_from(
-                "https://api.coolapk.com",
-                "/v6/feed/replyDetail",
-                &[("id", parent_reply_id.to_string())],
-            )
-            .await?;
-        let recent_ids = parent
-            .get("data")
-            .and_then(|value| value.get("recent_reply_ids"))
-            .and_then(Value::as_str)
-            .unwrap_or("");
-        let mut skip = !last_item.trim().is_empty();
-        let mut rows = Vec::new();
-
-        for reply_id in recent_ids
-            .split(',')
-            .map(str::trim)
-            .filter(|value| !value.is_empty() && *value != parent_reply_id)
-            .take(20)
-        {
-            if skip {
-                if reply_id == last_item.trim() {
-                    skip = false;
-                }
-                continue;
-            }
-            let detail = self
-                .public_api_get_from(
-                    "https://api.coolapk.com",
-                    "/v6/feed/replyDetail",
-                    &[("id", reply_id.to_string())],
-                )
-                .await?;
-            if let Some(data) = detail.get("data").filter(|value| value.is_object()) {
-                rows.push(data.clone());
-            }
-        }
-
-        Ok(json!({ "code": 200, "data": rows, "fallback": "detail" }))
     }
 
     // 8. 楼层评论：优先请求 APK 的 GET /v6/feed/replyList。

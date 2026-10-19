@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
-import { CoolapkTauriAPI } from '../coolapk';
+import { clearSubReplyCaptchaCache, CoolapkTauriAPI } from '../coolapk';
 import { clearFeedFullTextCache, getFeedFullTextRequestStats, loadFeedFullText } from '../../utils/feedFullTextCache';
 import { clearResourceMemoryCache, loadImageResource } from '../../utils/resourceCache';
 
@@ -12,6 +12,7 @@ describe('CoolapkTauriAPI 内容新页接口封装', () => {
   beforeEach(() => {
     vi.mocked(invoke).mockReset();
     vi.mocked(invoke).mockResolvedValue(okResponse([]));
+    clearSubReplyCaptchaCache();
     clearFeedFullTextCache();
     clearResourceMemoryCache();
     delete window.initNECaptcha;
@@ -113,6 +114,46 @@ describe('CoolapkTauriAPI 内容新页接口封装', () => {
     await expect(CoolapkTauriAPI.getFeedDetail('456')).resolves.toEqual(okResponse({ message: '完整正文' }));
     expect(invoke).toHaveBeenNthCalledWith(1, 'get_feed_detail', { feedId: '456' });
     expect(invoke).toHaveBeenNthCalledWith(2, 'get_feed_detail', { feedId: '456', postToken: 'NEC:414e5c9b:validated', postTokenField: '_v2_post_token' });
+  });
+
+  it('楼中楼验证码通过后带令牌重试，并在后续分页复用令牌', async () => {
+    window.initNECaptcha = vi.fn((config) => {
+      config.onVerify?.(null, { validate: 'validated' });
+    });
+    vi.mocked(invoke)
+      .mockRejectedValueOnce(JSON.stringify({ code: 403, messageStatus: 'err_request_captcha_v2' }))
+      .mockResolvedValueOnce(okResponse([{ id: 'child-1', message: '楼中楼一' }]))
+      .mockResolvedValueOnce(okResponse([{ id: 'child-2', message: '楼中楼二' }]));
+
+    await expect(CoolapkTauriAPI.getSubReplies('feed-1', 'reply-1', 1)).resolves.toEqual(
+      okResponse([{ id: 'child-1', message: '楼中楼一' }]),
+    );
+    await expect(CoolapkTauriAPI.getSubReplies('feed-1', 'reply-1', 2, { lastItem: 'child-1' })).resolves.toEqual(
+      okResponse([{ id: 'child-2', message: '楼中楼二' }]),
+    );
+
+    expect(invoke).toHaveBeenNthCalledWith(1, 'get_sub_replies', {
+      feedId: 'feed-1',
+      replyId: 'reply-1',
+      page: 1,
+      lastItem: '',
+    });
+    expect(invoke).toHaveBeenNthCalledWith(2, 'get_sub_replies', {
+      feedId: 'feed-1',
+      replyId: 'reply-1',
+      page: 1,
+      lastItem: '',
+      postToken: 'NEC:414e5c9b:validated',
+      postTokenField: '_v2_post_token',
+    });
+    expect(invoke).toHaveBeenNthCalledWith(3, 'get_sub_replies', {
+      feedId: 'feed-1',
+      replyId: 'reply-1',
+      page: 2,
+      lastItem: 'child-1',
+      postToken: 'NEC:414e5c9b:validated',
+      postTokenField: '_v2_post_token',
+    });
   });
 
   it('酷友圈活动列表调用 get_event_list', async () => {

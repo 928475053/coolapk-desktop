@@ -553,6 +553,8 @@ export class CoolapkTauriAPI {
       const postToken = await verifyWithCaptcha(challenge.captchaId);
       const field = challenge.captchaField || '_v2_post_token';
       cacheCommentCaptcha(postToken, field);
+      logDiagnostic('info', 'comment', 'captcha_verified', 'retrying feed replies');
+      showToast('验证通过，正在加载评论…', 'info');
       return await request(postToken, field);
     } catch (error) {
       logDiagnostic('warn', 'comment', 'captcha_cancelled', summarizeDiagnosticError(error));
@@ -591,6 +593,8 @@ export class CoolapkTauriAPI {
       if (!params) throw error;
       const postToken = await verifyWithCaptcha(params.captchaId);
       cacheCommentCaptcha(postToken, params.captchaField);
+      logDiagnostic('info', 'comment', 'captcha_verified', 'retrying sub replies');
+      showToast('验证通过，正在加载楼中楼…', 'info');
       return await request(postToken, params.captchaField);
     }
   }

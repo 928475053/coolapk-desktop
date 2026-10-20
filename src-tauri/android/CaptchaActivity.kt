@@ -5,6 +5,8 @@ import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.widget.FrameLayout
 import androidx.annotation.Keep
 import com.netease.nis.captcha.Captcha
@@ -24,6 +26,7 @@ class CaptchaActivity : Activity() {
         const val EXTRA_CAPTCHA_ID = "captcha_id"
         const val EXTRA_POST_TOKEN = "post_token"
         const val EXTRA_ERROR = "captcha_error"
+        @Volatile var pendingResult: String = "pending"
     }
 
     private var captcha: Captcha? = null
@@ -74,6 +77,9 @@ class CaptchaActivity : Activity() {
         try {
             captcha = Captcha.getInstance().init(configuration)
             captcha?.validate()
+            Handler(Looper.getMainLooper()).postDelayed({
+                if (!finished) finishError("等待人机验证超时")
+            }, 180_000L)
         } catch (error: Throwable) {
             finishError(error.message ?: error.javaClass.simpleName)
         }
@@ -83,30 +89,28 @@ class CaptchaActivity : Activity() {
         if (finished) return
         finished = true
         val token = "NEC:${captchaId.take(8)}:$validate"
+        pendingResult = token
         setResult(RESULT_OK, Intent().putExtra(EXTRA_POST_TOKEN, token))
-        destroyCaptcha()
         finish()
     }
 
     private fun finishError(message: String) {
         if (finished) return
         finished = true
+        val detail = message.trim().ifEmpty { "人机验证失败" }.take(300)
+        pendingResult = "error:$detail"
         setResult(
             RESULT_OK,
-            Intent().putExtra(
-                EXTRA_ERROR,
-                message.trim().ifEmpty { "人机验证失败" }.take(300),
-            ),
+            Intent().putExtra(EXTRA_ERROR, detail),
         )
-        destroyCaptcha()
         finish()
     }
 
     private fun finishCancelled() {
         if (finished) return
         finished = true
+        pendingResult = "cancelled"
         setResult(RESULT_CANCELED)
-        destroyCaptcha()
         finish()
     }
 
@@ -116,12 +120,15 @@ class CaptchaActivity : Activity() {
     }
 
     override fun onDestroy() {
-        destroyCaptcha()
-        super.onDestroy()
-    }
-
-    private fun destroyCaptcha() {
-        captcha?.destroy()
+        val instance = captcha
         captcha = null
+        if (instance != null) {
+            // setResult/finish 已经执行，SDK 清理放到消息队列，避免 destroy()
+            // 阻塞 Activity 结果回传，导致主界面一直等待验证码结果。
+            Handler(Looper.getMainLooper()).post {
+                runCatching { instance.destroy() }
+            }
+        }
+        super.onDestroy()
     }
 }

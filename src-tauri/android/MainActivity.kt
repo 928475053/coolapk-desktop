@@ -36,22 +36,11 @@ import java.lang.ref.WeakReference
 class MainActivity : TauriActivity() {
     @Volatile private var topSafeAreaPx = 0
     private var mainWebView: WeakReference<WebView>? = null
-    @Volatile private var captchaResult = "pending"
-
-    private val captchaLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        captchaResult = when (result.resultCode) {
-            Activity.RESULT_OK -> result.data
-                ?.getStringExtra(CaptchaActivity.EXTRA_POST_TOKEN)
-                ?.takeIf { it.isNotBlank() }
-                ?: result.data
-                    ?.getStringExtra(CaptchaActivity.EXTRA_ERROR)
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { "error:$it" }
-                ?: "error:验证码凭证为空"
-            Activity.RESULT_CANCELED -> "cancelled"
-            else -> "error:验证窗口异常关闭"
+    private val captchaLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            // CaptchaActivity 通过 companion.pendingResult 直接回传，避免不同
+            // 厂商 WebView/Activity 生命周期导致 ActivityResult 回调丢失。
         }
-    }
 
     override fun onWebViewCreate(webView: WebView) {
         super.onWebViewCreate(webView)
@@ -65,7 +54,7 @@ class MainActivity : TauriActivity() {
     fun startCoolapkCaptcha(captchaId: String): String = try {
         val safeId = captchaId.trim()
         require(safeId.matches(Regex("[A-Za-z0-9_-]{1,128}"))) { "验证码 ID 无效" }
-        captchaResult = "pending"
+        CaptchaActivity.pendingResult = "pending"
         runOnUiThread {
             try {
                 captchaLauncher.launch(
@@ -73,19 +62,19 @@ class MainActivity : TauriActivity() {
                         .putExtra(CaptchaActivity.EXTRA_CAPTCHA_ID, safeId),
                 )
             } catch (error: Exception) {
-                captchaResult = "error:${error.message ?: error.javaClass.simpleName}"
+                CaptchaActivity.pendingResult = "error:${error.message ?: error.javaClass.simpleName}"
             }
         }
         "pending"
     } catch (error: Exception) {
-        captchaResult = "pending"
+        CaptchaActivity.pendingResult = "pending"
         "error:${error.message ?: error.javaClass.simpleName}"
     }
 
     @Keep
     fun takeCoolapkCaptchaResult(unused: String): String {
-        val value = captchaResult
-        if (value != "pending") captchaResult = "pending"
+        val value = CaptchaActivity.pendingResult
+        if (value != "pending") CaptchaActivity.pendingResult = "pending"
         return value
     }
 

@@ -551,7 +551,7 @@ export class CoolapkTauriAPI {
     try {
       // 风控页只给热门评论时没有旧接口游标，必须先用验证码换取完整分页。
       const postToken = await verifyWithCaptcha(challenge.captchaId);
-      const field = challenge.captchaField || '_v2_post_token';
+      const field = challenge.captchaField ?? '_v2_post_token';
       cacheCommentCaptcha(postToken, field);
       logDiagnostic('info', 'comment', 'captcha_verified', 'retrying feed replies');
       showToast('验证通过，正在加载评论…', 'info');

@@ -37,6 +37,14 @@ export interface NECaptchaInstance {
 /** 酷安官方网易易盾 Captcha ID */
 export const DEFAULT_COOLAPK_CAPTCHA_ID = '414e5c9b866a03db03f860a1a9101672';
 
+function normalizeCaptchaField(value: unknown): string {
+  if (typeof value === 'string') {
+    const field = value.trim();
+    if (!field || /^_[A-Za-z0-9_]{1,63}$/.test(field)) return field;
+  }
+  return '_v2_post_token';
+}
+
 /**
  * 从酷安服务端响应中解析动态下发的 Captcha 配置（对应 APK C2143.java / wn.java）
  */
@@ -47,7 +55,7 @@ export function extractCaptchaParamsFromResponse(data: any): { captchaId?: strin
     if (data.captchaId) {
       return {
         captchaId: data.captchaId,
-        captchaField: data.captchaField || '_v2_post_token',
+        captchaField: normalizeCaptchaField(data.captchaField),
       };
     }
   }
@@ -57,7 +65,7 @@ export function extractCaptchaParamsFromResponse(data: any): { captchaId?: strin
       if (obj.captchaId) {
         return {
           captchaId: obj.captchaId,
-          captchaField: obj.captchaField || '_v2_post_token',
+          captchaField: normalizeCaptchaField(obj.captchaField),
         };
       }
     } catch (e) {
@@ -92,7 +100,12 @@ export function extractCaptchaParamsFromError(error: unknown): { captchaId: stri
   }
   if (!response || typeof response !== 'object') return null;
   const params = extractCaptchaParamsFromResponse(response);
-  if (params?.captchaId) return { captchaId: params.captchaId, captchaField: params.captchaField || '_v2_post_token' };
+  if (params?.captchaId) {
+    return {
+      captchaId: params.captchaId,
+      captchaField: normalizeCaptchaField(params.captchaField),
+    };
+  }
   const reason = [response.messageStatus, response.message, response.error].filter((value) => typeof value === 'string').join(' ');
   if ((Number(response.code) === 403 || Number(response.code) === 501) && /(captcha|验证码|dun\.163)/i.test(reason)) {
     return {

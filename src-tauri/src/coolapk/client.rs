@@ -1101,6 +1101,23 @@ impl CoolapkClient {
     fn api_client(&self) -> Result<Client, String> { self.client.read().map(|client| client.clone()).map_err(|_| "无法读取酷安 HTTP 客户端".to_string()) }
     fn api_redirect_client(&self) -> Result<Client, String> { self.redirect_client.read().map(|client| client.clone()).map_err(|_| "无法读取酷安重定向客户端".to_string()) }
 
+    /// `captchaField` 为空时，服务端使用 Cookie 协议：validate=<URL 编码后的凭证>。
+    fn set_captcha_validate(&self, proof: &str) -> Result<(), String> {
+        let proof = proof.trim();
+        if proof.is_empty() {
+            return Ok(());
+        }
+        let encoded = encode_cookie_value(proof);
+        let mut store = self
+            .api_cookie
+            .write()
+            .map_err(|_| "无法保存验证码会话".to_string())?;
+        let mut pairs = store.as_deref().map(parse_cookie_pairs).unwrap_or_default();
+        pairs.insert("validate".to_string(), encoded);
+        *store = format_cookie_pairs(&pairs);
+        Ok(())
+    }
+
     // 先校验代理地址，再同时替换接口客户端；已开始的请求继续使用原客户端。
     pub fn set_network_proxy(&self, proxy_url: Option<String>) -> Result<(), String> {
         let mut client = self.client.write().map_err(|_| "无法更新酷安 HTTP 客户端".to_string())?;
@@ -3265,8 +3282,12 @@ impl CoolapkClient {
         if !last_item.trim().is_empty() {
             query.push(("lastItem", last_item.trim().to_string()));
         }
-        if let Some((field, token)) = append_post_token(post_token, post_token_field) {
-            query.push((field, token));
+        if let Some(token) = post_token.filter(|value| !value.trim().is_empty()) {
+            if post_token_field == Some("") {
+                self.set_captcha_validate(token)?;
+            } else if let Some((field, token)) = append_post_token(Some(token), post_token_field) {
+                query.push((field, token));
+            }
         }
         log::info!(
             "comment.request reply_id={} has_token={} token_field={}",
@@ -3460,8 +3481,12 @@ impl CoolapkClient {
             ("blockStatus", "0".to_string()),
             ("fromFeedAuthor", from_feed_author.to_string()),
         ]);
-        if let Some((field, token)) = append_post_token(post_token, post_token_field) {
-            query.push((field, token));
+        if let Some(token) = post_token.filter(|value| !value.trim().is_empty()) {
+            if post_token_field == Some("") {
+                self.set_captcha_validate(token)?;
+            } else if let Some((field, token)) = append_post_token(Some(token), post_token_field) {
+                query.push((field, token));
+            }
         }
         log::info!(
             "comment.request feed_id={} has_token={} token_field={}",
@@ -4109,9 +4134,13 @@ impl CoolapkClient {
     pub async fn get_feed_detail(&self, feed_id: &str, post_token: Option<&str>, post_token_field: Option<&str>) -> Result<Value, String> {
         let mut query = vec![("id", feed_id.to_string())];
         if let Some(token) = post_token.filter(|value| !value.trim().is_empty()) {
-            // 验证令牌使用服务端指定的安全字段名，缺省时使用酷安标准字段。
-            let field = post_token_field.filter(|value| value.starts_with('_') && value.len() <= 64 && value.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')).unwrap_or("_v2_post_token");
-            query.push((field, token.to_string()));
+            if post_token_field == Some("") {
+                self.set_captcha_validate(token)?;
+            } else {
+                // 验证令牌使用服务端指定的安全字段名，缺省时使用酷安标准字段。
+                let field = post_token_field.filter(|value| value.starts_with('_') && value.len() <= 64 && value.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')).unwrap_or("_v2_post_token");
+                query.push((field, token.to_string()));
+            }
         }
         let primary_error = match self.api_get("/v6/feed/detail", &query).await {
             Ok(value) if matches!(application_failure(&value), Some((403, "captcha"))) => return Err(value.to_string()),
@@ -9406,6 +9435,18 @@ fn format_cookie_pairs(pairs: &BTreeMap<String, String>) -> Option<String> {
     }
 }
 
+fn encode_cookie_value(value: &str) -> String {
+    let mut encoded = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {
+            encoded.push(byte as char);
+        } else {
+            encoded.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    encoded
+}
+
 fn merge_cookie_headers(base: Option<&str>, overlay: Option<&str>) -> Option<String> {
     let mut pairs = base.map(parse_cookie_pairs).unwrap_or_default();
     if let Some(overlay) = overlay {
@@ -9542,8 +9583,8 @@ fn extract_captcha_id_from_text(text: &str) -> Option<String> {
 mod api_failure_log_tests {
     use super::{
         append_post_token, application_failure, classify_api_failure, extract_captcha_id_from_text,
-        is_captcha_error_text, is_reply_list_captcha_response, merge_cookie_headers,
-        normalize_client_version_in_ua, update_cookie_store,
+        encode_cookie_value, is_captcha_error_text, is_reply_list_captcha_response,
+        merge_cookie_headers, normalize_client_version_in_ua, update_cookie_store,
     };
     use serde_json::json;
 
@@ -9630,6 +9671,14 @@ mod api_failure_log_tests {
         assert_eq!(store.as_deref(), Some("SESSID=new"));
         update_cookie_store(&mut store, &["SESSID=deleted; Max-Age=0".to_string()]);
         assert_eq!(store, None);
+    }
+
+    #[test]
+    fn encodes_validate_cookie_like_official_client() {
+        assert_eq!(
+            encode_cookie_value("NEC:5fc4c10e:CN31_a+b/c*"),
+            "NEC%3A5fc4c10e%3ACN31_a%2Bb%2Fc%2A"
+        );
     }
 }
 

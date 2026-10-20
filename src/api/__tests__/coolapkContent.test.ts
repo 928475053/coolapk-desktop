@@ -176,7 +176,7 @@ describe('CoolapkTauriAPI 内容新页接口封装', () => {
     );
     expect(invoke).toHaveBeenNthCalledWith(2, 'get_sub_replies', expect.objectContaining({
       postToken: 'NEC:5fc4c10e:dynamic-validated',
-      postTokenField: '_v2_post_token',
+      postTokenField: '',
     }));
   });
 
@@ -219,7 +219,7 @@ describe('CoolapkTauriAPI 内容新页接口封装', () => {
       listType: 'lastupdate_desc',
       fromFeedAuthor: 0,
       postToken: 'NEC:5fc4c10e:comment-validated',
-      postTokenField: '_v2_post_token',
+      postTokenField: '',
     });
   });
 

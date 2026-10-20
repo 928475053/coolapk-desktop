@@ -690,9 +690,10 @@ jobs:
           expected_code="$(node -p 'require("./src-tauri/tauri.conf.json").bundle.android.versionCode')"
           badging="$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk")"
           grep '^package:' <<< "$badging" | grep -F "versionName='$expected_version'" | grep -F "versionCode='$expected_code'"
-          cp "$apk" "android-release/coolapk-${RELEASE_TAG}-android-arm64.apk"
+          safe_release_tag="${RELEASE_TAG//\//-}"
+          cp "$apk" "android-release/coolapk-${safe_release_tag}-android-arm64.apk"
           if [[ -f "$aab" ]]; then
-            cp "$aab" "android-release/coolapk-${RELEASE_TAG}-android-arm64.aab"
+            cp "$aab" "android-release/coolapk-${safe_release_tag}-android-arm64.aab"
           fi
 
       - name: 上传 Android Release 产物

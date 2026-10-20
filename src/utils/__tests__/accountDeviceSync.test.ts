@@ -16,11 +16,11 @@ function setup() {
 describe('账号设备信息自动同步', () => {
   afterEach(() => stop?.());
 
-  it('无历史记录使用 iPhone 18 Pro Max，启用手动设置后取消自动覆盖', async () => {
+  it('无历史记录使用 Android 兼容指纹，启用手动设置后取消自动覆盖', async () => {
     const { auth, settings, api } = setup();
     stop = setupAccountDeviceSync(auth, settings, api);
     await flushPromises();
-    expect(settings.profile?.model).toBe('iPhone19,7');
+    expect(settings.profile?.model).toBe('Pixel 7');
     settings.settings.deviceFingerprint.customFingerprint = true;
     await flushPromises();
     expect(settings.profile).toBeNull();
@@ -35,6 +35,14 @@ describe('账号设备信息自动同步', () => {
     expect(api.getUserFeeds).not.toHaveBeenCalled();
   });
 
+  it('iOS 原生指纹不会混入 Android API 请求', async () => {
+    const { auth, settings, api } = setup();
+    api.getDeviceInfo.mockResolvedValue({ data: { defaultProfile: { source: 'native', platform: 'ios' } } });
+    stop = setupAccountDeviceSync(auth, settings, api);
+    await flushPromises();
+    expect(settings.profile).toMatchObject({ source: 'fallback', manufacturer: 'Google', model: 'Pixel 7' });
+  });
+
   it('成功识别本人记录后应用历史机型，退出登录后恢复兜底', async () => {
     const { auth, settings, api } = setup();
     api.getUserFeeds.mockResolvedValue({ data: [{ id: 'own', uid: '123', dateline: 100, userAgent: ua }] });
@@ -43,7 +51,7 @@ describe('账号设备信息自动同步', () => {
     expect(settings.profile).toMatchObject({ source: 'history', model: '2210132C' });
     auth.isLoggedIn = false;
     await flushPromises();
-    expect(settings.profile).toMatchObject({ source: 'fallback', model: 'iPhone19,7' });
+    expect(settings.profile).toMatchObject({ source: 'fallback', model: 'Pixel 7' });
   });
 
   it('切换账号后旧请求迟到也不能覆盖新账号的兜底结果', async () => {

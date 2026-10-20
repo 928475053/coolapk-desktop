@@ -1092,8 +1092,12 @@ impl CoolapkClient {
     /// 设备码与 Token V3 绑定，切换时 auth 签名同步切换。
     pub fn new() -> Self {
         let native_device_profile = super::native_device::detect();
-        let device_code = device_code_with_profile(&generate_random_device_code(), &native_device_profile);
-        let (client, redirect_client) = build_api_clients(&native_device_profile).unwrap_or_else(|_| (Client::new(), Client::new()));
+        #[cfg(target_os = "android")]
+        let api_device_profile = native_device_profile.clone();
+        #[cfg(not(target_os = "android"))]
+        let api_device_profile = super::native_device::compatibility_profile();
+        let device_code = device_code_with_profile(&generate_random_device_code(), &api_device_profile);
+        let (client, redirect_client) = build_api_clients(&api_device_profile).unwrap_or_else(|_| (Client::new(), Client::new()));
 
         Self {
             client: RwLock::new(client),

@@ -11,11 +11,11 @@ export interface AccountDeviceProfile {
   dateline: number;
 }
 
-// 型号来自随包 AppleDB 表；系统为兼容模板，Build 不伪装成真实设备构建号。
+// 桌面和 iOS 的酷安 API 使用 Android 兼容协议；UA 必须与 X-App-Device 保持同一套 Android 指纹。
 export const fallbackAccountDevice: AccountDeviceProfile = {
-  manufacturer: 'Apple', brand: 'Apple', model: 'iPhone19,7', build: 'compatibility',
-  userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 27_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) (#Build; Apple; iPhone19,7; compatibility; 27.0) +CoolMarket/16.2.0-2604201-universal CoolapkDesktopFallback',
-  label: 'iPhone 18 Pro Max', source: 'fallback', dateline: 0,
+  manufacturer: 'Google', brand: 'google', model: 'Pixel 7', build: 'TQ3A.230805.001',
+  userAgent: 'Dalvik/2.1.0 (Linux; U; Android 13; Pixel 7 Build/TQ3A.230805.001) (#Build; google; Pixel 7; TQ3A.230805.001; 13) +CoolMarket/16.2.0-2604201-universal CoolapkDesktopFallback',
+  sdkInt: '33', label: 'Google Pixel 7', source: 'fallback', dateline: 0,
 };
 
 const androidSdks: Record<string, string> = { '10': '29', '11': '30', '12': '31', '12.1': '32', '13': '33', '14': '34', '15': '35', '16': '36', '17': '37' };

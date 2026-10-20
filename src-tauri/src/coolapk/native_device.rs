@@ -11,6 +11,18 @@ pub const COMPATIBILITY_UA: &str = "Dalvik/2.1.0 (Linux; U; Android 13; Pixel 7 
 #[cfg(any(target_os = "android", target_os = "ios", target_os = "macos", test))]
 const APP_SUFFIX: &str = " +CoolMarket/16.2.0-2604201-universal";
 
+pub fn compatibility_profile() -> DeviceProfile {
+    DeviceProfile {
+        manufacturer: Some("Google".into()),
+        brand: Some("google".into()),
+        model: Some("Pixel 7".into()),
+        build: Some("TQ3A.230805.001".into()),
+        user_agent: Some(COMPATIBILITY_UA.into()),
+        sdk_int: Some(SDK_INT.into()),
+        ..Default::default()
+    }
+}
+
 #[cfg(any(target_os = "android", test))]
 fn android_profile(
     manufacturer: &str,
@@ -205,6 +217,17 @@ pub fn detect() -> DeviceProfile {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn compatibility_profile_matches_android_api_fingerprint() {
+        let profile = compatibility_profile();
+        assert_eq!(profile.manufacturer.as_deref(), Some("Google"));
+        assert_eq!(profile.brand.as_deref(), Some("google"));
+        assert_eq!(profile.model.as_deref(), Some("Pixel 7"));
+        assert_eq!(profile.sdk_int.as_deref(), Some("33"));
+        assert!(profile.user_agent.as_deref().unwrap_or("").contains("Android 13; Pixel 7"));
+    }
+
     #[test]
     fn android_uses_actual_sdk_and_build() {
         let profile =

@@ -147,6 +147,55 @@ jobs:
         if: runner.os != 'Windows'
         run: sh scripts/test-desktop-update.sh
 
+  # ─── 普通 main 构建：与 Android APK 并行产出 Windows x64 便携版 ───
+  windows-portable-ci:
+    name: Windows x64 便携版（普通 CI）
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装 Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 缓存 Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: portable-ci-native
+
+      - name: 安装前端依赖
+        run: npm ci --no-audit --no-fund
+
+      - name: 构建前端
+        run: npm run build
+
+      - name: 构建 Windows x64 可执行文件
+        shell: pwsh
+        run: |
+          node -e 'const fs=require("fs"); const conf=JSON.parse(fs.readFileSync("src-tauri/tauri.conf.json","utf8")); conf.build.beforeBuildCommand=""; fs.writeFileSync("src-tauri/tauri.conf.json",JSON.stringify(conf,null,2));'
+          npm run tauri -- build --no-bundle
+
+      - name: 准备 Windows 单文件便携版
+        shell: pwsh
+        run: ./scripts/prepare-windows-portable.ps1 -Architecture x64
+
+      - name: 上传 Windows 单文件便携版
+        uses: actions/upload-artifact@v6
+        with:
+          name: windows-x64-portable-ci
+          path: src-tauri/target/portable/*.exe
+          if-no-files-found: error
+
   # ─── 构建（仅 tag / 手动触发） ───
   build:
     name: ${{ matrix.name }}

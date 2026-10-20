@@ -65,7 +65,24 @@ class CaptchaActivity : Activity() {
                 }
 
                 override fun onClose(closeType: Captcha.CloseType?) {
-                    runOnUiThread { finishCancelled() }
+                    when (closeType) {
+                        Captcha.CloseType.USER_CLOSE,
+                        Captcha.CloseType.UNDEFINE_CLOSE -> runOnUiThread { finishCancelled() }
+
+                        Captcha.CloseType.VERIFY_SUCCESS_CLOSE,
+                        Captcha.CloseType.VALIDATE_QUICK_CLOSE -> {
+                            // 成功关闭时 onValidate 通常会紧接着回调；留一点时间，
+                            // 避免因回调顺序丢掉 validate。
+                            Handler(Looper.getMainLooper()).postDelayed({
+                                if (!finished) finishError("验证码已通过但未返回凭证")
+                            }, 2_000L)
+                        }
+
+                        // TIP_CLOSE 表示“加载提示关闭，马上显示验证弹窗”，
+                        // 不是用户取消，必须继续等待。
+                        Captcha.CloseType.TIP_CLOSE,
+                        null -> Unit
+                    }
                 }
 
                 override fun onCaptchaShow() {

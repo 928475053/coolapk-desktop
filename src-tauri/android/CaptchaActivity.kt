@@ -36,10 +36,9 @@ class CaptchaActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // 易盾弹窗内部是浅色 WebView；透明/深色 Activity 会让部分厂商
-        // WebView 先绘制成黑屏。这里提供不透明白色承载窗口。
-        window.setBackgroundDrawable(ColorDrawable(Color.WHITE))
-        setContentView(FrameLayout(this).apply { setBackgroundColor(Color.WHITE) })
+        // 宿主窗口保持透明，页面仍可见；验证码由 SDK 自己绘制成对话框。
+        window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        setContentView(FrameLayout(this).apply { setBackgroundColor(Color.TRANSPARENT) })
 
         captchaId = intent.getStringExtra(EXTRA_CAPTCHA_ID).orEmpty().trim()
         if (captchaId.isBlank()) {
@@ -50,6 +49,9 @@ class CaptchaActivity : Activity() {
         val configuration = CaptchaConfiguration.Builder()
             .captchaId(captchaId)
             .timeout(15_000L)
+            .size("small")
+            .backgroundDimAmount(0.3f)
+            .touchOutsideDisappear(true)
             .languageType(CaptchaConfiguration.LangType.LANG_ZH_CN)
             .theme(CaptchaConfiguration.Theme.LIGHT)
             .listener(object : CaptchaListener {

@@ -35,6 +35,7 @@ import java.lang.ref.WeakReference
 
 class MainActivity : TauriActivity() {
     @Volatile private var topSafeAreaPx = 0
+    @Volatile private var captchaActive = false
     private var mainWebView: WeakReference<WebView>? = null
     private val captchaLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
@@ -54,6 +55,8 @@ class MainActivity : TauriActivity() {
     fun startCoolapkCaptcha(captchaId: String): String = try {
         val safeId = captchaId.trim()
         require(safeId.matches(Regex("[A-Za-z0-9_-]{1,128}"))) { "验证码 ID 无效" }
+        if (captchaActive) return "pending"
+        captchaActive = true
         CaptchaActivity.pendingResult = "pending"
         runOnUiThread {
             try {
@@ -62,11 +65,13 @@ class MainActivity : TauriActivity() {
                         .putExtra(CaptchaActivity.EXTRA_CAPTCHA_ID, safeId),
                 )
             } catch (error: Exception) {
+                captchaActive = false
                 CaptchaActivity.pendingResult = "error:${error.message ?: error.javaClass.simpleName}"
             }
         }
         "pending"
     } catch (error: Exception) {
+        captchaActive = false
         CaptchaActivity.pendingResult = "pending"
         "error:${error.message ?: error.javaClass.simpleName}"
     }
@@ -74,7 +79,10 @@ class MainActivity : TauriActivity() {
     @Keep
     fun takeCoolapkCaptchaResult(unused: String): String {
         val value = CaptchaActivity.pendingResult
-        if (value != "pending") CaptchaActivity.pendingResult = "pending"
+        if (value != "pending") {
+            captchaActive = false
+            CaptchaActivity.pendingResult = "pending"
+        }
         return value
     }
 

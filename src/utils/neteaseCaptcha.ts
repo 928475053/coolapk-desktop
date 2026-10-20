@@ -181,12 +181,20 @@ export function loadNECaptchaScript(): Promise<void> {
   return scriptLoadingPromise;
 }
 
+let captchaInFlight: Promise<string> | null = null;
+
 /**
- * 唤起网易易盾滑块弹窗并完成验证
- * @param captchaId 易盾业务 ID，默认使用酷安官方 ID
- * @returns 返回拼装后的官方标准 Token，格式为 `NEC:{captchaId前8位}:{validate}`
+ * 并发请求只允许一个验证码窗口，避免多个 Activity 互相覆盖造成闪烁/白屏。
  */
-export async function verifyWithCaptcha(captchaId = DEFAULT_COOLAPK_CAPTCHA_ID): Promise<string> {
+export function verifyWithCaptcha(captchaId = DEFAULT_COOLAPK_CAPTCHA_ID): Promise<string> {
+  if (captchaInFlight) return captchaInFlight;
+  captchaInFlight = verifyWithCaptchaInternal(captchaId).finally(() => {
+    captchaInFlight = null;
+  });
+  return captchaInFlight;
+}
+
+async function verifyWithCaptchaInternal(captchaId: string): Promise<string> {
   // Android 主 WebView 的 Origin 不是酷安网页，易盾会拒绝初始化。
   // Android 优先使用带酷安 Base URL 的原生 WebView，其它平台继续使用 Web SDK。
   if (/android/i.test(navigator.userAgent) && (window as any).__TAURI_INTERNALS__) {

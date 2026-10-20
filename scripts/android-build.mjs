@@ -206,7 +206,7 @@ ${closingTag}`);
     manifest = manifest.replace('</application>', `    <activity
             ${captchaActivityMarker}
             android:exported="false"
-            android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
+            android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode" />
 </application>`);
   }

@@ -36,8 +36,10 @@ class CaptchaActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-        setContentView(FrameLayout(this).apply { setBackgroundColor(Color.TRANSPARENT) })
+        // 易盾弹窗内部是浅色 WebView；透明/深色 Activity 会让部分厂商
+        // WebView 先绘制成黑屏。这里提供不透明白色承载窗口。
+        window.setBackgroundDrawable(ColorDrawable(Color.WHITE))
+        setContentView(FrameLayout(this).apply { setBackgroundColor(Color.WHITE) })
 
         captchaId = intent.getStringExtra(EXTRA_CAPTCHA_ID).orEmpty().trim()
         if (captchaId.isBlank()) {

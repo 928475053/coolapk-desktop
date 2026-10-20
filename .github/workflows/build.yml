@@ -147,9 +147,9 @@ jobs:
         if: runner.os != 'Windows'
         run: sh scripts/test-desktop-update.sh
 
-  # ─── 普通 main 构建：与 Android APK 并行产出 Windows x64 便携版 ───
+  # ─── 非 Tag 构建：与 Android APK 并行产出 Windows x64 便携版 ───
   windows-portable-ci:
-    name: Windows x64 便携版（普通 CI）
+    name: Windows x64 便携版
     if: ${{ github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/v') }}
     runs-on: windows-latest
     timeout-minutes: 60

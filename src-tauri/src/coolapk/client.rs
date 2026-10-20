@@ -250,10 +250,20 @@ pub struct CoolapkClient {
     user_cookie: RwLock<Option<String>>,
     /// API 响应 Set-Cookie 维护的风控/会话 Cookie。
     api_cookie: RwLock<Option<String>>,
+    /// 本轮验证码凭证；只有后续 API 重试成功后才并入持久化会话。
+    pending_validation: RwLock<Option<String>>,
+    api_session_expires_at_ms: RwLock<i64>,
     cookie_file: RwLock<Option<PathBuf>>,
     device_profile: RwLock<DeviceProfile>,
     native_device_profile: DeviceProfile,
     device_code: RwLock<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct PersistedApiSession {
+    identity: String,
+    cookie: String,
+    expires_at_ms: i64,
 }
 
 pub struct ProxiedVideoResponse {
@@ -1091,6 +1101,8 @@ impl CoolapkClient {
             auth: RwLock::new(CoolapkAuth::new(device_code.clone())),
             user_cookie: RwLock::new(None),
             api_cookie: RwLock::new(None),
+            pending_validation: RwLock::new(None),
+            api_session_expires_at_ms: RwLock::new(0),
             cookie_file: RwLock::new(None),
             device_profile: RwLock::new(DeviceProfile::default()),
             native_device_profile,
@@ -1101,20 +1113,178 @@ impl CoolapkClient {
     fn api_client(&self) -> Result<Client, String> { self.client.read().map(|client| client.clone()).map_err(|_| "无法读取酷安 HTTP 客户端".to_string()) }
     fn api_redirect_client(&self) -> Result<Client, String> { self.redirect_client.read().map(|client| client.clone()).map_err(|_| "无法读取酷安重定向客户端".to_string()) }
 
+    fn api_session_path(&self) -> Option<PathBuf> {
+        let base = self.cookie_file.read().ok().and_then(|value| value.clone())?;
+        base.parent().map(|parent| parent.join("api_session.json"))
+    }
+
+    fn current_api_identity(&self) -> String {
+        use md5::{Digest, Md5};
+        let device = self
+            .device_code
+            .read()
+            .map(|value| value.clone())
+            .unwrap_or_default();
+        let user_cookie = self
+            .user_cookie
+            .read()
+            .ok()
+            .and_then(|value| value.clone())
+            .unwrap_or_default();
+        let pairs = parse_cookie_pairs(&user_cookie);
+        let uid = pairs.get("uid").cloned().unwrap_or_default();
+        let token = pairs.get("token").cloned().unwrap_or_default();
+        let mut hasher = Md5::new();
+        hasher.update(format!("{device}|{uid}|{token}").as_bytes());
+        format!("{:x}", hasher.finalize())
+    }
+
+    fn ensure_api_session_loaded(&self) {
+        if self
+            .api_cookie
+            .read()
+            .ok()
+            .and_then(|value| value.clone())
+            .is_some()
+        {
+            return;
+        }
+        let Some(path) = self.api_session_path() else {
+            return;
+        };
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            return;
+        };
+        let Ok(record) = serde_json::from_str::<PersistedApiSession>(&text) else {
+            let _ = std::fs::remove_file(path);
+            return;
+        };
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|value| value.as_millis() as i64)
+            .unwrap_or_default();
+        if record.expires_at_ms <= now || record.identity != self.current_api_identity() {
+            let _ = std::fs::remove_file(path);
+            return;
+        }
+        if let Ok(mut store) = self.api_cookie.write() {
+            *store = Some(record.cookie);
+        }
+        if let Ok(mut expires) = self.api_session_expires_at_ms.write() {
+            *expires = record.expires_at_ms;
+        }
+    }
+
+    fn retain_api_session_for_current_identity(&self) {
+        let Some(path) = self.api_session_path() else {
+            self.clear_api_session();
+            return;
+        };
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            self.clear_api_session();
+            return;
+        };
+        let Ok(record) = serde_json::from_str::<PersistedApiSession>(&text) else {
+            self.clear_api_session();
+            return;
+        };
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|value| value.as_millis() as i64)
+            .unwrap_or_default();
+        if record.identity == self.current_api_identity() && record.expires_at_ms > now {
+            if let Ok(mut store) = self.api_cookie.write() {
+                *store = Some(record.cookie);
+            }
+            if let Ok(mut expires) = self.api_session_expires_at_ms.write() {
+                *expires = record.expires_at_ms;
+            }
+        } else {
+            self.clear_api_session();
+        }
+    }
+
+    fn save_api_session(&self) {
+        let Some(path) = self.api_session_path() else {
+            return;
+        };
+        let Some(cookie) = self
+            .api_cookie
+            .read()
+            .ok()
+            .and_then(|value| value.clone())
+        else {
+            let _ = std::fs::remove_file(path);
+            return;
+        };
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|value| value.as_millis() as i64)
+            .unwrap_or_default();
+        let record = PersistedApiSession {
+            identity: self.current_api_identity(),
+            cookie,
+            // 与 c001apk 一致：验证码凭证最长复用 24 小时。
+            expires_at_ms: now + 24 * 60 * 60 * 1000,
+        };
+        if let Ok(text) = serde_json::to_string_pretty(&record) {
+            let _ = std::fs::write(path, text);
+        }
+        if let Ok(mut expires) = self.api_session_expires_at_ms.write() {
+            *expires = record.expires_at_ms;
+        }
+    }
+
+    fn clear_api_session(&self) {
+        if let Ok(mut store) = self.api_cookie.write() {
+            *store = None;
+        }
+        if let Ok(mut pending) = self.pending_validation.write() {
+            *pending = None;
+        }
+        if let Ok(mut expires) = self.api_session_expires_at_ms.write() {
+            *expires = 0;
+        }
+        if let Some(path) = self.api_session_path() {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+
+    fn prune_expired_api_session(&self) {
+        let expires = self
+            .api_session_expires_at_ms
+            .read()
+            .map(|value| *value)
+            .unwrap_or_default();
+        if expires <= 0 {
+            return;
+        }
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|value| value.as_millis() as i64)
+            .unwrap_or_default();
+        if now >= expires {
+            self.clear_api_session();
+        }
+    }
+
     /// `captchaField` 为空时，服务端使用 Cookie 协议：validate=<URL 编码后的凭证>。
     fn set_captcha_validate(&self, proof: &str) -> Result<(), String> {
         let proof = proof.trim();
         if proof.is_empty() {
             return Ok(());
         }
-        let encoded = encode_cookie_value(proof);
-        let mut store = self
-            .api_cookie
+        // 旧凭证已触发挑战，先移除；新凭证只在重试成功后持久化。
+        if let Ok(mut store) = self.api_cookie.write() {
+            let mut pairs = store.as_deref().map(parse_cookie_pairs).unwrap_or_default();
+            pairs.remove("validate");
+            *store = format_cookie_pairs(&pairs);
+        }
+        *self
+            .pending_validation
             .write()
-            .map_err(|_| "无法保存验证码会话".to_string())?;
-        let mut pairs = store.as_deref().map(parse_cookie_pairs).unwrap_or_default();
-        pairs.insert("validate".to_string(), encoded);
-        *store = format_cookie_pairs(&pairs);
+            .map_err(|_| "无法保存验证码凭证".to_string())? = Some(proof.to_string());
+        self.save_api_session();
         Ok(())
     }
 
@@ -1154,8 +1324,13 @@ impl CoolapkClient {
         if let Ok(mut auth) = self.auth.write() {
             auth.set_device_code(code.clone());
         }
+        let mut changed = false;
         if let Ok(mut guard) = self.device_code.write() {
+            changed = *guard != code;
             *guard = code;
+        }
+        if changed {
+            self.retain_api_session_for_current_identity();
         }
     }
 
@@ -1734,11 +1909,11 @@ impl CoolapkClient {
             Some(safe_ascii)
         };
         drop(stored);
-        if let Ok(mut api_cookie) = self.api_cookie.write() {
-            *api_cookie = None;
-        }
         // 登录态变化（登录/登出/切换账号）后同步设备码
         self.sync_device_code();
+        // 同一账号重启恢复时保留已验证的 API 会话；账号或设备变化时 identity
+        // 不匹配，会自动清除。
+        self.retain_api_session_for_current_identity();
         Ok(())
     }
 
@@ -1802,6 +1977,8 @@ impl CoolapkClient {
         let started = std::time::Instant::now();
         let log_path = path.split('?').next().unwrap_or(path);
         let method_name = method.as_str().to_string();
+        self.ensure_api_session_loaded();
+        self.prune_expired_api_session();
         let token = self.get_token()?;
         let url = format!("{api_origin}{path}");
         let requested_with = "XMLHttpRequest";
@@ -1823,7 +2000,18 @@ impl CoolapkClient {
             .read()
             .ok()
             .and_then(|value| value.clone());
+        let pending_validation = self
+            .pending_validation
+            .read()
+            .ok()
+            .and_then(|value| value.clone());
         let cookie = merge_cookie_headers(user_cookie.as_deref(), api_cookie.as_deref());
+        let cookie = if let Some(proof) = pending_validation.as_deref() {
+            let pending_cookie = format!("validate={}", encode_cookie_value(proof));
+            merge_cookie_headers(cookie.as_deref(), Some(&pending_cookie))
+        } else {
+            cookie
+        };
         let mut cookie_attached = false;
         if let Some(cookie) = cookie {
             let full_cookie = self.cookie_for_path(&cookie, path);
@@ -1859,11 +2047,48 @@ impl CoolapkClient {
             if let Ok(mut store) = self.api_cookie.write() {
                 update_cookie_store(&mut store, &set_cookies);
             }
+            self.save_api_session();
             log::debug!(
                 "api.cookies_updated path={} count={}",
                 log_path,
                 set_cookies.len()
             );
+        }
+        if let Some(proof) = pending_validation {
+            let accepted = result.as_ref().is_ok_and(|value| !is_reply_list_captcha_response(value));
+            let rejected = result
+                .as_ref()
+                .is_err_and(|error| is_captcha_error_text(error.as_str()));
+            if accepted {
+                if let Ok(mut store) = self.api_cookie.write() {
+                    let mut pairs = store.as_deref().map(parse_cookie_pairs).unwrap_or_default();
+                    pairs.insert("validate".to_string(), encode_cookie_value(&proof));
+                    *store = format_cookie_pairs(&pairs);
+                }
+                self.save_api_session();
+            } else if rejected {
+                if let Ok(mut store) = self.api_cookie.write() {
+                    let mut pairs = store.as_deref().map(parse_cookie_pairs).unwrap_or_default();
+                    pairs.remove("validate");
+                    *store = format_cookie_pairs(&pairs);
+                }
+                self.save_api_session();
+            }
+            if let Ok(mut pending) = self.pending_validation.write() {
+                *pending = None;
+            }
+        } else if result.as_ref().is_ok_and(is_reply_list_captcha_response)
+            || result
+                .as_ref()
+                .is_err_and(|error| is_captcha_error_text(error.as_str()))
+        {
+            // 已持久化的凭证被服务端拒绝：立即丢弃，等待新的验证结果。
+            if let Ok(mut store) = self.api_cookie.write() {
+                let mut pairs = store.as_deref().map(parse_cookie_pairs).unwrap_or_default();
+                pairs.remove("validate");
+                *store = format_cookie_pairs(&pairs);
+            }
+            self.save_api_session();
         }
         match &result {
             Err(error) => log::warn!("api.response_failed method={} path={} status={} reason={} elapsed_ms={}",
@@ -7368,9 +7593,7 @@ impl CoolapkClient {
             .map_err(|_| "failed to lock login state".to_string())?;
         *stored = None;
         drop(stored);
-        if let Ok(mut api_cookie) = self.api_cookie.write() {
-            *api_cookie = None;
-        }
+        self.clear_api_session();
         // 清空当前登录标记（保留账户记录，便于下次快速切换）
         let mut root = self.load_accounts_root();
         root["lastLoginUid"] = json!("");
@@ -9457,6 +9680,8 @@ fn merge_cookie_headers(base: Option<&str>, overlay: Option<&str>) -> Option<Str
 
 fn update_cookie_store(store: &mut Option<String>, set_cookies: &[String]) {
     let mut pairs = store.as_deref().map(parse_cookie_pairs).unwrap_or_default();
+    let previous_sessid = pairs.get("SESSID").cloned();
+    let mut sessid_changed = false;
     for raw in set_cookies {
         let first = raw.split(';').next().unwrap_or("").trim();
         let Some((name, value)) = first.split_once('=') else {
@@ -9472,8 +9697,15 @@ fn update_cookie_store(store: &mut Option<String>, set_cookies: &[String]) {
         if value.eq_ignore_ascii_case("deleted") || expired {
             pairs.remove(name);
         } else {
+            if name == "SESSID" && previous_sessid.as_deref() != Some(value) {
+                sessid_changed = true;
+            }
             pairs.insert(name.to_string(), value.to_string());
         }
+    }
+    if sessid_changed {
+        // 新的 API 会话不继承旧会话的验证码凭证。
+        pairs.remove("validate");
     }
     *store = format_cookie_pairs(&pairs);
 }
@@ -9679,6 +9911,13 @@ mod api_failure_log_tests {
             encode_cookie_value("NEC:5fc4c10e:CN31_a+b/c*"),
             "NEC%3A5fc4c10e%3ACN31_a%2Bb%2Fc%2A"
         );
+    }
+
+    #[test]
+    fn changing_api_session_invalidates_old_validation() {
+        let mut store = Some("SESSID=old; validate=NEC%3Aold".to_string());
+        update_cookie_store(&mut store, &["SESSID=new; Path=/".to_string()]);
+        assert_eq!(store.as_deref(), Some("SESSID=new"));
     }
 }
 

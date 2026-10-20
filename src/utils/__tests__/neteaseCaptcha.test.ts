@@ -121,6 +121,20 @@ describe('neteaseCaptcha', () => {
     expect(document.querySelector('script')).toBeNull();
   });
 
+  it('桌面和 iOS 使用 coolapk.com 独立验证窗口', async () => {
+    vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 (Macintosh)');
+    (window as any).__TAURI_INTERNALS__ = {};
+    vi.mocked(invoke).mockResolvedValueOnce('NEC:5fc4c10e:desktop-validated');
+
+    await expect(verifyWithCaptcha('5fc4c10eccd64d178982bc560da43a91')).resolves.toBe(
+      'NEC:5fc4c10e:desktop-validated',
+    );
+    expect(invoke).toHaveBeenCalledWith('request_web_captcha', {
+      captchaId: '5fc4c10eccd64d178982bc560da43a91',
+    });
+    expect(document.querySelector('script')).toBeNull();
+  });
+
   it('rejects on user cancellation or verify error', async () => {
     (window as any).initNECaptcha = vi.fn((config, onLoad) => {
       const mockInstance = {

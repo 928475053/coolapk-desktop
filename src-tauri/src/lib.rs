@@ -601,6 +601,176 @@ async fn request_android_captcha(app: tauri::AppHandle, captcha_id: String) -> R
 }
 
 #[tauri::command]
+async fn request_web_captcha(app: tauri::AppHandle, captcha_id: String) -> Result<String, String> {
+    #[cfg(not(target_os = "android"))]
+    {
+        let captcha_id = captcha_id.trim().to_string();
+        if captcha_id.is_empty()
+            || captcha_id.len() > 128
+            || !captcha_id
+                .chars()
+                .all(|value| value.is_ascii_alphanumeric() || value == '_' || value == '-')
+        {
+            return Err("验证码 ID 无效".to_string());
+        }
+
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|value| value.as_millis())
+            .unwrap_or_default();
+        let label = format!("captcha_window_{timestamp}");
+        let captcha_page = "https://www.coolapk.com/"
+            .parse()
+            .map_err(|error| format!("验证码页面地址无效：{error}"))?;
+        let (sender, receiver) = tokio::sync::oneshot::channel::<Result<String, String>>();
+        let result_sender = std::sync::Arc::new(Mutex::new(Some(sender)));
+        let navigation_sender = result_sender.clone();
+        let navigation_app = app.clone();
+        let navigation_label = label.clone();
+
+        let window = tauri::WebviewWindowBuilder::new(
+            &app,
+            &label,
+            tauri::WebviewUrl::External(captcha_page),
+        )
+        .title("酷安人机验证")
+        .inner_size(440.0, 620.0)
+        .on_navigation(move |url| {
+            if url.host_str() == Some("www.coolapk.com")
+                && url.path() == "/captcha-return"
+            {
+                let token = url
+                    .query_pairs()
+                    .find(|(key, _)| key == "token")
+                    .map(|(_, value)| value.into_owned());
+                let error = url
+                    .query_pairs()
+                    .find(|(key, _)| key == "error")
+                    .map(|(_, value)| value.into_owned());
+                let cancelled = url.query_pairs().any(|(key, _)| key == "cancelled");
+                let result = match token {
+                    Some(token) if !token.trim().is_empty() => Ok(token),
+                    _ if cancelled => Err("用户取消了人机验证".to_string()),
+                    _ => Err(error.unwrap_or_else(|| "人机验证失败".to_string())),
+                };
+                if let Ok(mut guard) = navigation_sender.lock() {
+                    if let Some(sender) = guard.take() {
+                        let _ = sender.send(result);
+                    }
+                }
+                let app = navigation_app.clone();
+                let label = navigation_label.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Some(window) = app.get_webview_window(&label) {
+                        let _ = window.close();
+                    }
+                });
+                return false;
+            }
+            true
+        })
+        .build()
+        .map_err(|error| format!("创建人机验证窗口失败：{error}"))?;
+
+        let close_sender = result_sender.clone();
+        window.on_window_event(move |event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                if let Ok(mut guard) = close_sender.lock() {
+                    if let Some(sender) = guard.take() {
+                        let _ = sender.send(Err("用户取消了人机验证".to_string()));
+                    }
+                }
+            }
+        });
+
+        let captcha_id_json =
+            serde_json::to_string(&captcha_id).map_err(|error| error.to_string())?;
+        let script = format!(
+            r#"
+            (function () {{
+              if (location.hostname !== 'www.coolapk.com') return;
+              if (window.__coolapkCaptchaStarted) return;
+              if (!document.body || !document.head) return;
+              window.__coolapkCaptchaStarted = true;
+              var script = document.createElement('script');
+              script.src = 'https://cstaticdun.126.net/load.min.js';
+              script.async = true;
+              script.onload = function () {{
+                var container = document.createElement('div');
+                container.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.28);';
+                document.body.appendChild(container);
+                window.initNECaptcha({{
+                  captchaId: {captcha_id_json},
+                  element: container,
+                  mode: 'popup',
+                  apiVersion: 2,
+                  width: '320px',
+                  lang: 'zh-CN',
+                  onVerify: function (error, data) {{
+                    if (error || !data || !data.validate) {{
+                      window.location.href = 'https://www.coolapk.com/captcha-return?error=' +
+                        encodeURIComponent(String(error || '验证码凭证无效'));
+                      return;
+                    }}
+                    var token = 'NEC:' + String({captcha_id_json}).slice(0, 8) + ':' + data.validate;
+                    window.location.href = 'https://www.coolapk.com/captcha-return?token=' +
+                      encodeURIComponent(token);
+                  }},
+                  onClose: function () {{
+                    window.location.href = 'https://www.coolapk.com/captcha-return?cancelled=1';
+                  }}
+                }}, function (instance) {{
+                  try {{
+                    instance.verify();
+                  }} catch (error) {{
+                    window.location.href = 'https://www.coolapk.com/captcha-return?error=' +
+                      encodeURIComponent(String(error));
+                  }}
+                }}, function (error) {{
+                  window.location.href = 'https://www.coolapk.com/captcha-return?error=' +
+                    encodeURIComponent(String(error));
+                }});
+              }};
+              script.onerror = function () {{
+                window.location.href = 'https://www.coolapk.com/captcha-return?error=' +
+                  encodeURIComponent('验证码脚本加载失败');
+              }};
+              document.head.appendChild(script);
+            }})();
+            "#
+        );
+
+        let eval_window = window.clone();
+        tauri::async_runtime::spawn(async move {
+            // 页面导航完成前重复注入，脚本自身的标记会保证只启动一次。
+            for _ in 0..60 {
+                if eval_window.eval(&script).is_err() {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+            }
+        });
+
+        let result = match tokio::time::timeout(std::time::Duration::from_secs(180), receiver).await {
+            Ok(Ok(result)) => result,
+            Ok(Err(_)) => Err("人机验证窗口已关闭".to_string()),
+            Err(_) => Err("等待人机验证超时".to_string()),
+        };
+        if result.is_err() {
+            if let Some(window) = app.get_webview_window(&label) {
+                let _ = window.close();
+            }
+        }
+        result
+    }
+    #[cfg(target_os = "android")]
+    {
+        let _ = (app, captcha_id);
+        Err("网页验证码仅用于桌面端和 iOS".to_string())
+    }
+}
+
+#[tauri::command]
 async fn get_android_safe_area_top(app: tauri::AppHandle) -> Result<f64, String> {
     #[cfg(target_os = "android")]
     {
@@ -1490,6 +1660,7 @@ pub fn run() {
             system_theme::get_linux_system_theme,
             set_android_system_bar_theme,
             request_android_captcha,
+            request_web_captcha,
             get_android_safe_area_top,
             log_android_runtime_info,
             pick_font_family,

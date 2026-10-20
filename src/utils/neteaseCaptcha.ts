@@ -195,15 +195,26 @@ export function verifyWithCaptcha(captchaId = DEFAULT_COOLAPK_CAPTCHA_ID): Promi
 }
 
 async function verifyWithCaptchaInternal(captchaId: string): Promise<string> {
-  // Android 主 WebView 的 Origin 不是酷安网页，易盾会拒绝初始化。
-  // Android 优先使用带酷安 Base URL 的原生 WebView，其它平台继续使用 Web SDK。
-  if (/android/i.test(navigator.userAgent) && (window as any).__TAURI_INTERNALS__) {
+  const isTauri = Boolean((window as any).__TAURI_INTERNALS__);
+  // Android 使用官方原生 SDK；桌面和 iOS 使用独立 coolapk.com Origin 的 WebView，
+  // 避免 Tauri 主 WebView 的 tauri:// Origin 导致验证码凭证被服务端拒绝。
+  if (isTauri && /android/i.test(navigator.userAgent)) {
     try {
       return await invoke<string>('request_android_captcha', { captchaId });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes('取消') || message.includes('超时')) throw error;
       throw new Error(`Android 验证窗口启动失败：${message}`);
+    }
+  }
+
+  if (isTauri) {
+    try {
+      return await invoke<string>('request_web_captcha', { captchaId });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('取消') || message.includes('超时')) throw error;
+      throw new Error(`验证窗口启动失败：${message}`);
     }
   }
 

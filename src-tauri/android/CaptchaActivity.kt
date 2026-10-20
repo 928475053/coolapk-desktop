@@ -3,23 +3,20 @@ package com.coolapk.desktop
 import android.app.Activity
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
-import android.view.ViewGroup
-import android.webkit.CookieManager
-import android.webkit.JavascriptInterface
-import android.webkit.WebResourceRequest
-import android.webkit.WebResourceResponse
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import androidx.annotation.Keep
-import org.json.JSONObject
+import com.netease.nis.captcha.Captcha
+import com.netease.nis.captcha.CaptchaConfiguration
+import com.netease.nis.captcha.CaptchaListener
 
 /**
- * 易盾 Web 验证码需要酷安网页 Origin。主界面使用 Tauri 自定义协议，
- * 直接在主 WebView 初始化会被易盾拒绝；这里用独立 WebView 加载一个
- * 拦截到本地资源的 https://www.coolapk.com/ne_captcha.html 页面，再把
- * validate 返回给原生层。
+ * 使用酷安当前版本同款网易易盾原生 SDK（io.github.yidun:captcha）。
+ *
+ * 网页版易盾的 validate 与 App 业务 captchaId 的环境不匹配，服务端会把它
+ * 当作未验证，导致每次请求都重新弹出滑块。原生 SDK 生成的 validate 才会
+ * 被酷安 App API 接受。
  */
 @Keep
 class CaptchaActivity : Activity() {
@@ -27,113 +24,68 @@ class CaptchaActivity : Activity() {
         const val EXTRA_CAPTCHA_ID = "captcha_id"
         const val EXTRA_POST_TOKEN = "post_token"
         const val EXTRA_ERROR = "captcha_error"
-        private const val CAPTCHA_PAGE_URL = "https://www.coolapk.com/ne_captcha.html"
     }
 
-    private lateinit var webView: WebView
+    private var captcha: Captcha? = null
     private var finished = false
-    private var captchaStarted = false
     private var captchaId = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        captchaId = intent.getStringExtra(EXTRA_CAPTCHA_ID).orEmpty()
+        window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        setContentView(FrameLayout(this).apply { setBackgroundColor(Color.TRANSPARENT) })
+
+        captchaId = intent.getStringExtra(EXTRA_CAPTCHA_ID).orEmpty().trim()
         if (captchaId.isBlank()) {
-            finishCancelled()
+            finishError("验证码 ID 为空")
             return
         }
 
-        val root = FrameLayout(this).apply {
-            setBackgroundColor(Color.WHITE)
-        }
-        webView = WebView(this).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT,
-            )
-            settings.javaScriptEnabled = true
-            settings.domStorageEnabled = true
-            settings.databaseEnabled = true
-            settings.loadsImagesAutomatically = true
-            settings.mediaPlaybackRequiresUserGesture = false
-            // 易盾会检查 WebView 环境；使用普通移动 Chrome UA，避免厂商 WebView
-            // 自带的 "; wv" 标记触发业务侧风控。
-            settings.userAgentString =
-                "Mozilla/5.0 (Linux; Android 15; 23113RKC6C Build/AQ3A.250226.002) " +
-                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
-            CookieManager.getInstance().setAcceptCookie(true)
-            CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
-            addJavascriptInterface(CaptchaBridge(), "AndroidCaptcha")
-            webViewClient = object : WebViewClient() {
-                override fun shouldInterceptRequest(
-                    view: WebView,
-                    request: WebResourceRequest,
-                ): WebResourceResponse? {
-                    // 不要用 data: URL 伪造 Origin。拦截一个真实的酷安 HTTPS
-                    // 地址并返回本地 HTML，让 document.origin/referer 都是
-                    // https://www.coolapk.com，易盾才能正常下发挑战资源。
-                    if (request.url.toString().substringBefore('?') == CAPTCHA_PAGE_URL) {
-                        return WebResourceResponse(
-                            "text/html",
-                            "UTF-8",
-                            assets.open("ne_captcha.html"),
-                        )
+        val configuration = CaptchaConfiguration.Builder()
+            .captchaId(captchaId)
+            .timeout(15_000L)
+            .languageType(CaptchaConfiguration.LangType.LANG_ZH_CN)
+            .theme(CaptchaConfiguration.Theme.LIGHT)
+            .listener(object : CaptchaListener {
+                // 3.5.x 的回调顺序是 (result, validate, message)，第二个才是
+                // 可直接回传给业务接口的校验码。
+                override fun onValidate(result: String?, validate: String?, message: String?) {
+                    if (validate.isNullOrBlank()) {
+                        finishError("验证码凭证为空")
+                        return
                     }
-                    return super.shouldInterceptRequest(view, request)
+                    runOnUiThread { finishVerified(validate) }
                 }
 
-                override fun onPageFinished(view: WebView, url: String) {
-                    super.onPageFinished(view, url)
-                    if (finished || captchaStarted) return
-                    if (url.substringBefore('?') != CAPTCHA_PAGE_URL) return
-                    captchaStarted = true
-                    view.evaluateJavascript(
-                        "window.startCoolapkCaptcha(${JSONObject.quote(captchaId)})",
-                        null,
-                    )
+                override fun onError(code: Int, message: String?) {
+                    runOnUiThread { finishError(message ?: "人机验证失败（$code）") }
                 }
-            }
+
+                override fun onClose(closeType: Captcha.CloseType?) {
+                    runOnUiThread { finishCancelled() }
+                }
+
+                override fun onCaptchaShow() {
+                    // SDK 已展示验证弹窗，无需额外处理。
+                }
+            })
+            .build(this)
+
+        try {
+            captcha = Captcha.getInstance().init(configuration)
+            captcha?.validate()
+        } catch (error: Throwable) {
+            finishError(error.message ?: error.javaClass.simpleName)
         }
-        root.addView(webView)
-        setContentView(root)
-
-        webView.loadUrl(CAPTCHA_PAGE_URL)
     }
 
-    @Keep
-    inner class CaptchaBridge {
-        @Keep
-        @JavascriptInterface
-        fun onVerified(validate: String) {
-            val value = validate.trim()
-            if (value.isEmpty()) {
-                finishCancelled()
-                return
-            }
-            runOnUiThread {
-                if (finished) return@runOnUiThread
-                finished = true
-                val token = "NEC:${captchaId.take(8)}:$value"
-                setResult(
-                    RESULT_OK,
-                    Intent().putExtra(EXTRA_POST_TOKEN, token),
-                )
-                webView.destroy()
-                finish()
-            }
-        }
-
-        @Keep
-        @JavascriptInterface
-        fun onCancelled() {
-            runOnUiThread { finishCancelled() }
-        }
-
-        @Keep
-        @JavascriptInterface
-        fun onError(message: String) {
-            runOnUiThread { finishError(message) }
-        }
+    private fun finishVerified(validate: String) {
+        if (finished) return
+        finished = true
+        val token = "NEC:${captchaId.take(8)}:$validate"
+        setResult(RESULT_OK, Intent().putExtra(EXTRA_POST_TOKEN, token))
+        destroyCaptcha()
+        finish()
     }
 
     private fun finishError(message: String) {
@@ -143,12 +95,10 @@ class CaptchaActivity : Activity() {
             RESULT_OK,
             Intent().putExtra(
                 EXTRA_ERROR,
-                message.trim().ifEmpty { "人机验证加载失败" }.take(300),
+                message.trim().ifEmpty { "人机验证失败" }.take(300),
             ),
         )
-        if (::webView.isInitialized) {
-            webView.destroy()
-        }
+        destroyCaptcha()
         finish()
     }
 
@@ -156,14 +106,22 @@ class CaptchaActivity : Activity() {
         if (finished) return
         finished = true
         setResult(RESULT_CANCELED)
-        if (::webView.isInitialized) {
-            webView.destroy()
-        }
+        destroyCaptcha()
         finish()
     }
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         finishCancelled()
+    }
+
+    override fun onDestroy() {
+        destroyCaptcha()
+        super.onDestroy()
+    }
+
+    private fun destroyCaptcha() {
+        captcha?.destroy()
+        captcha = null
     }
 }

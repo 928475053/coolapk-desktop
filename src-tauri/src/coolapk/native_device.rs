@@ -2,13 +2,13 @@
 use super::client::DeviceProfile;
 
 /// 与酷安当前 API 网关匹配的客户端版本。旧版本头会被楼中楼接口直接拒绝。
-pub const APP_VERSION: &str = "16.6.1";
-pub const APP_CODE: &str = "2608212";
+pub const APP_VERSION: &str = "16.6.4";
+pub const APP_CODE: &str = "2609291";
 pub const SDK_INT: &str = "36";
 
-pub const COMPATIBILITY_UA: &str = "Dalvik/2.1.0 (Linux; U; Android 16; 23113RKC6C Build/AQ3A.250226.002) (#Build; Redmi; 23113RKC6C; AQ3A.250226.002; 16) +CoolMarket/16.6.1-2608212-universal";
+pub const COMPATIBILITY_UA: &str = "Dalvik/2.1.0 (Linux; U; Android 16; 23113RKC6C Build/AQ3A.250226.002) (#Build; Redmi; 23113RKC6C; AQ3A.250226.002; 16) +CoolMarket/16.6.4-2609291-universal";
 #[cfg(any(target_os = "android", target_os = "ios", target_os = "macos", test))]
-const APP_SUFFIX: &str = " +CoolMarket/16.6.1-2608212-universal";
+const APP_SUFFIX: &str = " +CoolMarket/16.6.4-2609291-universal";
 
 #[cfg(any(target_os = "android", test))]
 fn android_profile(

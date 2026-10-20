@@ -9498,7 +9498,7 @@ mod api_failure_log_tests {
             normalize_client_version_in_ua(
                 "Dalvik/2.1.0 (#Build; Xiaomi; model; build; 16) +CoolMarket/16.2.0-2604201-universal CoolapkDesktopAuto"
             ),
-            "Dalvik/2.1.0 (#Build; Xiaomi; model; build; 16) +CoolMarket/16.6.1-2608212-universal CoolapkDesktopAuto"
+            "Dalvik/2.1.0 (#Build; Xiaomi; model; build; 16) +CoolMarket/16.6.4-2609291-universal CoolapkDesktopAuto"
         );
     }
 }

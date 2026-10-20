@@ -31,7 +31,7 @@ describe('settings store', () => {
     expect(invoke).toHaveBeenLastCalledWith('update_device_profile', { profile: expect.objectContaining({ model: 'iPhone19,7', brand: 'Apple', deviceId: 'saved-id', userAgent: fallbackAccountDevice.userAgent }) });
     expect(store.settings.deviceFingerprint).toEqual(saved);
     await store.setAutomaticDeviceProfile({ ...fallbackAccountDevice, source: 'history', userAgent: 'Dalvik/2.1.0 (#Build; Xiaomi; real-model; real-build; 16) +CoolMarket/16.5.1' });
-    expect(invoke).toHaveBeenLastCalledWith('update_device_profile', { profile: expect.objectContaining({ userAgent: 'Dalvik/2.1.0 (#Build; Xiaomi; real-model; real-build; 16) +CoolMarket/16.6.1-2608212-universal CoolapkDesktopAuto' }) });
+    expect(invoke).toHaveBeenLastCalledWith('update_device_profile', { profile: expect.objectContaining({ userAgent: 'Dalvik/2.1.0 (#Build; Xiaomi; real-model; real-build; 16) +CoolMarket/16.6.4-2609291-universal CoolapkDesktopAuto' }) });
     store.settings.deviceFingerprint.customFingerprint = true;
     await store.syncDeviceProfile(store.settings);
     expect(invoke).toHaveBeenLastCalledWith('update_device_profile', { profile: expect.objectContaining({ model: saved.model, deviceId: 'saved-id' }) });
@@ -49,8 +49,8 @@ describe('settings store', () => {
     const automatic = normalizeSettings({
       deviceFingerprint: { customFingerprint: false, appVersion: '16.2.0', appCode: '2604201' },
     });
-    expect(automatic.deviceFingerprint.appVersion).toBe('16.6.1');
-    expect(automatic.deviceFingerprint.appCode).toBe('2608212');
+    expect(automatic.deviceFingerprint.appVersion).toBe('16.6.4');
+    expect(automatic.deviceFingerprint.appCode).toBe('2609291');
 
     const custom = normalizeSettings({
       deviceFingerprint: { customFingerprint: true, appVersion: '16.2.0', appCode: '2604201' },

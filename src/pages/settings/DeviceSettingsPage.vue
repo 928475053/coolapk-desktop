@@ -279,7 +279,7 @@
             v-model="settingsStore.settings.deviceFingerprint.appVersion"
             type="text"
             class="text-input small-input"
-            placeholder="16.6.1"
+            placeholder="16.6.4"
             maxlength="20"
           />
           <div class="row-info">
@@ -290,7 +290,7 @@
             v-model="settingsStore.settings.deviceFingerprint.appCode"
             type="text"
             class="text-input small-input"
-            placeholder="2608212"
+            placeholder="2609291"
             maxlength="12"
           />
         </div>
@@ -341,9 +341,9 @@
           </div>
           <div class="preview-row">
             <span class="preview-key">X-App-Version</span>
-            <code class="preview-value">{{ fingerprint.appVersion || '16.6.1' }}</code>
+            <code class="preview-value">{{ fingerprint.appVersion || '16.6.4' }}</code>
             <span class="preview-key">X-App-Code</span>
-            <code class="preview-value">{{ fingerprint.appCode || '2608212' }}</code>
+            <code class="preview-value">{{ fingerprint.appCode || '2609291' }}</code>
           </div>
           <div class="preview-row">
             <span class="preview-key">X-Sdk-Int</span>
@@ -569,8 +569,8 @@ const presetModel = computed({
 const versionWarning = computed(() => {
   const f = fingerprint.value;
   const code = Number(f.appCode);
-  if (!Number.isNaN(code) && code > 0 && code < 2608212) {
-    return `版本号 ${f.appCode} 低于客户端默认请求版本 2608212，服务端可能要求升级。`;
+  if (!Number.isNaN(code) && code > 0 && code < 2609291) {
+    return `版本号 ${f.appCode} 低于客户端默认请求版本 2609291，服务端可能要求升级。`;
   }
   const version = f.appVersion.trim();
   if (version) {
@@ -593,8 +593,8 @@ function resetToDefault() {
     androidVersion: '16',
     build: 'AQ3A.250226.002',
     rom: '',
-    appVersion: '16.6.1',
-    appCode: '2608212',
+    appVersion: '16.6.4',
+    appCode: '2609291',
     sdkInt: '36',
     locale: 'zh-CN',
     darkMode: '0',

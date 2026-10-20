@@ -14,7 +14,7 @@ export interface AccountDeviceProfile {
 // 型号来自随包 AppleDB 表；系统为兼容模板，Build 不伪装成真实设备构建号。
 export const fallbackAccountDevice: AccountDeviceProfile = {
   manufacturer: 'Apple', brand: 'Apple', model: 'iPhone19,7', build: 'compatibility',
-  userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 27_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) (#Build; Apple; iPhone19,7; compatibility; 27.0) +CoolMarket/16.6.1-2608212-universal CoolapkDesktopFallback',
+  userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 27_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) (#Build; Apple; iPhone19,7; compatibility; 27.0) +CoolMarket/16.6.4-2609291-universal CoolapkDesktopFallback',
   label: 'iPhone 18 Pro Max', source: 'fallback', dateline: 0,
 };
 
@@ -33,7 +33,8 @@ export function parseAccountDevice(userAgent: unknown, dateline = 0): AccountDev
   // 旧版桌面兼容模板不是用户实际手机，避免把客户端自身记录再次识别为手机。
   if (model === '23113RKC6C' && build === 'AQ3A.250226.002'
     && (userAgent.includes('+CoolMarket/16.2.0-2604201-universal')
-      || userAgent.includes('+CoolMarket/16.6.1-2608212-universal'))) return null;
+      || userAgent.includes('+CoolMarket/16.6.1-2608212-universal')
+      || userAgent.includes('+CoolMarket/16.6.4-2609291-universal'))) return null;
   if (apple && /^(iPhone|iPad|iPod)\d+,\d+$/.test(model)) {
     return { manufacturer: 'Apple', brand: 'Apple', model, build, userAgent, label: model, source: 'history', dateline };
   }

@@ -5,9 +5,7 @@ import { spawnSync } from 'node:child_process';
 const root = resolve(import.meta.dirname, '..');
 const androidDir = join(root, 'src-tauri', 'gen', 'android');
 const androidIconSourceDir = join(root, 'src-tauri', 'android', 'res');
-const androidAssetSourceDir = join(root, 'src-tauri', 'android', 'assets');
 const androidResourceDir = join(androidDir, 'app', 'src', 'main', 'res');
-const androidAssetDir = join(androidDir, 'app', 'src', 'main', 'assets');
 const gradleProperties = join(androidDir, 'gradle.properties');
 const appBuildGradle = join(androidDir, 'app', 'build.gradle.kts');
 const androidManifest = join(androidDir, 'app', 'src', 'main', 'AndroidManifest.xml');
@@ -99,8 +97,6 @@ function ensureAndroidProject() {
 
   // Tauri 生成的 Android 工程是临时目录；每次构建都同步仓库内的启动器图标资源。
   copyAndroidResources(androidIconSourceDir, androidResourceDir);
-  mkdirSync(androidAssetDir, { recursive: true });
-  copyFileSync(join(androidAssetSourceDir, 'ne_captcha.html'), join(androidAssetDir, 'ne_captcha.html'));
 
   const pathCheckSetting = 'android.overridePathCheck=true';
   const contents = existsSync(gradleProperties) ? readFileSync(gradleProperties, 'utf8') : '';
@@ -165,6 +161,10 @@ function ensureAndroidProject() {
   const normalizedGradle = buildGradle.replaceAll('\r\n', '\n');
   if (normalizedGradle.includes(unconditionalKeepSymbols)) {
     buildGradle = normalizedGradle.replace(unconditionalKeepSymbols, debugOnlyKeepSymbols);
+  }
+  const captchaDependencyMarker = '// coolapk-android-yidun-captcha';
+  if (!buildGradle.includes(captchaDependencyMarker)) {
+    buildGradle += `\n${captchaDependencyMarker}\ndependencies {\n    implementation("io.github.yidun:captcha:3.5.8")\n}\n`;
   }
   writeFileSync(appBuildGradle, buildGradle, 'utf8');
 

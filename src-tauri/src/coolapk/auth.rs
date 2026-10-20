@@ -5,7 +5,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const APP_ID: &str = "com.coolapk.market";
-const APP_CODE: u64 = 2_609_291;
+const APP_CODE: u64 = 2_604_201;
 const STD_BASE64_ALPHABET: &[u8; 64] =
     b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 const AUTH_BLOB_B64: &str = include_str!("auth_blob.b64");

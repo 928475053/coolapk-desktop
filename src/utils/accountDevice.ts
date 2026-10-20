@@ -14,7 +14,7 @@ export interface AccountDeviceProfile {
 // 型号来自随包 AppleDB 表；系统为兼容模板，Build 不伪装成真实设备构建号。
 export const fallbackAccountDevice: AccountDeviceProfile = {
   manufacturer: 'Apple', brand: 'Apple', model: 'iPhone19,7', build: 'compatibility',
-  userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 27_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) (#Build; Apple; iPhone19,7; compatibility; 27.0) +CoolMarket/16.6.4-2609291-universal CoolapkDesktopFallback',
+  userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 27_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) (#Build; Apple; iPhone19,7; compatibility; 27.0) +CoolMarket/16.2.0-2604201-universal CoolapkDesktopFallback',
   label: 'iPhone 18 Pro Max', source: 'fallback', dateline: 0,
 };
 

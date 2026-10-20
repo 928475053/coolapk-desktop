@@ -97,9 +97,9 @@ const defaultDeviceFingerprint: DeviceFingerprintSettings = {
   androidVersion: '16',
   build: 'AQ3A.250226.002',
   rom: '',
-  appVersion: '16.6.4',
-  appCode: '2609291',
-  sdkInt: '36',
+  appVersion: '16.2.0',
+  appCode: '2604201',
+  sdkInt: '33',
   locale: 'zh-CN',
   darkMode: '0',
 };
@@ -372,9 +372,9 @@ export function normalizeSettings(value: unknown): AppSettings {
     result.deviceFingerprint.sdkInt = readString(fingerprint.sdkInt, result.deviceFingerprint.sdkInt);
     result.deviceFingerprint.locale = readString(fingerprint.locale, result.deviceFingerprint.locale);
     if (isOneOf(fingerprint.darkMode, ['0', '1'])) result.deviceFingerprint.darkMode = fingerprint.darkMode;
-    // 旧默认版本会被楼中楼接口直接拒绝；仅迁移自动指纹，用户显式自定义的版本保持不动。
+    // 自动指纹必须使用 c001apk 已验证可用的协议基线；用户显式自定义的版本保持不动。
     const appCode = Number(result.deviceFingerprint.appCode);
-    if (!result.deviceFingerprint.customFingerprint && Number.isFinite(appCode) && appCode > 0 && appCode < 2609291) {
+    if (!result.deviceFingerprint.customFingerprint && appCode !== 2604201) {
       result.deviceFingerprint.appVersion = defaultDeviceFingerprint.appVersion;
       result.deviceFingerprint.appCode = defaultDeviceFingerprint.appCode;
     }

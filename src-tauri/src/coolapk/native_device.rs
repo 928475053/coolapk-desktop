@@ -1,14 +1,15 @@
 //! 默认设备指纹只读取系统公开的型号/版本，不读取序列号、设备名称或硬件标识。
 use super::client::DeviceProfile;
 
-/// 与酷安当前 API 网关匹配的客户端版本。旧版本头会被楼中楼接口直接拒绝。
-pub const APP_VERSION: &str = "16.6.4";
-pub const APP_CODE: &str = "2609291";
-pub const SDK_INT: &str = "36";
+/// 与 c001apk 当前验证可用的 API 协议基线保持一致。
+/// 更新到更新版本号会被部分网关直接返回空正文 403，而不是业务错误。
+pub const APP_VERSION: &str = "16.2.0";
+pub const APP_CODE: &str = "2604201";
+pub const SDK_INT: &str = "33";
 
-pub const COMPATIBILITY_UA: &str = "Dalvik/2.1.0 (Linux; U; Android 16; 23113RKC6C Build/AQ3A.250226.002) (#Build; Redmi; 23113RKC6C; AQ3A.250226.002; 16) +CoolMarket/16.6.4-2609291-universal";
+pub const COMPATIBILITY_UA: &str = "Dalvik/2.1.0 (Linux; U; Android 13; Pixel 7 Build/TQ3A.230805.001) (#Build; google; Pixel 7; TQ3A.230805.001; 13) +CoolMarket/16.2.0-2604201-universal";
 #[cfg(any(target_os = "android", target_os = "ios", target_os = "macos", test))]
-const APP_SUFFIX: &str = " +CoolMarket/16.6.4-2609291-universal";
+const APP_SUFFIX: &str = " +CoolMarket/16.2.0-2604201-universal";
 
 #[cfg(any(target_os = "android", test))]
 fn android_profile(

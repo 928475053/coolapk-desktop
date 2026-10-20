@@ -2005,7 +2005,7 @@ impl CoolapkClient {
             .read()
             .ok()
             .and_then(|value| value.clone());
-        let cookie = merge_cookie_headers(user_cookie.as_deref(), api_cookie.as_deref());
+        let cookie = api_cookie_header(user_cookie.as_deref(), api_cookie.as_deref());
         let cookie = if let Some(proof) = pending_validation.as_deref() {
             let pending_cookie = format!("validate={}", encode_cookie_value(proof));
             merge_cookie_headers(cookie.as_deref(), Some(&pending_cookie))
@@ -9678,6 +9678,30 @@ fn merge_cookie_headers(base: Option<&str>, overlay: Option<&str>) -> Option<Str
     format_cookie_pairs(&pairs)
 }
 
+/// API 请求只携带登录身份字段，再叠加 API 会话 Cookie。
+/// 登录 Cookie 中同名的 SESSID 属于网页会话，不能覆盖 API 响应下发的 SESSID。
+fn api_cookie_header(user_cookie: Option<&str>, api_cookie: Option<&str>) -> Option<String> {
+    let mut pairs = BTreeMap::new();
+    if let Some(user_cookie) = user_cookie {
+        let user_pairs = parse_cookie_pairs(user_cookie);
+        for name in ["uid", "username", "token"] {
+            if let Some(value) = user_pairs.get(name).filter(|value| !value.trim().is_empty()) {
+                pairs.insert(name.to_string(), value.clone());
+            }
+        }
+    }
+    let has_login_identity = pairs.contains_key("uid") && pairs.contains_key("token");
+    if let Some(api_cookie) = api_cookie {
+        for (name, value) in parse_cookie_pairs(api_cookie) {
+            if has_login_identity && matches!(name.as_str(), "uid" | "username" | "token") {
+                continue;
+            }
+            pairs.insert(name, value);
+        }
+    }
+    format_cookie_pairs(&pairs)
+}
+
 fn update_cookie_store(store: &mut Option<String>, set_cookies: &[String]) {
     let mut pairs = store.as_deref().map(parse_cookie_pairs).unwrap_or_default();
     let previous_sessid = pairs.get("SESSID").cloned();
@@ -9876,7 +9900,7 @@ mod api_failure_log_tests {
             normalize_client_version_in_ua(
                 "Dalvik/2.1.0 (#Build; Xiaomi; model; build; 16) +CoolMarket/16.2.0-2604201-universal CoolapkDesktopAuto"
             ),
-            "Dalvik/2.1.0 (#Build; Xiaomi; model; build; 16) +CoolMarket/16.6.4-2609291-universal CoolapkDesktopAuto"
+            "Dalvik/2.1.0 (#Build; Xiaomi; model; build; 16) +CoolMarket/16.2.0-2604201-universal CoolapkDesktopAuto"
         );
     }
 

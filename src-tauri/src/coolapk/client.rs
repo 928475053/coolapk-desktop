@@ -5,6 +5,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use reqwest::header::{COOKIE, HeaderMap, HeaderValue, LOCATION, USER_AGENT};
 use reqwest::{Client, Method};
 use serde_json::{Value, json};
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::RwLock;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -247,6 +248,8 @@ pub struct CoolapkClient {
     redirect_client: RwLock<Client>,
     auth: RwLock<CoolapkAuth>,
     user_cookie: RwLock<Option<String>>,
+    /// API 响应 Set-Cookie 维护的风控/会话 Cookie。
+    api_cookie: RwLock<Option<String>>,
     cookie_file: RwLock<Option<PathBuf>>,
     device_profile: RwLock<DeviceProfile>,
     native_device_profile: DeviceProfile,
@@ -1087,6 +1090,7 @@ impl CoolapkClient {
             redirect_client: RwLock::new(redirect_client),
             auth: RwLock::new(CoolapkAuth::new(device_code.clone())),
             user_cookie: RwLock::new(None),
+            api_cookie: RwLock::new(None),
             cookie_file: RwLock::new(None),
             device_profile: RwLock::new(DeviceProfile::default()),
             native_device_profile,
@@ -1713,6 +1717,9 @@ impl CoolapkClient {
             Some(safe_ascii)
         };
         drop(stored);
+        if let Ok(mut api_cookie) = self.api_cookie.write() {
+            *api_cookie = None;
+        }
         // 登录态变化（登录/登出/切换账号）后同步设备码
         self.sync_device_code();
         Ok(())
@@ -1789,11 +1796,17 @@ impl CoolapkClient {
                 .query(query),
         )?;
 
-        let cookie = self
+        let user_cookie = self
             .user_cookie
             .read()
             .map_err(|_| "failed to read login state".to_string())?
             .clone();
+        let api_cookie = self
+            .api_cookie
+            .read()
+            .ok()
+            .and_then(|value| value.clone());
+        let cookie = merge_cookie_headers(user_cookie.as_deref(), api_cookie.as_deref());
         let mut cookie_attached = false;
         if let Some(cookie) = cookie {
             let full_cookie = self.cookie_for_path(&cookie, path);
@@ -1817,8 +1830,24 @@ impl CoolapkClient {
                 method_name, log_path, error.is_timeout(), started.elapsed().as_millis(), error_cause_chain(&error));
             error.to_string()
         })?;
+        let set_cookies: Vec<String> = response
+            .headers()
+            .get_all(reqwest::header::SET_COOKIE)
+            .iter()
+            .filter_map(|value| value.to_str().ok().map(str::to_string))
+            .collect();
         let status = response.status();
         let result = response_json(response).await;
+        if !set_cookies.is_empty() {
+            if let Ok(mut store) = self.api_cookie.write() {
+                update_cookie_store(&mut store, &set_cookies);
+            }
+            log::debug!(
+                "api.cookies_updated path={} count={}",
+                log_path,
+                set_cookies.len()
+            );
+        }
         match &result {
             Err(error) => log::warn!("api.response_failed method={} path={} status={} reason={} elapsed_ms={}",
                 method_name, log_path, status.as_u16(), classify_api_failure(error), started.elapsed().as_millis()),
@@ -3239,6 +3268,12 @@ impl CoolapkClient {
         if let Some((field, token)) = append_post_token(post_token, post_token_field) {
             query.push((field, token));
         }
+        log::info!(
+            "comment.request reply_id={} has_token={} token_field={}",
+            target_reply_id,
+            post_token.filter(|value| !value.trim().is_empty()).is_some(),
+            post_token_field.unwrap_or("_v2_post_token")
+        );
 
         let primary = self.api_get("/v6/feed/replyList", &query).await;
         let raw = match primary {
@@ -3428,6 +3463,12 @@ impl CoolapkClient {
         if let Some((field, token)) = append_post_token(post_token, post_token_field) {
             query.push((field, token));
         }
+        log::info!(
+            "comment.request feed_id={} has_token={} token_field={}",
+            feed_id,
+            post_token.filter(|value| !value.trim().is_empty()).is_some(),
+            post_token_field.unwrap_or("_v2_post_token")
+        );
         let primary = self.api_get("/v6/feed/replyList", &query).await;
         let (raw, fallback, captcha) = match primary {
             Ok(value) if is_reply_list_captcha_response(&value) => (
@@ -7298,6 +7339,9 @@ impl CoolapkClient {
             .map_err(|_| "failed to lock login state".to_string())?;
         *stored = None;
         drop(stored);
+        if let Ok(mut api_cookie) = self.api_cookie.write() {
+            *api_cookie = None;
+        }
         // 清空当前登录标记（保留账户记录，便于下次快速切换）
         let mut root = self.load_accounts_root();
         root["lastLoginUid"] = json!("");
@@ -9333,6 +9377,66 @@ fn application_failure(value: &Value) -> Option<(i64, &'static str)> {
     Some((code, reason))
 }
 
+fn parse_cookie_pairs(header: &str) -> BTreeMap<String, String> {
+    header
+        .split(';')
+        .filter_map(|part| {
+            let (name, value) = part.trim().split_once('=')?;
+            let name = name.trim();
+            if name.is_empty() {
+                None
+            } else {
+                Some((name.to_string(), value.trim().to_string()))
+            }
+        })
+        .collect()
+}
+
+fn format_cookie_pairs(pairs: &BTreeMap<String, String>) -> Option<String> {
+    if pairs.is_empty() {
+        None
+    } else {
+        Some(
+            pairs
+                .iter()
+                .map(|(name, value)| format!("{name}={value}"))
+                .collect::<Vec<_>>()
+                .join("; "),
+        )
+    }
+}
+
+fn merge_cookie_headers(base: Option<&str>, overlay: Option<&str>) -> Option<String> {
+    let mut pairs = base.map(parse_cookie_pairs).unwrap_or_default();
+    if let Some(overlay) = overlay {
+        pairs.extend(parse_cookie_pairs(overlay));
+    }
+    format_cookie_pairs(&pairs)
+}
+
+fn update_cookie_store(store: &mut Option<String>, set_cookies: &[String]) {
+    let mut pairs = store.as_deref().map(parse_cookie_pairs).unwrap_or_default();
+    for raw in set_cookies {
+        let first = raw.split(';').next().unwrap_or("").trim();
+        let Some((name, value)) = first.split_once('=') else {
+            continue;
+        };
+        let name = name.trim();
+        let value = value.trim();
+        if name.is_empty() {
+            continue;
+        }
+        let lower = raw.to_ascii_lowercase();
+        let expired = lower.contains("max-age=0") || lower.contains("expires=thu, 01 jan 1970");
+        if value.eq_ignore_ascii_case("deleted") || expired {
+            pairs.remove(name);
+        } else {
+            pairs.insert(name.to_string(), value.to_string());
+        }
+    }
+    *store = format_cookie_pairs(&pairs);
+}
+
 /// 服务端验证码字段名通常为空，此时使用官方 APK 的默认字段。
 fn append_post_token<'a>(
     post_token: Option<&str>,
@@ -9438,7 +9542,8 @@ fn extract_captcha_id_from_text(text: &str) -> Option<String> {
 mod api_failure_log_tests {
     use super::{
         append_post_token, application_failure, classify_api_failure, extract_captcha_id_from_text,
-        is_captcha_error_text, is_reply_list_captcha_response, normalize_client_version_in_ua,
+        is_captcha_error_text, is_reply_list_captcha_response, merge_cookie_headers,
+        normalize_client_version_in_ua, update_cookie_store,
     };
     use serde_json::json;
 
@@ -9500,6 +9605,31 @@ mod api_failure_log_tests {
             ),
             "Dalvik/2.1.0 (#Build; Xiaomi; model; build; 16) +CoolMarket/16.6.4-2609291-universal CoolapkDesktopAuto"
         );
+    }
+
+    #[test]
+    fn merges_and_updates_api_cookies_by_name() {
+        let merged = merge_cookie_headers(
+            Some("SESSID=old; uid=123; token=login"),
+            Some("SESSID=new; risk=abc"),
+        )
+        .unwrap();
+        assert!(merged.contains("SESSID=new"));
+        assert!(merged.contains("uid=123"));
+        assert!(merged.contains("token=login"));
+        assert!(merged.contains("risk=abc"));
+
+        let mut store = None;
+        update_cookie_store(
+            &mut store,
+            &[
+                "SESSID=new; Path=/; Domain=.coolapk.com".to_string(),
+                "token=deleted; Max-Age=0".to_string(),
+            ],
+        );
+        assert_eq!(store.as_deref(), Some("SESSID=new"));
+        update_cookie_store(&mut store, &["SESSID=deleted; Max-Age=0".to_string()]);
+        assert_eq!(store, None);
     }
 }
 

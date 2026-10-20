@@ -7,6 +7,7 @@ import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.widget.FrameLayout
 import androidx.annotation.Keep
 import com.netease.nis.captcha.Captcha
@@ -53,6 +54,11 @@ class CaptchaActivity : Activity() {
                 // 3.5.x 的回调顺序是 (result, validate, message)，第二个才是
                 // 可直接回传给业务接口的校验码。
                 override fun onValidate(result: String?, validate: String?, message: String?) {
+                    Log.i(
+                        "CoolapkCaptcha",
+                        "onValidate result_len=${result?.length ?: 0} validate_len=${validate?.length ?: 0} " +
+                            "result_prefix=${result?.take(24)} validate_prefix=${validate?.take(24)}",
+                    )
                     if (validate.isNullOrBlank()) {
                         finishError("验证码凭证为空")
                         return
@@ -106,6 +112,7 @@ class CaptchaActivity : Activity() {
         if (finished) return
         finished = true
         val token = "NEC:${captchaId.take(8)}:$validate"
+        Log.i("CoolapkCaptcha", "finished token_prefix=${token.take(24)} token_len=${token.length}")
         pendingResult = token
         setResult(RESULT_OK, Intent().putExtra(EXTRA_POST_TOKEN, token))
         finish()

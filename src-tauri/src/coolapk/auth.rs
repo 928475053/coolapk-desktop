@@ -133,8 +133,8 @@ mod tests {
     fn token_is_deterministic_for_a_synthetic_device_and_timestamp() {
         let auth = CoolapkAuth::new("synthetic-test-device");
         // 该时间戳生成的 bcrypt salt 合法；固定时间点用于验证签名确定性。
-        let first = auth.generate_token_at(1_770_000_001).unwrap();
-        let second = auth.generate_token_at(1_770_000_001).unwrap();
+        let first = auth.generate_token_at(1_770_000_003).unwrap();
+        let second = auth.generate_token_at(1_770_000_003).unwrap();
         assert_eq!(first, second);
         assert!(first.starts_with("v3"));
         assert!(first.len() > 70);

@@ -100,8 +100,16 @@ function ensureAndroidProject() {
 
   const pathCheckSetting = 'android.overridePathCheck=true';
   const contents = existsSync(gradleProperties) ? readFileSync(gradleProperties, 'utf8') : '';
-  if (!contents.includes(pathCheckSetting)) {
-    appendFileSync(gradleProperties, `\n${pathCheckSetting}\n`, 'utf8');
+  for (const setting of [
+    pathCheckSetting,
+    // 易盾 3.5.8 依赖的 Glide 4.9.0 仍引用旧 support 库；官方包同样用
+    // Jetifier 把这些引用映射到 AndroidX，避免 support/AndroidX 重复类。
+    'android.useAndroidX=true',
+    'android.enableJetifier=true',
+  ]) {
+    if (!contents.includes(setting)) {
+      appendFileSync(gradleProperties, `\n${setting}\n`, 'utf8');
+    }
   }
 
   const signingMarker = '// coolapk-android-release-signing';
@@ -164,7 +172,7 @@ function ensureAndroidProject() {
   }
   const captchaDependencyMarker = '// coolapk-android-yidun-captcha';
   if (!buildGradle.includes(captchaDependencyMarker)) {
-    buildGradle += `\n${captchaDependencyMarker}\ndependencies {\n    implementation("io.github.yidun:captcha:3.5.8")\n}\n`;
+    buildGradle += `\n${captchaDependencyMarker}\ndependencies {\n    implementation("io.github.yidun:captcha:3.5.8") {\n        exclude(group = "com.android.support")\n    }\n}\n`;
   }
   writeFileSync(appBuildGradle, buildGradle, 'utf8');
 

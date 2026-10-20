@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, test/desktop-network-fix]
     tags: ['v[0-9]*', '!v*-beta.*']
   pull_request:
     branches: [main]

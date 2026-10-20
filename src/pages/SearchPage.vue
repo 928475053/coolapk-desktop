@@ -130,6 +130,16 @@ const searchAreaRef = ref<HTMLElement | null>(null);
 let suggestTimer: ReturnType<typeof setTimeout> | null = null;
 let searchSequence = 0;
 let configLoaded = false;
+// 记录最近一次真正应用到搜索页的查询签名。进入帖子时 route.query 变为空，
+// 不能把仍在 keep-alive 中的搜索状态清空；返回同一搜索页时也不应重新请求。
+let appliedQuerySignature = JSON.stringify([
+  readQueryString(route.query.q),
+  readQueryString(route.query.tab),
+  readQueryString(route.query.pageType),
+  readQueryString(route.query.pageParam),
+  readQueryString(route.query.feedType),
+  readQueryString(route.query.sort),
+]);
 
 const scopedTopicTag = computed(() => {
   return readQueryString(route.query.pageType) === 'tag' ? readQueryString(route.query.pageParam) : '';
@@ -448,7 +458,19 @@ watch(() => [
   readQueryString(route.query.pageParam),
   readQueryString(route.query.feedType),
   readQueryString(route.query.sort),
-], ([nextQuery, nextTab, , , nextFeedType, nextSort]) => {
+], ([nextQuery, nextTab, nextPageType, nextPageParam, nextFeedType, nextSort]) => {
+  // 搜索页在 keep-alive 中休眠时全局 route 已切换到帖子页，不能据此重置搜索状态。
+  if (route.path !== '/search') return;
+  const signature = JSON.stringify([
+    nextQuery,
+    nextTab,
+    nextPageType,
+    nextPageParam,
+    nextFeedType,
+    nextSort,
+  ]);
+  if (signature === appliedQuerySignature) return;
+  appliedQuerySignature = signature;
   const normalizedQuery = nextQuery;
   queryStr.value = normalizedQuery;
   searchQuery.value = normalizedQuery;

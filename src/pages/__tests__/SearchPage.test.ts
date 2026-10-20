@@ -144,6 +144,47 @@ describe('综合搜索空首页', () => {
   });
 });
 
+describe('搜索页返回保持', () => {
+  it('进入帖子再返回不会清空结果或重新请求', async () => {
+    vi.clearAllMocks();
+    mocks.searchByType.mockResolvedValue({
+      data: [{ id: 'kept-result', entityType: 'feed', message: '保持结果' }],
+    });
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/search', name: 'Search', component: SearchPage },
+        { path: '/feed/:feedId', name: 'FeedDetail', component: { template: '<div />' } },
+      ],
+    });
+    await router.push({ path: '/search', query: { q: '保持', tab: 'all' } });
+    await router.isReady();
+    const wrapper = mount(SearchPage, {
+      global: {
+        plugins: [createPinia(), router],
+        stubs: { SearchResultItem: true, SearchHotListCard: true, LoadingState: true, EmptyState: true },
+      },
+    });
+    try {
+      await flushPromises();
+      expect(wrapper.findAll('search-result-item-stub')).toHaveLength(1);
+      const requestCount = mocks.searchByType.mock.calls.length;
+
+      await router.push('/feed/123');
+      await flushPromises();
+      await router.push({ path: '/search', query: { q: '保持', tab: 'all' } });
+      await flushPromises();
+
+      expect(mocks.searchByType).toHaveBeenCalledTimes(requestCount);
+      expect(wrapper.findAll('search-result-item-stub')).toHaveLength(1);
+      expect((wrapper.findComponent({ name: 'SearchResultItem' }).props('entity') as { id: string }).id)
+        .toBe('kept-result');
+    } finally {
+      wrapper.unmount();
+    }
+  });
+});
+
 describe('话题内搜索', () => {
   it('个人动态搜索在重新输入、分页和切换用户后保留 UID 范围', async () => {
     vi.clearAllMocks();

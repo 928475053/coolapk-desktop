@@ -21,8 +21,8 @@ export function setupAccountDeviceSync(auth: DeviceSyncAuth, settings: DeviceSyn
     try {
       const info = await api.getDeviceInfo().catch(() => null);
       if (!current()) return;
-      // 真机已有系统信息时优先使用本机；桌面兼容模式才需要账号历史机型和兜底模板。
-      if (info?.data?.defaultProfile?.source === 'native' && ['android', 'ios'].includes(info.data.defaultProfile.platform)) return;
+      // Android 真机使用系统公开设备信息；其余平台统一使用 Android 兼容协议。
+      if (info?.data?.defaultProfile?.source === 'native' && info.data.defaultProfile.platform === 'android') return;
       await settings.setAutomaticDeviceProfile({ ...fallbackAccountDevice });
       if (!uid || !current()) return;
       const profile = await detectAccountDevice(uid, api, current);

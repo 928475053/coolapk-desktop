@@ -1,13 +1,15 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use bcrypt::{BASE_64 as BCRYPT_BASE64, Version, hash_with_salt};
 use md5::{Digest, Md5};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::Mutex;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const APP_ID: &str = "com.coolapk.market";
 const APP_CODE: u64 = 2_609_291;
 const STD_BASE64_ALPHABET: &[u8; 64] =
     b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 const AUTH_BLOB_B64: &str = include_str!("auth_blob.b64");
+const TOKEN_CACHE_TTL: Duration = Duration::from_secs(45);
 
 /// 酷安 Token V3 离线签名器。
 ///
@@ -16,6 +18,7 @@ const AUTH_BLOB_B64: &str = include_str!("auth_blob.b64");
 pub struct CoolapkAuth {
     device_code: String,
     auth_blob: Vec<u8>,
+    cached_token: Mutex<Option<(String, Instant)>>,
 }
 
 impl CoolapkAuth {
@@ -27,6 +30,7 @@ impl CoolapkAuth {
         Self {
             device_code: device_code.into(),
             auth_blob,
+            cached_token: Mutex::new(None),
         }
     }
 
@@ -34,9 +38,20 @@ impl CoolapkAuth {
     /// Token V3 与设备码绑定，切换后所有后续请求的签名使用新设备码。
     pub fn set_device_code(&mut self, device_code: String) {
         self.device_code = device_code;
+        if let Ok(mut cache) = self.cached_token.lock() {
+            *cache = None;
+        }
     }
 
     pub fn get_app_token(&self) -> Result<String, String> {
+        if let Ok(cache) = self.cached_token.lock() {
+            if let Some((token, created_at)) = cache.as_ref() {
+                if created_at.elapsed() < TOKEN_CACHE_TTL {
+                    return Ok(token.clone());
+                }
+            }
+        }
+
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|e| format!("system clock error: {e}"))?
@@ -47,7 +62,12 @@ impl CoolapkAuth {
         let mut last_error = String::new();
         for offset in 0..=15 {
             match self.generate_token_at(timestamp + offset) {
-                Ok(token) => return Ok(token),
+                Ok(token) => {
+                    if let Ok(mut cache) = self.cached_token.lock() {
+                        *cache = Some((token.clone(), Instant::now()));
+                    }
+                    return Ok(token);
+                }
                 Err(error) => last_error = error,
             }
         }
@@ -138,5 +158,13 @@ mod tests {
         assert_eq!(first, second);
         assert!(first.starts_with("v3"));
         assert!(first.len() > 70);
+    }
+
+    #[test]
+    fn caches_app_token_for_captcha_retry_window() {
+        let auth = CoolapkAuth::new("synthetic-cache-device");
+        let first = auth.get_app_token().unwrap();
+        let second = auth.get_app_token().unwrap();
+        assert_eq!(first, second);
     }
 }

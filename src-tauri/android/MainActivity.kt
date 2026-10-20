@@ -52,28 +52,30 @@ class MainActivity : TauriActivity() {
     fun getSafeAreaTop(unused: String): String = topSafeAreaPx.toString()
 
     @Keep
-    fun startCoolapkCaptcha(captchaId: String): String = try {
-        val safeId = captchaId.trim()
-        require(safeId.matches(Regex("[A-Za-z0-9_-]{1,128}"))) { "验证码 ID 无效" }
-        if (captchaActive) return "pending"
-        captchaActive = true
-        CaptchaActivity.pendingResult = "pending"
-        runOnUiThread {
-            try {
-                captchaLauncher.launch(
-                    Intent(this, CaptchaActivity::class.java)
-                        .putExtra(CaptchaActivity.EXTRA_CAPTCHA_ID, safeId),
-                )
-            } catch (error: Exception) {
-                captchaActive = false
-                CaptchaActivity.pendingResult = "error:${error.message ?: error.javaClass.simpleName}"
+    fun startCoolapkCaptcha(captchaId: String): String {
+        return try {
+            val safeId = captchaId.trim()
+            require(safeId.matches(Regex("[A-Za-z0-9_-]{1,128}"))) { "验证码 ID 无效" }
+            if (captchaActive) return "pending"
+            captchaActive = true
+            CaptchaActivity.pendingResult = "pending"
+            runOnUiThread {
+                try {
+                    captchaLauncher.launch(
+                        Intent(this, CaptchaActivity::class.java)
+                            .putExtra(CaptchaActivity.EXTRA_CAPTCHA_ID, safeId),
+                    )
+                } catch (error: Exception) {
+                    captchaActive = false
+                    CaptchaActivity.pendingResult = "error:${error.message ?: error.javaClass.simpleName}"
+                }
             }
+            "pending"
+        } catch (error: Exception) {
+            captchaActive = false
+            CaptchaActivity.pendingResult = "pending"
+            "error:${error.message ?: error.javaClass.simpleName}"
         }
-        "pending"
-    } catch (error: Exception) {
-        captchaActive = false
-        CaptchaActivity.pendingResult = "pending"
-        "error:${error.message ?: error.javaClass.simpleName}"
     }
 
     @Keep

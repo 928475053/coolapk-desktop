@@ -1,5 +1,9 @@
 name: CI
 
+# 构建模式：
+# 1. main 推送：仅生成 Android ARM64 APK 和 Windows x64 便携版。
+# 2. v* Tag 推送：全量构建并发布所有平台的 Release 产物。
+# 3. pull_request：只运行检查，不生成发布产物。
 on:
   push:
     branches: [main]
@@ -15,23 +19,19 @@ on:
         type: string
         required: true
   workflow_dispatch:
-    inputs:
-      create_release:
-        description: '发布 Release（仅 tag 推送时生效）'
-        type: boolean
-        default: false
 
 permissions:
   contents: write
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ inputs.build_version || github.ref }}
-  cancel-in-progress: ${{ !inputs.build_version }}
+  cancel-in-progress: ${{ inputs.build_version == '' && !startsWith(github.ref, 'refs/tags/v') }}
 
 env:
   BUILD_VERSION: ${{ inputs.build_version }}
   RELEASE_TAG: ${{ inputs.build_version && format('v{0}', inputs.build_version) || github.ref_name }}
   VITE_BUILD_COMMIT: ${{ inputs.build_sha || github.sha }}
+  IS_TAG_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
 
 jobs:
   # ─── 前端测试矩阵（多代理并行） ───
@@ -147,10 +147,10 @@ jobs:
         if: runner.os != 'Windows'
         run: sh scripts/test-desktop-update.sh
 
-  # ─── 非 Tag 构建：与 Android APK 并行产出 Windows x64 便携版 ───
+  # ─── main 推送：与 Android APK 并行产出 Windows x64 便携版 ───
   windows-portable-ci:
     name: Windows x64 便携版
-    if: ${{ github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/v') }}
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
@@ -192,11 +192,11 @@ jobs:
       - name: 上传 Windows 单文件便携版
         uses: actions/upload-artifact@v6
         with:
-          name: windows-x64-portable-ci
+          name: windows-x64-portable
           path: src-tauri/target/portable/*.exe
           if-no-files-found: error
 
-  # ─── 构建（仅 tag / 手动触发） ───
+  # ─── Tag / 手动全量构建：所有桌面平台 ───
   build:
     name: ${{ matrix.name }}
     if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || inputs.build_version != '' }}
@@ -290,7 +290,7 @@ jobs:
           '
 
       - name: 构建与上传产物（非 Tag 推送）
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') && !(runner.os == 'Linux' && inputs.build_version != '') }}
+        if: ${{ env.IS_TAG_RELEASE != 'true' && !(runner.os == 'Linux' && inputs.build_version != '') }}
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -300,7 +300,7 @@ jobs:
           workflowArtifactNamePattern: '[platform]-[arch]-[bundle]'
 
       - name: 读取中文发布说明
-        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        if: ${{ env.IS_TAG_RELEASE == 'true' }}
         id: release_notes
         shell: bash
         run: |
@@ -315,7 +315,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: 发布 Release 产物（Tag 推送）
-        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        if: ${{ env.IS_TAG_RELEASE == 'true' }}
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -367,7 +367,7 @@ jobs:
           bash scripts/fix-appimage-permissions.sh "$appimage"
 
       - name: 上传 Linux AppImage 工作流产物
-        if: ${{ runner.os == 'Linux' && !startsWith(github.ref, 'refs/tags/v') }}
+        if: ${{ runner.os == 'Linux' && env.IS_TAG_RELEASE != 'true' }}
         uses: actions/upload-artifact@v6
         with:
           name: linux-x64-appimage
@@ -375,7 +375,7 @@ jobs:
           if-no-files-found: error
 
       - name: 发布 Linux AppImage
-        if: ${{ runner.os == 'Linux' && startsWith(github.ref, 'refs/tags/v') }}
+        if: ${{ runner.os == 'Linux' && env.IS_TAG_RELEASE == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$GITHUB_REF_NAME" src-tauri/target/release/bundle/appimage/*.AppImage --repo "$GITHUB_REPOSITORY"
@@ -545,9 +545,9 @@ jobs:
           if-no-files-found: error
 
   android-build:
-    name: Android ARM64 Release
-    # main 推送、tag、手动触发和测试版都产出 APK；PR 不重复构建 Android。
-    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' || inputs.build_version != '' }}
+    name: Android ARM64
+    # main 只生成 APK；Tag、手动全量构建和测试版额外生成 AAB。
+    if: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || inputs.build_version != '' }}
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     steps:
